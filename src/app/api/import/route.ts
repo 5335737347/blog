@@ -66,10 +66,8 @@ export async function POST(request: NextRequest) {
         const tags = extractTags(raw);
         const excerpt = autoExcerpt(raw);
 
-        // Strip YAML frontmatter and first heading if it matches title
-        let cleanContent = raw.replace(/^---[\s\S]*?---\n*/, "");
-        // Remove first # heading if it duplicates the extracted title
-        cleanContent = cleanContent.replace(new RegExp(`^#\\s+${title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\n*`), "");
+        // Strip YAML frontmatter only (keep headings)
+        const cleanContent = raw.replace(/^---[\s\S]*?---\n*/, "").trim();
 
         // Check slug
         const existing = await prisma.post.findUnique({ where: { slug } });
