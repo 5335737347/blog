@@ -153,6 +153,21 @@ pre code {
 pre[data-lined] .code-line {
   display: block;
   line-height: 1.7;
+  white-space: pre;
+}
+.line-num {
+  display: inline-block;
+  width: 2.5rem;
+  margin-right: 0.75rem;
+  text-align: right;
+  color: rgba(167,139,250,0.25);
+  user-select: none;
+  font-size: inherit;
+  line-height: inherit;
+  vertical-align: baseline;
+}
+.line-content {
+  vertical-align: baseline;
 }
 pre[data-lined] code {
   display: block;
