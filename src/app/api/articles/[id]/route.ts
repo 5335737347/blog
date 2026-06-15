@@ -151,8 +151,9 @@ export async function PUT(
       updatedAt: post.updatedAt.toISOString(),
       tags: post.tags.map((t) => t.tag),
     });
-  } catch {
-    return NextResponse.json({ error: "更新失败" }, { status: 500 });
+  } catch (e: any) {
+    console.error("PUT error:", e?.message || e);
+    return NextResponse.json({ error: "更新失败: " + (e?.message || "unknown") }, { status: 500 });
   }
 }
 
@@ -166,8 +167,17 @@ export async function DELETE(
     return NextResponse.json({ error: "未登录" }, { status: 401 });
   }
 
-  const { id } = await params;
-
-  await prisma.post.delete({ where: { id } });
-  return NextResponse.json({ success: true });
+  try {
+    const { id } = await params;
+    // Check article exists
+    const post = await prisma.post.findUnique({ where: { id } });
+    if (!post) {
+      return NextResponse.json({ error: "文章不存在" }, { status: 404 });
+    }
+    await prisma.post.delete({ where: { id } });
+    return NextResponse.json({ success: true });
+  } catch (e: any) {
+    console.error("DELETE error:", e?.message || e);
+    return NextResponse.json({ error: "删除失败: " + (e?.message || "unknown") }, { status: 500 });
+  }
 }
