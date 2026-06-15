@@ -20,6 +20,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
       title: true,
       excerpt: true,
       content: true,
+      contentHtml: true,
       coverImage: true,
       publishedAt: true,
       category: { select: { name: true, slug: true } },
@@ -79,7 +80,14 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
         </header>
 
         <div className="border-t-2 border-pink-100 pt-8 dark:border-purple-800/30">
-          <MarkdownContent content={post.content} />
+          {post.contentHtml ? (
+            <div
+              className="prose max-w-none dark:prose-invert prose-headings:text-purple-950 dark:prose-headings:text-purple-100 prose-headings:font-bold prose-a:text-pink-500 dark:prose-a:text-pink-400 prose-a:no-underline hover:prose-a:text-purple-500 prose-code:before:content-none prose-code:after:content-none prose-code:rounded-lg prose-code:bg-pink-50 prose-code:px-1.5 prose-code:py-0.5 prose-code:text-sm prose-code:text-pink-600 dark:prose-code:bg-purple-900/40 dark:prose-code:text-pink-300 prose-pre:rounded-2xl prose-pre:bg-purple-950 dark:prose-pre:bg-purple-950 prose-pre:border prose-pre:border-purple-800 prose-img:rounded-2xl prose-blockquote:border-pink-400 prose-blockquote:bg-pink-50/50 dark:prose-blockquote:bg-purple-900/20 prose-blockquote:rounded-r-xl prose-table:rounded-2xl"
+              dangerouslySetInnerHTML={{ __html: post.contentHtml }}
+            />
+          ) : (
+            <MarkdownContent content={post.content} />
+          )}
         </div>
       </article>
 

@@ -21,6 +21,7 @@ model Post {
   title       String
   excerpt     String?
   content     String
+  contentHtml String?
   coverImage  String?
   published   Boolean    @default(false)
   publishedAt DateTime?

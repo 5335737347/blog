@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/lib/auth";
-import { slugify } from "@/lib/utils";
+import { slugify, renderMarkdown, extractHashTags } from "@/lib/utils";
 
 // GET /api/articles/[id] — get single article
 export async function GET(
@@ -104,6 +104,16 @@ export async function PUT(
       return NextResponse.json({ error: "slug 已存在" }, { status: 400 });
     }
 
+    // Auto-extract #tags from new content
+    const autoTags = content ? extractHashTags(content) : [];
+    const existingTagIds = tagIds || [];
+    const autoTagIds = await Promise.all(autoTags.map(async (name) => {
+      const s = slugify(name);
+      const tag = await prisma.tag.upsert({ where: { slug: s }, update: {}, create: { name, slug: s } });
+      return tag.id;
+    }));
+    const allTagIds = [...new Set([...existingTagIds, ...autoTagIds])];
+
     const post = await prisma.post.update({
       where: { id },
       data: {
@@ -111,13 +121,14 @@ export async function PUT(
         slug: finalSlug,
         excerpt: excerpt?.trim() ?? null,
         content: content?.trim(),
+        contentHtml: content ? renderMarkdown(content.trim()) : undefined,
         coverImage: coverImage !== undefined ? (coverImage?.trim() ?? null) : undefined,
         published,
         publishedAt,
         categoryId: categoryId === null ? null : categoryId || existing.categoryId,
-        tags: tagIds?.length
+        tags: allTagIds.length
           ? {
-              create: tagIds.map((tagId: string) => ({ tagId })),
+              create: allTagIds.map((tagId: string) => ({ tagId })),
             }
           : undefined,
       },

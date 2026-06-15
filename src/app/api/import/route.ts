@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/lib/auth";
-import { slugify } from "@/lib/utils";
+import { slugify, renderMarkdown, extractHashTags } from "@/lib/utils";
 
 function extractTitle(content: string, filename: string): string {
   // Try YAML frontmatter title
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
 
       // Resolve tags
       const tagConnects = [];
-      for (const tagName of tags) {
+      for (const tagName of allTags) {
         const tagSlug = slugify(tagName);
         const tag = await prisma.tag.upsert({
           where: { slug: tagSlug },
@@ -81,11 +81,16 @@ export async function POST(request: NextRequest) {
         tagConnects.push({ tagId: tag.id });
       }
 
+      // Merge frontmatter tags with auto-detected #tags
+      const autoTags = extractHashTags(raw);
+      const allTags = [...new Set([...tags, ...autoTags])];
+
       await prisma.post.create({
         data: {
           title,
           slug,
           content: raw,
+          contentHtml: renderMarkdown(raw),
           excerpt,
           published: false,
           tags: tagConnects.length > 0 ? { create: tagConnects } : undefined,

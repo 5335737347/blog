@@ -1,7 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/lib/auth";
-import { slugify } from "@/lib/utils";
+import { slugify, renderMarkdown, extractHashTags } from "@/lib/utils";
+
+async function resolveTags(tagNames: string[]): Promise<string[]> {
+  const ids: string[] = [];
+  for (const name of tagNames) {
+    const s = slugify(name);
+    const tag = await prisma.tag.upsert({
+      where: { slug: s },
+      update: {},
+      create: { name, slug: s },
+    });
+    ids.push(tag.id);
+  }
+  return ids;
+}
 
 // GET /api/articles — list published articles (public)
 export async function GET(request: NextRequest) {
@@ -105,20 +119,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Auto-extract tags from content #tags
+    const autoTags = extractHashTags(content);
+    const allTagIds = [...new Set([...(tagIds || []), ...(await resolveTags(autoTags))])];
+
     const post = await prisma.post.create({
       data: {
         title: title.trim(),
         slug: finalSlug,
         excerpt: excerpt?.trim() || null,
         content: content.trim(),
+        contentHtml: renderMarkdown(content.trim()),
         coverImage: coverImage?.trim() || null,
         published: published ?? false,
         publishedAt: published ? new Date() : null,
         categoryId: categoryId || null,
-        tags: tagIds?.length
-          ? {
-              create: tagIds.map((tagId: string) => ({ tagId })),
-            }
+        tags: allTagIds.length
+          ? { create: allTagIds.map((tagId: string) => ({ tagId })) }
           : undefined,
       },
       include: {

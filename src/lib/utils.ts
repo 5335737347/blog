@@ -57,6 +57,29 @@ const TAG_COLORS = [
   "bg-rose-50 text-rose-600 hover:bg-rose-100 dark:bg-rose-900/20 dark:text-rose-300 dark:hover:bg-rose-900/40",
 ];
 
+import { marked } from "marked";
+
+// Render markdown to HTML (server-side)
+export function renderMarkdown(md: string): string {
+  return marked.parse(md, { breaks: true, gfm: true }) as string;
+}
+
+// Extract #tags from content
+export function extractHashTags(content: string): string[] {
+  const tags = new Set<string>();
+  // Match #tag patterns (Chinese + English + numbers)
+  const matches = content.match(/#[一-龥\wЀ-ӿ-]+/g);
+  if (matches) {
+    for (const m of matches) {
+      const tag = m.slice(1).toLowerCase(); // remove # and lowercase
+      if (tag.length > 1 && tag.length < 30 && !/^\d+$/.test(tag)) {
+        tags.add(tag);
+      }
+    }
+  }
+  return [...tags];
+}
+
 export function hashTagColor(slug: string): string {
   let hash = 0;
   for (let i = 0; i < slug.length; i++) {

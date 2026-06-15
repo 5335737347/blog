@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { slugify } from "@/lib/utils";
+import { slugify, renderMarkdown, extractHashTags } from "@/lib/utils";
 
 // POST /api/publish — publish article via API key
 export async function POST(request: NextRequest) {
@@ -32,10 +32,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `slug "${finalSlug}" 已存在` }, { status: 409 });
     }
 
-    // Resolve tags: find existing or create new
-    const tagNames: string[] = tags || [];
+    // Resolve tags: user-provided + auto-extracted from content
+    const userTags: string[] = tags || [];
+    const autoTags = extractHashTags(content);
+    const allTagNames = [...new Set([...userTags, ...autoTags])];
     const tagConnects = [];
-    for (const name of tagNames) {
+    for (const name of allTagNames) {
       const tagSlug = slugify(name);
       const tag = await prisma.tag.upsert({
         where: { slug: tagSlug },
@@ -51,6 +53,7 @@ export async function POST(request: NextRequest) {
         slug: finalSlug,
         excerpt: excerpt?.trim() || null,
         content: content.trim(),
+        contentHtml: renderMarkdown(content.trim()),
         coverImage: coverImage?.trim() || null,
         published: true,
         publishedAt: new Date(),
