@@ -81,8 +81,8 @@ export function renderMarkdown(md: string): string {
 
   // Add line numbers to code blocks (post-process raw HTML)
   html = html.replace(/<pre[^>]*><code class="([^"]*)"[^>]*>([\s\S]*?)<\/code><\/pre>/g, (_match: string, cls: string, content: string) => {
-    // Unescape HTML entities that might interfere
-    const lines = content.split("\n");
+    const content2 = content.replace(/\n$/, "");
+    const lines = content2.split("\n");
     if (lines.length <= 1) return _match;
 
     const numbered = lines.map((line, i) => {
