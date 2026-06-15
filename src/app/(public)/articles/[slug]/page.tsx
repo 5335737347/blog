@@ -6,6 +6,7 @@ import CommentSection from "@/components/public/CommentSection";
 import PublicLayout from "@/components/public/PublicLayout";
 import TableOfContents from "@/components/public/TableOfContents";
 import ReadingProgressBar from "@/components/public/ReadingProgressBar";
+import CodeCopyButton from "@/components/public/CodeCopyButton";
 import { formatDate, readingTime } from "@/lib/utils";
 import "katex/dist/katex.min.css";
 import "highlight.js/styles/github-dark.min.css";
@@ -42,6 +43,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
   return (
     <PublicLayout>
       <ReadingProgressBar />
+      <CodeCopyButton />
       <article>
         <header className="mb-10">
           {post.coverImage && (
