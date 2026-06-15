@@ -53,7 +53,7 @@ export default function ImportPage() {
 
       <p className="mb-4 text-sm text-purple-400 dark:text-purple-500">
         上传 Markdown (.md)、Word (.docx)、HTML (.html) 或纯文本 (.txt)。
-        自动识别格式并转换为 Markdown。支持 YAML frontmatter。
+        自动识别格式并渲染为 HTML 网页。支持 YAML frontmatter。
         导入后为草稿状态。
       </p>
 
