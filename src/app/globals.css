@@ -131,13 +131,14 @@ body {
 
 /* ===== 📝 代码块 ===== */
 pre {
+  position: relative;
   max-width: 100%;
   overflow-x: auto;
   background: #1e1030 !important;
   border: 1px solid rgba(167,139,250,0.2);
   border-left: 3px solid #a78bfa;
   border-radius: 1rem;
-  padding: 1rem 1rem 1rem 0;
+  padding: 1.25rem 1rem 1rem 1rem;
 }
 pre code {
   white-space: pre;
@@ -145,46 +146,9 @@ pre code {
   background: transparent !important;
   color: #e2d5f1;
   line-height: 1.7;
-  counter-reset: line;
-}
-pre code .hljs-ln-line {
-  display: block;
-  padding-left: 0.5rem;
-}
-pre code .hljs-ln-line::before {
-  counter-increment: line;
-  content: counter(line);
-  display: inline-block;
-  width: 2.5rem;
-  margin-right: 1rem;
-  text-align: right;
-  color: rgba(167,139,250,0.25);
-  user-select: none;
-}
-pre[data-lined] code {
-  display: block;
-  padding-left: 0;
-}
-pre[data-lined] code > span {
-  display: block;
-  padding-left: 0.5rem;
-}
-pre[data-lined] code > span::before {
-  counter-increment: line;
-  content: counter(line);
-  display: inline-block;
-  width: 2.5rem;
-  margin-right: 1rem;
-  text-align: right;
-  color: rgba(167,139,250,0.25);
-  user-select: none;
-}
-pre[data-lined] code > span:first-line,
-pre[data-lined] code > span > span {
-  counter-increment: none;
 }
 
-/* Copy button & lang label */
+/* Copy button */
 .copy-btn {
   position: absolute;
   top: 0.4rem;
@@ -206,6 +170,8 @@ pre[data-lined] code > span > span {
   background: rgba(236,72,153,0.3);
   color: #fff;
 }
+
+/* Language label */
 .lang-label {
   position: absolute;
   top: 0.5rem;
