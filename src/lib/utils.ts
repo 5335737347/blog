@@ -67,36 +67,32 @@ import rehypeKatex from "rehype-katex";
 import rehypeHighlight from "rehype-highlight";
 // Custom rehype plugin: add line numbers to code blocks
 function rehypeLineNumbers() {
-  return (tree: any) => {
-    function visit(node: any) {
-      if (node.tagName === "code" && node.properties?.className) {
-        const pre = node.parent;
-        if (pre?.tagName === "pre" && !pre.properties?.["data-lined"]) {
-          pre.properties = { ...pre.properties, "data-lined": "" };
-
-          const textNodes = node.children?.filter((c: any) => c.type === "text") || [];
-          const allText = textNodes.map((c: any) => c.value).join("");
-          const lines = allText.split("\n");
-
-          if (lines.length > 1) {
-            node.children = lines.map((line: string, i: number) => ({
-              type: "element",
-              tagName: "span",
-              properties: { className: ["code-line"] },
-              children: [
-                { type: "element", tagName: "span", properties: { className: ["line-num"] }, children: [{ type: "text", value: String(i + 1) }] },
-                { type: "element", tagName: "span", properties: { className: ["line-content"] }, children: [{ type: "text", value: line || " " }] },
-              ],
-            }));
-          }
-        }
-      }
-      if (node.children) {
-        for (const child of node.children) visit(child);
-      }
-    }
-    visit(tree);
+  return () => {
+    return (tree: any) => {
+      // Post-process: wrap code lines with line numbers using raw HTML string replacement
+      // This runs after rehype-stringify via string manipulation
+    };
   };
+}
+
+// Render markdown to HTML, then post-process to add line numbers
+export function renderMarkdown(md: string): string {
+  let html = String(getProcessor().processSync(md));
+
+  // Add line numbers to code blocks (post-process raw HTML)
+  html = html.replace(/<pre[^>]*><code class="([^"]*)"[^>]*>([\s\S]*?)<\/code><\/pre>/g, (_match: string, cls: string, content: string) => {
+    // Unescape HTML entities that might interfere
+    const lines = content.split("\n");
+    if (lines.length <= 1) return _match;
+
+    const numbered = lines.map((line, i) => {
+      return `<span class="code-line"><span class="line-num">${i + 1}</span><span class="line-content">${line || " "}</span></span>`;
+    }).join("\n");
+
+    return `<pre data-lined=""><code class="${cls}">${numbered}</code></pre>`;
+  });
+
+  return html;
 }
 
 // Render markdown to HTML with LaTeX + syntax highlighting (server-side)
@@ -110,14 +106,9 @@ function getProcessor(): any {
       .use(remarkRehype)
       .use(rehypeKatex)
       .use(rehypeHighlight)
-      .use(rehypeLineNumbers)
       .use(rehypeStringify);
   }
   return _processor;
-}
-
-export function renderMarkdown(md: string): string {
-  return String(getProcessor().processSync(md));
 }
 
 // Auto-generate excerpt from content
