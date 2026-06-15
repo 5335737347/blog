@@ -39,7 +39,8 @@ export async function POST(request: NextRequest) {
         // Convert based on file type
         if (ext === "docx") {
           const buf = Buffer.from(await file.arrayBuffer());
-          const result = await mammoth.convertToMarkdown({ buffer: buf });
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+          const result = await (mammoth as any).convertToMarkdown({ buffer: buf }) as { value: string };
           raw = result.value;
           if (!raw.trim()) {
             results.push({ success: false, title: file.name, error: "文档为空" });
