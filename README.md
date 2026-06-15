@@ -1,18 +1,19 @@
-# 鲲鹏の博客
+# 鲲鹏の博客 v2.0.0
 
-一个基于 Next.js 16 的全栈个人博客，二次元风格主题。
+基于 Next.js 16 的全栈个人博客，二次元主题。6 篇 0 基础教程带你从零搭建。
 
 ## 技术栈
 
 | 层 | 技术 |
 |---|---|
 | 框架 | Next.js 16 (App Router + Turbopack) |
-| 数据库 | SQLite + Prisma 5 |
+| 数据库 | SQLite + Prisma 5 + prisma migrate |
 | 样式 | Tailwind CSS v4 |
-| 认证 | JWT (jose) + bcryptjs |
+| 认证 | JWT (jose) + bcryptjs + HTTP-only cookie |
 | 编辑器 | @uiw/react-md-editor |
-| 渲染 | react-markdown + remark-gfm |
+| 渲染 | react-markdown + remark-gfm + remark-math + rehype-katex + rehype-highlight |
 | RSS | feed |
+| 部署 | PM2 + Nginx + Let's Encrypt
 
 ## 快速开始
 
@@ -116,6 +117,13 @@ SITE_URL="http://localhost:3000"
 | `not-found.png` | 400×300 | 404 插画 | 🌸 emoji + 动画 |
 | `back-to-top.gif` | 48×48 | 回到顶部按钮 | 渐变 SVG 箭头 |
 
+## v2.0.0 重大变更
+
+- 废弃 unified 预渲染 → 改用 react-markdown 服务端直出
+- Markdown 渲染完全由 react-markdown + rehype-highlight + rehype-katex 处理
+- 删除 contentHtml 字段，文章存储纯 Markdown
+- 删除 renderMarkdown / regen-html
+
 ## 部署
 
 ### 初次部署
@@ -125,7 +133,7 @@ git clone https://github.com/5335737347/blog.git
 cd blog
 npm install
 npx prisma generate
-npx prisma db push
+npx prisma migrate deploy
 echo 'DATABASE_URL="file:./dev.db"' > .env
 echo "JWT_SECRET=$(openssl rand -hex 32)" >> .env
 echo "SITE_URL=https://你的域名" >> .env
@@ -136,17 +144,16 @@ pm2 save
 
 ### 更新部署
 
-本地 `git push` 后，服务器执行：
-
 ```bash
 npm run update
 ```
 
-等价于 `git pull && npm install && npx prisma generate && npm run build && pm2 restart blog`
+等价于 `git checkout . && git pull && npm install && npx prisma generate && npx prisma migrate deploy && npm run build && pm2 restart blog`
 
 ### 注意事项
 
 - 数据库: `prisma/dev.db`（单文件，备份即复制）
 - 上传文件: `public/images/`、`public/music/`
 - 切换到 PostgreSQL: 修改 `prisma/schema.prisma` 的 `provider` + `DATABASE_URL`
-- API 发布: 用 `/admin/settings` 生成的 API Key，POST 到 `/api/publish`
+- API 发布: `/admin/settings` 生成 API Key → POST `/api/publish`
+- 教程: https://kpblog.cc 有 6 篇 0 基础入门教程
