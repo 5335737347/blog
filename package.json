@@ -1,6 +1,6 @@
 {
   "name": "blog",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -12,7 +12,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
     "db:reset": "prisma migrate reset",
-    "update": "git checkout . && git pull && npm install --silent && npx prisma generate && npm run build && pm2 restart blog"
+    "update": "git checkout . && git pull && npm install --silent && npx prisma generate && npx prisma db push --accept-data-loss && npm run build && pm2 restart blog"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
