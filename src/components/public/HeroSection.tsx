@@ -20,7 +20,7 @@ export default async function HeroSection() {
       <div className="absolute -right-16 top-16 h-72 w-72 rounded-full bg-purple-300/20 blur-3xl dark:bg-purple-500/10" />
       <div className="absolute bottom-0 left-1/3 h-48 w-48 rounded-full bg-sky-300/20 blur-3xl dark:bg-sky-500/10" />
 
-      <div className="relative mx-auto max-w-6xl px-4 py-20 text-center">
+      <div className="relative mx-auto max-w-7xl px-4 py-20 text-center">
         <div className="mb-4 text-5xl animate-float">🌸</div>
         <h1 className="text-5xl font-extrabold tracking-tight">
           <span className="bg-gradient-to-r from-pink-500 via-purple-500 to-sky-400 bg-clip-text text-transparent">

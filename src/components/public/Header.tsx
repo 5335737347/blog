@@ -7,7 +7,7 @@ import MusicPlayer from "./MusicPlayer";
 export default function Header() {
   return (
     <header className="border-b border-pink-100 bg-white dark:border-purple-800/30 dark:bg-purple-950">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
+      <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4">
         <Link
           href="/"
           className="group flex items-center gap-2 text-xl font-bold transition-colors"
