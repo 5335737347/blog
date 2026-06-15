@@ -65,6 +65,39 @@ import remarkRehype from "remark-rehype";
 import rehypeStringify from "rehype-stringify";
 import rehypeKatex from "rehype-katex";
 import rehypeHighlight from "rehype-highlight";
+// Custom rehype plugin: add line numbers to code blocks
+function rehypeLineNumbers() {
+  return (tree: any) => {
+    function visit(node: any) {
+      if (node.tagName === "code" && node.properties?.className) {
+        const pre = node.parent;
+        if (pre?.tagName === "pre" && !pre.properties?.["data-lined"]) {
+          pre.properties = { ...pre.properties, "data-lined": "" };
+
+          const textNodes = node.children?.filter((c: any) => c.type === "text") || [];
+          const allText = textNodes.map((c: any) => c.value).join("");
+          const lines = allText.split("\n");
+
+          if (lines.length > 1) {
+            node.children = lines.map((line: string, i: number) => ({
+              type: "element",
+              tagName: "span",
+              properties: { className: ["code-line"] },
+              children: [
+                { type: "element", tagName: "span", properties: { className: ["line-num"] }, children: [{ type: "text", value: String(i + 1) }] },
+                { type: "element", tagName: "span", properties: { className: ["line-content"] }, children: [{ type: "text", value: line || " " }] },
+              ],
+            }));
+          }
+        }
+      }
+      if (node.children) {
+        for (const child of node.children) visit(child);
+      }
+    }
+    visit(tree);
+  };
+}
 
 // Render markdown to HTML with LaTeX + syntax highlighting (server-side)
 let _processor: any = null;
@@ -77,6 +110,7 @@ function getProcessor(): any {
       .use(remarkRehype)
       .use(rehypeKatex)
       .use(rehypeHighlight)
+      .use(rehypeLineNumbers)
       .use(rehypeStringify);
   }
   return _processor;

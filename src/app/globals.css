@@ -147,6 +147,20 @@ pre code {
   background: transparent !important;
   color: #e2d5f1;
 }
+.code-line {
+  display: block;
+  min-height: 1.5em;
+}
+.line-num {
+  display: inline-block;
+  width: 2.5rem;
+  margin-right: 1rem;
+  text-align: right;
+  color: rgba(167,139,250,0.3);
+  user-select: none;
+  font-size: 0.85em;
+  flex-shrink: 0;
+}
 /* Syntax highlight overrides for theme match */
 .hljs-keyword { color: #c4b5fd; }
 .hljs-string { color: #f9a8d4; }
