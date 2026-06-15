@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { version } from "@/../package.json";
+import pkg from "../../../package.json";
 
 export default function Footer() {
   return (
@@ -11,7 +11,7 @@ export default function Footer() {
           <span className="text-purple-400">TypeScript</span> ✨
         </p>
         <div className="flex items-center gap-3">
-          <span className="text-xs text-purple-300 dark:text-purple-600">v{version}</span>
+          <span className="text-xs text-purple-300 dark:text-purple-600">v{pkg.version}</span>
           <Link
             href="/admin"
             className="text-purple-400 hover:text-pink-500 dark:hover:text-pink-400 transition-colors"
