@@ -8,7 +8,7 @@ export default function Header() {
   return (
     <header className="sticky top-0 z-50 bg-white/90 backdrop-blur-md dark:bg-purple-950/90">
       <div className="mx-auto max-w-[90rem] px-4">
-        <div className="flex items-center justify-between rounded-b-2xl border-x border-b border-pink-100 bg-white px-6 py-3 shadow-sm dark:border-purple-800/30 dark:bg-purple-950">
+        <div className="flex items-center justify-between rounded-2xl border border-pink-100 bg-white px-6 py-3 shadow-sm dark:border-purple-800/30 dark:bg-purple-950">
           <Link
             href="/"
             className="group flex items-center gap-2 text-xl font-bold transition-colors"

@@ -118,11 +118,35 @@ SITE_URL="http://localhost:3000"
 
 ## 部署
 
+### 初次部署
+
 ```bash
+git clone https://github.com/5335737347/blog.git
+cd blog
+npm install
+npx prisma generate
+npx prisma db push
+echo 'DATABASE_URL="file:./dev.db"' > .env
+echo "JWT_SECRET=$(openssl rand -hex 32)" >> .env
+echo "SITE_URL=https://你的域名" >> .env
 npm run build
-npm start
+pm2 start npm --name blog -- start
+pm2 save
 ```
 
-- 数据库: `prisma/dev.db`（单文件，备份即可）
+### 更新部署
+
+本地 `git push` 后，服务器执行：
+
+```bash
+npm run update
+```
+
+等价于 `git pull && npm install && npx prisma generate && npm run build && pm2 restart blog`
+
+### 注意事项
+
+- 数据库: `prisma/dev.db`（单文件，备份即复制）
 - 上传文件: `public/images/`、`public/music/`
 - 切换到 PostgreSQL: 修改 `prisma/schema.prisma` 的 `provider` + `DATABASE_URL`
+- API 发布: 用 `/admin/settings` 生成的 API Key，POST 到 `/api/publish`
