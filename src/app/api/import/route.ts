@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
             title,
             slug,
             content: raw,
-            contentHtml: renderMarkdown(raw),
+            contentHtml: renderMarkdown(raw.replace(/^---[\s\S]*?---\n*/, "")),
             excerpt,
             published: false,
             tags: tagConnects.length > 0 ? { create: tagConnects } : undefined,
