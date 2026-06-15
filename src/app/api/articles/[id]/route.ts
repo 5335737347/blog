@@ -176,6 +176,7 @@ export async function DELETE(
       return NextResponse.json({ error: "文章不存在" }, { status: 404 });
     }
     await prisma.post.delete({ where: { id } });
+    cleanOrphanTags();
     return NextResponse.json({ success: true });
   } catch (e: any) {
     console.error("DELETE error:", e?.message || e);
