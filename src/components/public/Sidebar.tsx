@@ -12,7 +12,7 @@ async function ProfileCard() {
         </div>
         <div>
           <h3 className="text-lg font-bold text-purple-950 dark:text-purple-50">
-            悠哉代码
+            鲲鹏の博客
           </h3>
           <p className="mt-1 text-xs text-purple-400 dark:text-purple-500">
             CS Student / ACG Lover
