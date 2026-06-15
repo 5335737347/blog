@@ -69,6 +69,10 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
+      // Merge frontmatter tags with auto-detected #tags
+      const autoTags = extractHashTags(raw);
+      const allTags = [...new Set([...tags, ...autoTags])];
+
       // Resolve tags
       const tagConnects = [];
       for (const tagName of allTags) {
@@ -80,10 +84,6 @@ export async function POST(request: NextRequest) {
         });
         tagConnects.push({ tagId: tag.id });
       }
-
-      // Merge frontmatter tags with auto-detected #tags
-      const autoTags = extractHashTags(raw);
-      const allTags = [...new Set([...tags, ...autoTags])];
 
       await prisma.post.create({
         data: {
