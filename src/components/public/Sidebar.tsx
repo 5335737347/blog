@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import Card from "@/components/ui/Card";
+import { hashTagColor } from "@/lib/utils";
 
 async function ProfileCard() {
   return (
@@ -43,23 +44,6 @@ async function TagCloud() {
     orderBy: { name: "asc" },
   });
 
-  const TAG_COLORS = [
-    "bg-pink-50 text-pink-600 hover:bg-pink-100 dark:bg-pink-900/20 dark:text-pink-300 dark:hover:bg-pink-900/40",
-    "bg-purple-50 text-purple-600 hover:bg-purple-100 dark:bg-purple-900/20 dark:text-purple-300 dark:hover:bg-purple-900/40",
-    "bg-sky-50 text-sky-600 hover:bg-sky-100 dark:bg-sky-900/20 dark:text-sky-300 dark:hover:bg-sky-900/40",
-    "bg-emerald-50 text-emerald-600 hover:bg-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-300 dark:hover:bg-emerald-900/40",
-    "bg-amber-50 text-amber-600 hover:bg-amber-100 dark:bg-amber-900/20 dark:text-amber-300 dark:hover:bg-amber-900/40",
-    "bg-rose-50 text-rose-600 hover:bg-rose-100 dark:bg-rose-900/20 dark:text-rose-300 dark:hover:bg-rose-900/40",
-  ];
-
-  function hashColor(slug: string) {
-    let hash = 0;
-    for (let i = 0; i < slug.length; i++) {
-      hash = slug.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    return TAG_COLORS[Math.abs(hash) % TAG_COLORS.length];
-  }
-
   return (
     <Card>
       <h3 className="mb-4 text-sm font-semibold text-purple-900 dark:text-purple-100">
@@ -70,7 +54,7 @@ async function TagCloud() {
           <Link
             key={tag.slug}
             href={`/tags/${tag.slug}`}
-            className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium transition-all hover:scale-105 ${hashColor(tag.slug)}`}
+            className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium transition-all hover:scale-105 ${hashTagColor(tag.slug)}`}
           >
             {tag.name}
             <span className="opacity-60">({tag._count.posts})</span>

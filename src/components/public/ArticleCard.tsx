@@ -36,7 +36,7 @@ export default function ArticleCard({
       <div className="flex flex-col gap-3">
         {category && (
           <Link
-            href={`/tags/${category.slug}`}
+            href={`/tags/${category.slug}`} // category redirects to tag page (categories not implemented separately)
             className="inline-flex w-fit items-center gap-1 rounded-full bg-gradient-to-r from-pink-100 to-purple-100 px-3 py-1 text-xs font-medium text-purple-600 hover:from-pink-200 hover:to-purple-200 dark:from-pink-900/30 dark:to-purple-900/30 dark:text-purple-300 transition-all"
           >
             📁 {category.name}

@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
 
     // If replying, verify parent comment exists and belongs to same post
     if (parentId) {
-      const parent = await prisma.comment.findUnique({
+      const parent = await prisma.comment.findFirst({
         where: { id: parentId, postId },
       });
       if (!parent) {

@@ -23,7 +23,7 @@ async function main() {
       password: hashedPassword,
     },
   });
-  console.log(`  ✓ Admin user created: admin / fengzhitanxi04..`);
+  console.log(`  ✓ Admin user created`);
 
   // Create categories
   const tech = await prisma.category.create({

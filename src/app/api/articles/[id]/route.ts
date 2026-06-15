@@ -95,11 +95,20 @@ export async function PUT(
     // Update tags: delete all, then create
     await prisma.tagOnPost.deleteMany({ where: { postId: id } });
 
+    const finalSlug = slug?.trim() || slugify(title || existing.title);
+    // Check slug uniqueness (against other posts)
+    const slugConflict = await prisma.post.findFirst({
+      where: { slug: finalSlug, id: { not: id } },
+    });
+    if (slugConflict) {
+      return NextResponse.json({ error: "slug 已存在" }, { status: 400 });
+    }
+
     const post = await prisma.post.update({
       where: { id },
       data: {
         title: title?.trim(),
-        slug: slug?.trim() || slugify(title || existing.title),
+        slug: finalSlug,
         excerpt: excerpt?.trim() ?? null,
         content: content?.trim(),
         coverImage: coverImage !== undefined ? (coverImage?.trim() ?? null) : undefined,

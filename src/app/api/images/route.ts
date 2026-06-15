@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/auth";
-import { readdir, unlink } from "fs/promises";
+import { readdir, unlink, stat } from "fs/promises";
 import path from "path";
-import { statSync } from "fs";
 
 // GET /api/images — list all uploaded images
 export async function GET(request: NextRequest) {
@@ -15,19 +14,15 @@ export async function GET(request: NextRequest) {
     const dir = path.join(process.cwd(), "public", "images");
     const files = await readdir(dir).catch(() => [] as string[]);
 
-    const images = files
-      .filter((f) => /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(f))
-      .map((f) => {
+    const imageFiles = files.filter((f) => /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(f));
+    const images = await Promise.all(
+      imageFiles.map(async (f) => {
         const filePath = path.join(dir, f);
-        const stats = statSync(filePath);
-        return {
-          name: f,
-          url: `/images/${f}`,
-          size: stats.size,
-          modified: stats.mtime.toISOString(),
-        };
+        const s = await stat(filePath);
+        return { name: f, url: `/images/${f}`, size: s.size, modified: s.mtime.toISOString() };
       })
-      .sort((a, b) => new Date(b.modified).getTime() - new Date(a.modified).getTime());
+    );
+    images.sort((a, b) => new Date(b.modified).getTime() - new Date(a.modified).getTime());
 
     return NextResponse.json(images);
   } catch {

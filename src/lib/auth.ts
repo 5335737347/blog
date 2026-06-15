@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import type { NextRequest } from "next/server";
 import bcrypt from "bcryptjs";
 
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || "dev-secret");
+const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET!);
 const TOKEN_NAME = "session";
 const EXPIRES_IN = "7d";
 
