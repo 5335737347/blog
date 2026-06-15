@@ -15,8 +15,8 @@ function addButtons() {
     if (lang && !pre.querySelector(".lang-label")) {
       const label = document.createElement("span");
       label.className =
-        "lang-label absolute top-2 left-2 z-10 flex items-center gap-1 rounded-md bg-purple-500/20 px-2 py-0.5 text-[10px] font-medium text-purple-200 select-none";
-      label.innerHTML = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>${lang}`;
+        "lang-label absolute top-2 left-2 z-10 flex items-center gap-1.5 rounded-md bg-purple-500/20 px-2.5 py-0.5 text-[10px] font-medium tracking-wide text-purple-200/80 select-none";
+      label.innerHTML = `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="opacity-50"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg><span>${lang}</span>`;
       pre.appendChild(label);
     }
 
