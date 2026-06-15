@@ -17,17 +17,22 @@ export default function ArticleList({ articles }: ArticleListProps) {
 
   return (
     <div className="grid gap-6">
-      {articles.map((article) => (
-        <ArticleCard
+      {articles.map((article, i) => (
+        <div
           key={article.id}
-          slug={article.slug}
-          title={article.title}
-          excerpt={article.excerpt}
-          coverImage={article.coverImage ?? null}
-          publishedAt={article.publishedAt}
-          tags={article.tags}
-          category={article.category}
-        />
+          className="animate-fade-in-up"
+          style={{ animationDelay: `${i * 80}ms` }}
+        >
+          <ArticleCard
+            slug={article.slug}
+            title={article.title}
+            excerpt={article.excerpt}
+            coverImage={article.coverImage ?? null}
+            publishedAt={article.publishedAt}
+            tags={article.tags}
+            category={article.category}
+          />
+        </div>
       ))}
     </div>
   );
