@@ -133,11 +133,28 @@ body {
 pre {
   max-width: 100%;
   overflow-x: auto;
+  background: #1e1030 !important;
+  border: 1px solid rgba(167,139,250,0.2);
+  border-left: 3px solid #a78bfa;
+}
+.dark pre {
+  background: #1e1030 !important;
+  border-color: rgba(167,139,250,0.15);
 }
 pre code {
   white-space: pre;
   word-wrap: normal;
+  background: transparent !important;
+  color: #e2d5f1;
 }
+/* Syntax highlight overrides for theme match */
+.hljs-keyword { color: #c4b5fd; }
+.hljs-string { color: #f9a8d4; }
+.hljs-number { color: #93d5fb; }
+.hljs-comment { color: #6b5b7a; }
+.hljs-function { color: #a78bfa; }
+.hljs-title { color: #c4b5fd; }
+.hljs-built_in { color: #7dd3fc; }
 
 /* ===== 🖨️ 打印样式 ===== */
 @media print {
