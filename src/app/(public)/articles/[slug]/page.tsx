@@ -6,6 +6,8 @@ import CommentSection from "@/components/public/CommentSection";
 import PublicLayout from "@/components/public/PublicLayout";
 import TableOfContents from "@/components/public/TableOfContents";
 import { formatDate, readingTime } from "@/lib/utils";
+import "katex/dist/katex.min.css";
+import "highlight.js/styles/github-dark.min.css";
 
 interface ArticlePageProps {
   params: Promise<{ slug: string }>;
