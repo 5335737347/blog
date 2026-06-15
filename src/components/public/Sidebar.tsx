@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import Card from "@/components/ui/Card";
+import SearchBox from "./SearchBox";
 import { hashTagColor } from "@/lib/utils";
 
 async function ProfileCard() {
@@ -106,6 +107,7 @@ async function RecentPosts() {
 export default async function Sidebar() {
   return (
     <aside className="flex flex-col gap-5">
+      <SearchBox />
       <ProfileCard />
       <TagCloud />
       <RecentPosts />
