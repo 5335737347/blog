@@ -1,26 +1,122 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ===== 🌸 二次元配色方案 ===== */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #fff5f7;
+  --foreground: #2d1b2e;
+  --primary: #ff6b9d;
+  --primary-light: #ffb3cc;
+  --secondary: #a78bfa;
+  --secondary-light: #ddd6fe;
+  --accent: #7dd3fc;
+  --accent-light: #bae6fd;
+  --card-bg: #ffffff;
+  --card-border: #f8d4e3;
+  --muted: #8b6b7d;
+}
+
+.dark {
+  --background: #1a1025;
+  --foreground: #f0e6f6;
+  --primary: #ff85b3;
+  --primary-light: #ff4d8c;
+  --secondary: #c4b5fd;
+  --secondary-light: #8b7cf0;
+  --accent: #93d5fb;
+  --accent-light: #5eb8f0;
+  --card-bg: #231835;
+  --card-border: #3d2550;
+  --muted: #9b8ba8;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-light: var(--primary-light);
+  --color-secondary: var(--secondary);
+  --color-accent: var(--accent);
+  --color-card-bg: var(--card-bg);
+  --color-card-border: var(--card-border);
+  --color-muted: var(--muted);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+/* ===== 🌸 全局样式 ===== */
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  background-image:
+    radial-gradient(ellipse at 20% 50%, rgba(255, 107, 157, 0.04) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, rgba(167, 139, 250, 0.04) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 80%, rgba(125, 211, 252, 0.04) 0%, transparent 50%);
 }
+
+.dark body {
+  background-image:
+    radial-gradient(ellipse at 20% 50%, rgba(255, 133, 179, 0.06) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, rgba(196, 181, 253, 0.06) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 80%, rgba(147, 213, 251, 0.06) 0%, transparent 50%);
+}
+
+/* ===== 🌟 可爱滚动条 ===== */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--background);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--primary-light);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
+}
+
+/* ===== ✨ 选中文字 ===== */
+::selection {
+  background: var(--primary-light);
+  color: var(--foreground);
+}
+
+/* ===== 🎀 装饰动画 ===== */
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-4px); }
+}
+
+@keyframes sparkle {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(0.95); }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+.animate-sparkle {
+  animation: sparkle 2s ease-in-out infinite;
+}
+
+/* ===== 🌸 樱花飘落动画 ===== */
+@keyframes sakura-fall {
+  0% {
+    transform: translateY(-10%) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(110vh) rotate(360deg);
+    opacity: 0;
+  }
+}
+
+@keyframes sakura-sway {
+  0%, 100% { margin-left: 0; }
+  50% { margin-left: 30px; }
+}
+

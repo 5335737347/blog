@@ -1,36 +1,128 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 鲲鹏の博客
 
-## Getting Started
+一个基于 Next.js 16 的全栈个人博客，二次元风格主题。
 
-First, run the development server:
+## 技术栈
+
+| 层 | 技术 |
+|---|---|
+| 框架 | Next.js 16 (App Router + Turbopack) |
+| 数据库 | SQLite + Prisma 5 |
+| 样式 | Tailwind CSS v4 |
+| 认证 | JWT (jose) + bcryptjs |
+| 编辑器 | @uiw/react-md-editor |
+| 渲染 | react-markdown + remark-gfm |
+| RSS | feed |
+
+## 快速开始
 
 ```bash
+npm install
+npx prisma generate
+npx prisma migrate dev --name init
+npx prisma db seed
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+访问 http://localhost:3000
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 管理员
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- 地址: `/admin/login`
+- 账号: `admin` / `fengzhitanxi04..`
 
-## Learn More
+> ⚠️ 生产环境务必修改密码
 
-To learn more about Next.js, take a look at the following resources:
+## 功能
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 公开前台
+- 📝 文章列表（分页 + 封面图）+ 文章详情 + Markdown 渲染
+- 🏷️ 标签云 + 分类筛选 + 侧边栏（博主卡片/标签云/最近文章）
+- 💬 评论系统（嵌套回复 + 后台审核）
+- 🌓 主题切换器（明亮 / 黑暗 / 跟随系统，无闪烁）
+- 🎵 全局音乐播放器（上一首 / 下一首 / 音量，切换页面不中断）
+- 🌸 访客特效选择器（樱花 / 星星 / 雪花 / 关闭）
+- 📡 RSS 2.0 + sitemap
+- ⬆️ 回到顶部按钮
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 管理后台
+- 📝 文章管理（新建/编辑/草稿/发布/删除，Markdown 编辑器实时预览）
+- 🖼️ 图片管理（上传/预览/复制 URL/删除）
+- 🎵 音乐管理（上传本地 mp3/添加外链/删除）
+- ⚙️ 博客设置（标题/描述，实时生效）
 
-## Deploy on Vercel
+## 目录结构
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```
+src/
+├── app/
+│   ├── layout.tsx              # 根布局（ThemeProvider + MusicProvider + 特效）
+│   ├── page.tsx                # 首页（Hero + 分页文章列表 + 侧边栏）
+│   ├── not-found.tsx           # 404（萌系动画）
+│   ├── articles/[slug]/page.tsx
+│   ├── tags/[tag]/page.tsx
+│   ├── rss.xml/route.ts
+│   ├── sitemap.ts
+│   ├── admin/
+│   │   ├── page.tsx            # 文章管理面板
+│   │   ├── login/page.tsx      # 登录
+│   │   ├── articles/new + [id] # 新建/编辑文章
+│   │   ├── images/page.tsx     # 图片管理
+│   │   ├── music/page.tsx      # 音乐管理
+│   │   └── settings/page.tsx   # 博客设置
+│   └── api/                    # REST API（articles/comments/tags/upload/music/images/settings/auth）
+├── components/
+│   ├── public/  # Header, Footer, Hero, Sidebar, MusicPlayer, Effects, BackToTop...
+│   ├── admin/   # AdminSidebar, AdminHeader, ArticleEditor, ArticleForm
+│   └── ui/      # Button, Input, Textarea, Card
+├── lib/         # prisma, auth, theme, utils
+└── types/       # TypeScript 类型定义
+prisma/
+├── schema.prisma  # User, Post, Category, Tag, Comment, Music, Setting
+└── seed.ts        # 示例数据
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 环境变量
+
+```env
+DATABASE_URL="file:./dev.db"
+JWT_SECRET="生成一个随机字符串"
+SITE_URL="http://localhost:3000"
+```
+
+## 可用命令
+
+| 命令 | 说明 |
+|------|------|
+| `npm run dev` | 开发服务器 |
+| `npm run build` | 生产构建 |
+| `npm start` | 启动生产服务 |
+| `npm run db:studio` | Prisma Studio 数据管理 |
+| `npm run db:migrate` | 数据库迁移 |
+| `npm run db:seed` | 种子数据 |
+| `npm run db:reset` | 重置数据库 |
+
+## 自备图片资源（可选）
+
+放到 `public/images/` 下：
+
+| 文件 | 尺寸 | 用途 | 无图时行为 |
+|------|------|------|-----------|
+| `favicon.png` | 32×32 | 标签页图标 | 无图标 |
+| `avatar-default.png` | 200×200 | 评论默认头像 | Gravatar retro + 首字母渐变 |
+| `logo.png` | 80×80 | Header Logo | 🌸 emoji |
+| `hero-bg.webp` | 1200×400 | 首页横幅背景 | CSS 渐变（已很好看） |
+| `og-image.png` | 1200×630 | 社交分享卡片 | 无图 |
+| `not-found.png` | 400×300 | 404 插画 | 🌸 emoji + 动画 |
+| `back-to-top.gif` | 48×48 | 回到顶部按钮 | 渐变 SVG 箭头 |
+
+## 部署
+
+```bash
+npm run build
+npm start
+```
+
+- 数据库: `prisma/dev.db`（单文件，备份即可）
+- 上传文件: `public/images/`、`public/music/`
+- 切换到 PostgreSQL: 修改 `prisma/schema.prisma` 的 `provider` + `DATABASE_URL`
