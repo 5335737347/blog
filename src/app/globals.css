@@ -129,6 +129,16 @@ body {
   50% { margin-left: 30px; }
 }
 
+/* ===== 📝 代码块 ===== */
+pre {
+  max-width: 100%;
+  overflow-x: auto;
+}
+pre code {
+  white-space: pre;
+  word-wrap: normal;
+}
+
 /* ===== 🖨️ 打印样式 ===== */
 @media print {
   header, footer, nav, .fixed, .sticky,
