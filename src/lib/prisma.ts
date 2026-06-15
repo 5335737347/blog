@@ -15,6 +15,16 @@ let _settingsCache: Record<string, string> | null = null;
 let _settingsCacheTime = 0;
 const CACHE_TTL = 60_000; // 60 seconds
 
+// Delete tags that have no posts
+export async function cleanOrphanTags() {
+  const tags = await prisma.tag.findMany({ include: { posts: true } });
+  for (const tag of tags) {
+    if (tag.posts.length === 0) {
+      await prisma.tag.delete({ where: { id: tag.id } });
+    }
+  }
+}
+
 export async function getSettings(): Promise<Record<string, string>> {
   const now = Date.now();
   if (_settingsCache && now - _settingsCacheTime < CACHE_TTL) {

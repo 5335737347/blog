@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma, cleanOrphanTags } from "@/lib/prisma";
 import { getAuthUser } from "@/lib/auth";
 import { slugify, renderMarkdown, extractHashTags, autoExcerpt } from "@/lib/utils";
 
@@ -132,6 +132,7 @@ export async function PUT(
       if (allTagIds.length > 0) {
         data.tags = { create: allTagIds.map((tagId: string) => ({ tagId })) };
       }
+      cleanOrphanTags(); // fire-and-forget
     }
     if (categoryId !== undefined) data.categoryId = categoryId || null;
 
