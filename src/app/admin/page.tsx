@@ -31,17 +31,26 @@ export default function AdminDashboard() {
   }, [fetchArticles]);
 
   const handleTogglePublish = async (article: ArticleItem) => {
-    await fetch(`/api/articles/${article.id}`, {
+    const res = await fetch(`/api/articles/${article.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ published: !article.published }),
     });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      alert(`操作失败: ${err.error || res.status}`);
+      return;
+    }
     fetchArticles();
   };
 
   const handleDelete = async (id: string) => {
     if (!confirm("确定要删除这篇文章吗？")) return;
-    await fetch(`/api/articles/${id}`, { method: "DELETE" });
+    const res = await fetch(`/api/articles/${id}`, { method: "DELETE" });
+    if (!res.ok) {
+      alert(`删除失败: ${res.status}`);
+      return;
+    }
     fetchArticles();
   };
 
