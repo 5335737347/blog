@@ -154,22 +154,21 @@ pre[data-lined] code {
 pre[data-lined] .code-line {
   display: block;
   line-height: 1.5;
-}
-pre[data-lined] .code-line:first-child {
-  padding-top: 0;
-}
-pre[data-lined] .code-line:last-child {
-  padding-bottom: 0;
+  white-space: pre;
 }
 .line-num {
   display: inline-block;
-  width: 2.5rem;
-  margin-right: 1rem;
+  width: 3rem;
+  padding-right: 1rem;
   text-align: right;
-  color: rgba(167,139,250,0.3);
+  color: rgba(167,139,250,0.25);
   user-select: none;
-  font-size: 0.85em;
-  flex-shrink: 0;
+  font-size: inherit;
+  line-height: inherit;
+  vertical-align: baseline;
+}
+.line-content {
+  vertical-align: baseline;
 }
 /* Syntax highlight overrides for theme match */
 .hljs-keyword { color: #c4b5fd; }
