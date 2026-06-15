@@ -1,7 +1,15 @@
 import slugifyLib from "slugify";
 
 export function slugify(text: string): string {
-  return slugifyLib(text, { lower: true, strict: true, locale: "zh" });
+  const result = slugifyLib(text, { lower: true, strict: true, locale: "zh" });
+  if (result) return result;
+  // Fallback: hash for non-ASCII-only text (Chinese, Japanese, etc.)
+  let hash = 0;
+  for (let i = 0; i < text.length; i++) {
+    hash = ((hash << 5) - hash) + text.charCodeAt(i);
+    hash |= 0;
+  }
+  return "x" + Math.abs(hash).toString(36);
 }
 
 export function formatDate(date: Date | string): string {
