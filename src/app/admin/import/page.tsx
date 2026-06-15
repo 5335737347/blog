@@ -8,6 +8,7 @@ interface ImportResult {
   success: boolean;
   title: string;
   slug?: string;
+  source?: string;
   error?: string;
 }
 
@@ -51,8 +52,9 @@ export default function ImportPage() {
       </h2>
 
       <p className="mb-4 text-sm text-purple-400 dark:text-purple-500">
-        上传 Markdown (.md) 或 HTML (.html) 文件。支持 YAML frontmatter（title / tags / excerpt）。
-        导入后为草稿状态，可在文章管理中编辑发布。
+        上传 Markdown (.md)、Word (.docx)、HTML (.html) 或纯文本 (.txt)。
+        自动识别格式并转换为 Markdown。支持 YAML frontmatter。
+        导入后为草稿状态。
       </p>
 
       <div
@@ -67,7 +69,7 @@ export default function ImportPage() {
         <input
           ref={fileRef}
           type="file"
-          accept=".md,.html,.htm,.txt"
+          accept=".md,.docx,.html,.htm,.txt"
           multiple
           onChange={handleUpload}
           className="hidden"
@@ -98,6 +100,7 @@ export default function ImportPage() {
               >
                 <span>
                   {r.success ? "✅" : "❌"} {r.title}
+                  {r.source && <span className="ml-1 text-xs opacity-60">(.{r.source})</span>}
                 </span>
                 <span className="text-xs">
                   {r.success ? (
