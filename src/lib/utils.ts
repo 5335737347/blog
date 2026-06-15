@@ -87,7 +87,7 @@ export function renderMarkdown(md: string): string {
 
     const numbered = lines.map((line, i) => {
       return `<span class="code-line"><span class="line-num">${i + 1}</span><span class="line-content">${line || " "}</span></span>`;
-    }).join("\n");
+    }).join("");
 
     return `<pre data-lined=""><code class="${cls}">${numbered}</code></pre>`;
   });
