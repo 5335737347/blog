@@ -137,7 +137,7 @@ pre {
   border: 1px solid rgba(167,139,250,0.2);
   border-left: 3px solid #a78bfa;
   border-radius: 1rem;
-  padding: 1rem;
+  padding: 1rem 1rem 1rem 0.5rem;
 }
 .dark pre {
   background: #1e1030 !important;
@@ -150,21 +150,21 @@ pre code {
   color: #e2d5f1;
   line-height: 1.7;
 }
+pre[data-lined] code {
+  display: block;
+}
 pre[data-lined] .code-line {
   display: block;
   line-height: 1.7;
-  white-space: pre;
 }
 .line-num {
   display: inline-block;
   width: 2.5rem;
-  margin-right: 0.75rem;
+  margin-right: 1rem;
+  margin-left: 0.5rem;
   text-align: right;
   color: rgba(167,139,250,0.25);
   user-select: none;
-  font-size: inherit;
-  line-height: inherit;
-  vertical-align: baseline;
 }
 .line-content {
   vertical-align: baseline;
