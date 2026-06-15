@@ -13,7 +13,7 @@
     "db:studio": "prisma studio",
     "db:reset": "prisma migrate reset",
     "update": "git checkout . && git pull && npm install --silent && npx prisma generate && npx prisma db push --accept-data-loss && npm run build && pm2 restart blog",
-    "regen-html": "npx tsx -e \"const{PrismaClient}=require('@prisma/client');const{renderMarkdown}=require('./src/lib/utils');const p=new PrismaClient();(async()=>{const posts=await p.post.findMany();let c=0;for(const post of posts){const h=renderMarkdown(post.content);if(post.contentHtml!==h){await p.post.update({where:{id:post.id},data:{contentHtml:h}});c++;}}console.log('Updated '+c+' posts');await p.\$disconnect();})();\""
+    "regen-html": "npx tsx scripts/regen-html.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
