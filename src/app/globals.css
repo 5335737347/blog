@@ -146,10 +146,20 @@ pre code {
   word-wrap: normal;
   background: transparent !important;
   color: #e2d5f1;
+  line-height: 1.5;
 }
-.code-line {
+pre[data-lined] code {
   display: block;
-  min-height: 1.5em;
+}
+pre[data-lined] .code-line {
+  display: block;
+  line-height: 1.5;
+}
+pre[data-lined] .code-line:first-child {
+  padding-top: 0;
+}
+pre[data-lined] .code-line:last-child {
+  padding-bottom: 0;
 }
 .line-num {
   display: inline-block;
