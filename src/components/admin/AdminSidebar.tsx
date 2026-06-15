@@ -7,6 +7,7 @@ import { usePathname, useRouter } from "next/navigation";
 const links = [
   { href: "/admin", label: "📝 文章管理", exact: true },
   { href: "/admin/articles/new", label: "✨ 新建文章" },
+  { href: "/admin/import", label: "📥 导入笔记" },
   { href: "/admin/images", label: "🖼️ 图片管理" },
   { href: "/admin/music", label: "🎵 音乐管理" },
   { href: "/admin/settings", label: "⚙️ 博客设置" },
