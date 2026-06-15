@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma, cleanOrphanTags } from "@/lib/prisma";
 import { getAuthUser } from "@/lib/auth";
-import { slugify, renderMarkdown, extractHashTags, autoExcerpt } from "@/lib/utils";
+import { slugify, extractHashTags, autoExcerpt } from "@/lib/utils";
 
 // GET /api/articles/[id] — get single article
 export async function GET(
@@ -110,7 +110,6 @@ export async function PUT(
     }
     if (content !== undefined) {
       data.content = content?.trim();
-      data.contentHtml = renderMarkdown(content!.trim());
     }
     if (coverImage !== undefined) data.coverImage = coverImage?.trim() || null;
     if (published !== undefined) {

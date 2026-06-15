@@ -5,7 +5,6 @@ import TagBadge from "@/components/public/TagBadge";
 import CommentSection from "@/components/public/CommentSection";
 import PublicLayout from "@/components/public/PublicLayout";
 import TableOfContents from "@/components/public/TableOfContents";
-import HtmlContent from "@/components/public/HtmlContent";
 import ReadingProgressBar from "@/components/public/ReadingProgressBar";
 import { formatDate, readingTime } from "@/lib/utils";
 import "katex/dist/katex.min.css";
@@ -25,7 +24,6 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
       title: true,
       excerpt: true,
       content: true,
-      contentHtml: true,
       coverImage: true,
       publishedAt: true,
       category: { select: { name: true, slug: true } },
@@ -88,11 +86,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
         <TableOfContents content={post.content} />
 
         <div className="border-t-2 border-pink-100 pt-8 dark:border-purple-800/30">
-          {post.contentHtml ? (
-            <HtmlContent html={post.contentHtml} />
-          ) : (
-            <MarkdownContent content={post.content} />
-          )}
+          <MarkdownContent content={post.content} />
         </div>
       </article>
 

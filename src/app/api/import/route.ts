@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/lib/auth";
-import { slugify, renderMarkdown, extractHashTags, autoExcerpt } from "@/lib/utils";
+import { slugify, extractHashTags, autoExcerpt } from "@/lib/utils";
 import mammoth from "mammoth";
 
 function extractTitle(content: string, filename: string): string {
@@ -98,7 +98,6 @@ export async function POST(request: NextRequest) {
             title,
             slug,
             content: cleanContent || raw,
-            contentHtml: renderMarkdown(cleanContent || raw),
             excerpt,
             published: false,
             tags: tagConnects.length > 0 ? { create: tagConnects } : undefined,

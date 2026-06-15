@@ -1,12 +1,4 @@
 import slugifyLib from "slugify";
-import { unified } from "unified";
-import remarkParse from "remark-parse";
-import remarkGfm from "remark-gfm";
-import remarkMath from "remark-math";
-import remarkRehype from "remark-rehype";
-import rehypeStringify from "rehype-stringify";
-import rehypeKatex from "rehype-katex";
-import rehypeHighlight from "rehype-highlight";
 
 export function slugify(text: string): string {
   const result = slugifyLib(text, { lower: true, strict: true, locale: "zh" });
@@ -45,61 +37,6 @@ export function generateUniqueFilename(original: string): string {
 
 export const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 export const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
-
-// ====== Markdown → HTML Pipeline ======
-
-let _processor: any = null;
-function getProcessor(): any {
-  if (!_processor) {
-    _processor = unified()
-      .use(remarkParse)
-      .use(remarkGfm)
-      .use(remarkMath)
-      .use(remarkRehype)
-      .use(rehypeKatex)
-      .use(rehypeHighlight)
-      .use(rehypeStringify);
-  }
-  return _processor;
-}
-
-export function renderMarkdown(md: string): string {
-  // Strip YAML frontmatter
-  const clean = md.replace(/^---[\s\S]*?---\n*/, "").trim();
-  if (!clean) return "";
-
-  try {
-    let html = String(getProcessor().processSync(clean));
-
-    // Post-process: add line numbers to multi-line code blocks
-    html = html.replace(
-      /<pre><code( class="[^"]*")?>([\s\S]*?)<\/code><\/pre>/g,
-      (_match: string, cls: string, content: string) => {
-        const classAttr = cls || "";
-        const trimmed = content.replace(/\n$/, "");
-        const lines = trimmed.split("\n");
-        if (lines.length <= 1) {
-          return `<pre><code${classAttr}>${trimmed || " "}</code></pre>`;
-        }
-        const numbered = lines
-          .map((line, i) =>
-            `<span class="code-line"><span class="line-num">${i + 1}</span><span class="line-content">${line || " "}</span></span>`
-          )
-          .join("");
-        return `<pre data-lined=""><code${classAttr}>${numbered}</code></pre>`;
-      }
-    );
-
-    return html;
-  } catch (e) {
-    console.error("renderMarkdown error:", e);
-    // Fallback: basic paragraph wrapping
-    return clean
-      .split("\n\n")
-      .map((p) => `<p>${p.replace(/\n/g, "<br>")}</p>`)
-      .join("\n");
-  }
-}
 
 // ====== Content Utilities ======
 
@@ -140,7 +77,7 @@ export function extractHashTags(content: string): string[] {
   while ((m = re.exec(content)) !== null) {
     const tag = m[0].slice(1).toLowerCase();
     if (tag.length < 2 || !isNaN(Number(tag))) continue;
-    if (/^[0-9a-f]{3,8}$/.test(tag)) continue; // skip hex colors
+    if (/^[0-9a-f]{3,8}$/.test(tag)) continue;
     tags.add(tag);
   }
   return [...tags];

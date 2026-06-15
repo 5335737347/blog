@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/lib/auth";
-import { slugify, renderMarkdown, extractHashTags, autoExcerpt } from "@/lib/utils";
+import { slugify, extractHashTags, autoExcerpt } from "@/lib/utils";
 
 async function resolveTags(tagNames: string[]): Promise<string[]> {
   const ids: string[] = [];
@@ -129,7 +129,6 @@ export async function POST(request: NextRequest) {
         slug: finalSlug,
         excerpt: excerpt?.trim() || autoExcerpt(content) || null,
         content: content.trim(),
-        contentHtml: renderMarkdown(content.trim()),
         coverImage: coverImage?.trim() || null,
         published: published ?? false,
         publishedAt: published ? new Date() : null,
