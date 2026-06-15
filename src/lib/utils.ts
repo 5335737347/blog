@@ -57,11 +57,33 @@ const TAG_COLORS = [
   "bg-rose-50 text-rose-600 hover:bg-rose-100 dark:bg-rose-900/20 dark:text-rose-300 dark:hover:bg-rose-900/40",
 ];
 
-import { marked } from "marked";
+import { unified } from "unified";
+import remarkParse from "remark-parse";
+import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import remarkRehype from "remark-rehype";
+import rehypeStringify from "rehype-stringify";
+import rehypeKatex from "rehype-katex";
+import rehypeHighlight from "rehype-highlight";
 
-// Render markdown to HTML (server-side)
+// Render markdown to HTML with LaTeX + syntax highlighting (server-side)
+let _processor: any = null;
+function getProcessor(): any {
+  if (!_processor) {
+    _processor = unified()
+      .use(remarkParse)
+      .use(remarkGfm)
+      .use(remarkMath)
+      .use(remarkRehype)
+      .use(rehypeKatex)
+      .use(rehypeHighlight)
+      .use(rehypeStringify);
+  }
+  return _processor;
+}
+
 export function renderMarkdown(md: string): string {
-  return marked.parse(md, { breaks: true, gfm: true }) as string;
+  return String(getProcessor().processSync(md));
 }
 
 // Auto-generate excerpt from content

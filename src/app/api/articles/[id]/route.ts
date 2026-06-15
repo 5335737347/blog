@@ -114,24 +114,28 @@ export async function PUT(
     }));
     const allTagIds = [...new Set([...existingTagIds, ...autoTagIds])];
 
+    // Only update fields that were explicitly sent
+    const data: any = {};
+    if (title !== undefined) data.title = title?.trim();
+    data.slug = finalSlug;
+    if (excerpt !== undefined || content !== undefined) {
+      data.excerpt = excerpt?.trim() || (content ? autoExcerpt(content) : existing.excerpt);
+    }
+    if (content !== undefined) {
+      data.content = content?.trim();
+      data.contentHtml = renderMarkdown(content!.trim());
+    }
+    if (coverImage !== undefined) data.coverImage = coverImage?.trim() || null;
+    if (published !== undefined) data.published = published;
+    if (published !== undefined) data.publishedAt = publishedAt;
+    if (categoryId !== undefined) data.categoryId = categoryId || null;
+    if (allTagIds.length > 0) {
+      data.tags = { create: allTagIds.map((tagId: string) => ({ tagId })) };
+    }
+
     const post = await prisma.post.update({
       where: { id },
-      data: {
-        title: title?.trim(),
-        slug: finalSlug,
-        excerpt: excerpt?.trim() || (content ? autoExcerpt(content) : null),
-        content: content?.trim(),
-        contentHtml: content ? renderMarkdown(content.trim()) : undefined,
-        coverImage: coverImage !== undefined ? (coverImage?.trim() ?? null) : undefined,
-        published,
-        publishedAt,
-        categoryId: categoryId === null ? null : categoryId || existing.categoryId,
-        tags: allTagIds.length
-          ? {
-              create: allTagIds.map((tagId: string) => ({ tagId })),
-            }
-          : undefined,
-      },
+      data,
       include: {
         category: true,
         tags: { include: { tag: true } },

@@ -1,6 +1,6 @@
 {
   "name": "blog",
-  "version": "1.4.2",
+  "version": "1.5.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -31,9 +31,13 @@
     "react-markdown": "^10.1.0",
     "rehype-highlight": "^7.0.2",
     "rehype-katex": "^7.0.1",
+    "rehype-stringify": "^10.0.1",
     "remark-gfm": "^4.0.1",
     "remark-math": "^6.0.0",
-    "slugify": "^1.6.9"
+    "remark-parse": "^11.0.0",
+    "remark-rehype": "^11.1.2",
+    "slugify": "^1.6.9",
+    "unified": "^11.0.5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
