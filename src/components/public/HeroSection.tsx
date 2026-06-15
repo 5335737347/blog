@@ -1,8 +1,7 @@
-import { prisma } from "@/lib/prisma";
+import { getSettings } from "@/lib/prisma";
 
 export default async function HeroSection() {
-  const settings = await prisma.setting.findMany();
-  const settingsMap = Object.fromEntries(settings.map((s) => [s.key, s.value]));
+  const settingsMap = await getSettings();
   const blogTitle = settingsMap.blog_title || "鲲鹏の博客";
 
   return (

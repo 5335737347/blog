@@ -101,23 +101,27 @@ export function extractHeadings(content: string): { level: number; text: string;
 // Extract #tags from content
 export function extractHashTags(content: string): string[] {
   const tags = new Set<string>();
-  // Match #tag patterns (Chinese + English + numbers)
-  const matches = content.match(/#[一-龥\wЀ-ӿ-]+/g);
-  if (matches) {
-    for (const m of matches) {
-      const tag = m.slice(1).toLowerCase(); // remove # and lowercase
-      if (tag.length > 1 && tag.length < 30 && !/^\d+$/.test(tag)) {
-        tags.add(tag);
-      }
+  const re = /#[\p{L}\p{N}一-鿿][\p{L}\p{N}一-鿿_-]{0,28}/gu;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(content)) !== null) {
+    const tag = match[0].slice(1).toLowerCase();
+    if (tag.length > 1 && isNaN(Number(tag))) {
+      tags.add(tag);
     }
   }
   return [...tags];
 }
 
+const _colorCache = new Map<string, string>();
+
 export function hashTagColor(slug: string): string {
+  const cached = _colorCache.get(slug);
+  if (cached) return cached;
   let hash = 0;
   for (let i = 0; i < slug.length; i++) {
     hash = slug.charCodeAt(i) + ((hash << 5) - hash);
   }
-  return TAG_COLORS[Math.abs(hash) % TAG_COLORS.length];
+  const color = TAG_COLORS[Math.abs(hash) % TAG_COLORS.length];
+  _colorCache.set(slug, color);
+  return color;
 }

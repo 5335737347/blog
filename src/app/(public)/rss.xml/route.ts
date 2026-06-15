@@ -1,10 +1,10 @@
-import { prisma } from "@/lib/prisma";
+import { prisma, getSettings } from "@/lib/prisma";
 import { Feed } from "feed";
 
 export async function GET() {
   const siteUrl = process.env.SITE_URL || "http://localhost:3000";
 
-  const [posts, settings] = await Promise.all([
+  const [posts, settingsMap] = await Promise.all([
     prisma.post.findMany({
       where: { published: true },
       orderBy: { publishedAt: "desc" },
@@ -21,12 +21,8 @@ export async function GET() {
         },
       },
     }),
-    prisma.setting.findMany(),
+    getSettings(),
   ]);
-
-  const settingsMap = Object.fromEntries(
-    settings.map((s) => [s.key, s.value])
-  );
   const blogTitle = settingsMap.blog_title || "My Blog";
   const blogDescription =
     settingsMap.blog_description || "一个关于技术和生活的个人博客";
