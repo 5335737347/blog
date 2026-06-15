@@ -1,6 +1,8 @@
-# 鲲鹏の博客 v2.0.0
+# 鲲鹏の博客 v2.1.0
 
 基于 Next.js 16 的全栈个人博客，二次元主题。6 篇 0 基础教程带你从零搭建。
+
+线上地址：https://kpblog.cc
 
 ## 技术栈
 
@@ -11,7 +13,7 @@
 | 样式 | Tailwind CSS v4 |
 | 认证 | JWT (jose) + bcryptjs + HTTP-only cookie |
 | 编辑器 | @uiw/react-md-editor |
-| 渲染 | react-markdown + remark-gfm + remark-math + rehype-katex + rehype-highlight |
+| 渲染 | react-markdown + remark-gfm + remark-math + rehype-katex + rehype-highlight + rehype-slug |
 | RSS | feed |
 | 部署 | PM2 + Nginx + Let's Encrypt
 
@@ -43,8 +45,10 @@ npm run dev
 - 🌓 主题切换器（明亮 / 黑暗 / 跟随系统，无闪烁）
 - 🎵 全局音乐播放器（上一首 / 下一首 / 音量，切换页面不中断）
 - 🌸 访客特效选择器（樱花 / 星星 / 雪花 / 关闭）
+- 📋 代码块复制 + 语言标签 + 语法高亮
+- 🔗 标题锚点跳转（目录点击直达）
 - 📡 RSS 2.0 + sitemap
-- ⬆️ 回到顶部按钮
+- ⬆️ 回到顶部按钮 + 阅读进度条
 
 ### 管理后台
 - 📝 文章管理（新建/编辑/草稿/发布/删除，Markdown 编辑器实时预览）
