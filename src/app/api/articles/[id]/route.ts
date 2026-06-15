@@ -92,9 +92,6 @@ export async function PUT(
       publishedAt = null;
     }
 
-    // Update tags: delete all, then create
-    await prisma.tagOnPost.deleteMany({ where: { postId: id } });
-
     const finalSlug = slug?.trim() || slugify(title || existing.title);
     // Check slug uniqueness (against other posts)
     const slugConflict = await prisma.post.findFirst({
@@ -103,16 +100,6 @@ export async function PUT(
     if (slugConflict) {
       return NextResponse.json({ error: "slug 已存在" }, { status: 400 });
     }
-
-    // Auto-extract #tags from new content
-    const autoTags = content ? extractHashTags(content) : [];
-    const existingTagIds = tagIds || [];
-    const autoTagIds = await Promise.all(autoTags.map(async (name) => {
-      const s = slugify(name);
-      const tag = await prisma.tag.upsert({ where: { slug: s }, update: {}, create: { name, slug: s } });
-      return tag.id;
-    }));
-    const allTagIds = [...new Set([...existingTagIds, ...autoTagIds])];
 
     // Only update fields that were explicitly sent
     const data: any = {};
@@ -126,12 +113,27 @@ export async function PUT(
       data.contentHtml = renderMarkdown(content!.trim());
     }
     if (coverImage !== undefined) data.coverImage = coverImage?.trim() || null;
-    if (published !== undefined) data.published = published;
-    if (published !== undefined) data.publishedAt = publishedAt;
-    if (categoryId !== undefined) data.categoryId = categoryId || null;
-    if (allTagIds.length > 0) {
-      data.tags = { create: allTagIds.map((tagId: string) => ({ tagId })) };
+    if (published !== undefined) {
+      data.published = published;
+      data.publishedAt = publishedAt;
     }
+
+    // Only update tags if content or tagIds were sent
+    if (content !== undefined || tagIds !== undefined) {
+      await prisma.tagOnPost.deleteMany({ where: { postId: id } });
+      const autoTags = content ? extractHashTags(content) : [];
+      const userTagIds = tagIds || [];
+      const autoTagIds = await Promise.all(autoTags.map(async (name) => {
+        const s = slugify(name);
+        const tag = await prisma.tag.upsert({ where: { slug: s }, update: {}, create: { name, slug: s } });
+        return tag.id;
+      }));
+      const allTagIds = [...new Set([...userTagIds, ...autoTagIds])];
+      if (allTagIds.length > 0) {
+        data.tags = { create: allTagIds.map((tagId: string) => ({ tagId })) };
+      }
+    }
+    if (categoryId !== undefined) data.categoryId = categoryId || null;
 
     const post = await prisma.post.update({
       where: { id },
