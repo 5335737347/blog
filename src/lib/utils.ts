@@ -160,9 +160,11 @@ export function extractHashTags(content: string): string[] {
   let match: RegExpExecArray | null;
   while ((match = re.exec(content)) !== null) {
     const tag = match[0].slice(1).toLowerCase();
-    if (tag.length > 1 && isNaN(Number(tag))) {
-      tags.add(tag);
-    }
+    // Skip hex colors, pure numbers, and too-short tags
+    if (tag.length > 1 && !isNaN(Number(tag))) continue;
+    if (/^[0-9a-f]{3,8}$/.test(tag)) continue; // skip hex colors like ff6b9d
+    if (/^[a-z]$/.test(tag)) continue; // skip single letters
+    tags.add(tag);
   }
   return [...tags];
 }
