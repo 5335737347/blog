@@ -12,7 +12,7 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
     "db:reset": "prisma migrate reset",
-    "update": "git checkout . && git pull && npm install --silent && npx prisma generate && npx prisma db push --accept-data-loss && npm run build && pm2 restart blog",
+    "update": "git checkout . && git pull && npm install --silent && npx prisma generate && npx prisma migrate deploy && npm run build && pm2 restart blog",
     "regen-html": "npx tsx scripts/regen-html.ts"
   },
   "prisma": {
