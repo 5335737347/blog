@@ -4,7 +4,8 @@ import MarkdownContent from "@/components/public/MarkdownContent";
 import TagBadge from "@/components/public/TagBadge";
 import CommentSection from "@/components/public/CommentSection";
 import PublicLayout from "@/components/public/PublicLayout";
-import { formatDate } from "@/lib/utils";
+import TableOfContents from "@/components/public/TableOfContents";
+import { formatDate, readingTime } from "@/lib/utils";
 
 interface ArticlePageProps {
   params: Promise<{ slug: string }>;
@@ -73,11 +74,13 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
                 dateTime={post.publishedAt.toISOString()}
                 className="text-sm text-purple-300 dark:text-purple-500"
               >
-                📅 {formatDate(post.publishedAt)}
+                📅 {formatDate(post.publishedAt)} · 📖 {readingTime(post.content)} 分钟
               </time>
             )}
           </div>
         </header>
+
+        <TableOfContents content={post.content} />
 
         <div className="border-t-2 border-pink-100 pt-8 dark:border-purple-800/30">
           {post.contentHtml ? (

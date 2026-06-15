@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/lib/auth";
-import { slugify, renderMarkdown, extractHashTags } from "@/lib/utils";
+import { slugify, renderMarkdown, extractHashTags, autoExcerpt } from "@/lib/utils";
 
 // GET /api/articles/[id] — get single article
 export async function GET(
@@ -119,7 +119,7 @@ export async function PUT(
       data: {
         title: title?.trim(),
         slug: finalSlug,
-        excerpt: excerpt?.trim() ?? null,
+        excerpt: excerpt?.trim() || (content ? autoExcerpt(content) : null),
         content: content?.trim(),
         contentHtml: content ? renderMarkdown(content.trim()) : undefined,
         coverImage: coverImage !== undefined ? (coverImage?.trim() ?? null) : undefined,

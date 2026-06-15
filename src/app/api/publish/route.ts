@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { slugify, renderMarkdown, extractHashTags } from "@/lib/utils";
+import { slugify, renderMarkdown, extractHashTags, autoExcerpt } from "@/lib/utils";
 
 // POST /api/publish — publish article via API key
 export async function POST(request: NextRequest) {
@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
       data: {
         title: title.trim(),
         slug: finalSlug,
-        excerpt: excerpt?.trim() || null,
+        excerpt: excerpt?.trim() || autoExcerpt(content) || null,
         content: content.trim(),
         contentHtml: renderMarkdown(content.trim()),
         coverImage: coverImage?.trim() || null,

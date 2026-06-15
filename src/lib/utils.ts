@@ -64,6 +64,40 @@ export function renderMarkdown(md: string): string {
   return marked.parse(md, { breaks: true, gfm: true }) as string;
 }
 
+// Auto-generate excerpt from content
+export function autoExcerpt(content: string, maxLen = 200): string {
+  const clean = content
+    .replace(/^---[\s\S]*?---\s*/m, "")  // remove frontmatter
+    .replace(/^#+\s+.*$/gm, "")           // remove headings
+    .replace(/```[\s\S]*?```/g, "")       // remove code blocks
+    .replace(/[|*_~>`\[\]()!#]/g, "")     // remove markdown syntax
+    .replace(/\n+/g, " ")                 // collapse newlines
+    .trim();
+  return clean.slice(0, maxLen) + (clean.length > maxLen ? "..." : "");
+}
+
+// Estimate reading time
+export function readingTime(content: string): number {
+  const text = content.replace(/```[\s\S]*?```/g, "").replace(/[#*~>`\[\]()!_|]/g, "");
+  const words = text.match(/[一-鿿]|\w+/g)?.length || 0;
+  return Math.max(1, Math.ceil(words / 300)); // 300 chars/min for Chinese
+}
+
+// Extract headings for TOC
+export function extractHeadings(content: string): { level: number; text: string; id: string }[] {
+  const headings: { level: number; text: string; id: string }[] = [];
+  const lines = content.split("\n");
+  for (const line of lines) {
+    const match = line.match(/^(#{1,3})\s+(.+)$/);
+    if (match) {
+      const text = match[2].trim();
+      const id = text.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9一-鿿-]/g, "");
+      headings.push({ level: match[1].length, text, id });
+    }
+  }
+  return headings;
+}
+
 // Extract #tags from content
 export function extractHashTags(content: string): string[] {
   const tags = new Set<string>();
