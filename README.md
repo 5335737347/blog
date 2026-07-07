@@ -95,6 +95,32 @@ JWT_SECRET="生成一个随机字符串"
 SITE_URL="http://localhost:3000"
 ```
 
+可复制 `.env.example` 作为本地配置起点。不要提交 `.env` 或 `.env.local`。
+
+## Obsidian 内容工作流
+
+这个博客现在支持围绕 Obsidian 的学习输出流程：
+
+- 本地公开草稿目录：`content/drafts/`
+- 内容工作流文档：`docs/content-workflow.md`
+- 支持 frontmatter：`title`、`slug`、`tags`、`excerpt`、`category`、`coverImage`、`published`、`date`
+- 后台导入：`/admin/import`
+- API 发布：`/api/publish`
+
+命令行导入草稿：
+
+```bash
+npm run publish:draft -- content/drafts/example.md
+```
+
+发布到线上：
+
+```bash
+KPBLOG_API_URL=https://kpblog.cc/api/publish npm run publish:post -- content/drafts/example.md
+```
+
+API Key 放在 `.env.local` 或 shell 环境变量 `KPBLOG_API_KEY` 中，不要写进脚本、README 或文章。
+
 ## 可用命令
 
 | 命令 | 说明 |
@@ -106,6 +132,8 @@ SITE_URL="http://localhost:3000"
 | `npm run db:migrate` | 数据库迁移 |
 | `npm run db:seed` | 种子数据 |
 | `npm run db:reset` | 重置数据库 |
+| `npm run publish:draft -- <file>` | 将 Markdown 提交为草稿 |
+| `npm run publish:post -- <file>` | 将 Markdown 发布为文章 |
 
 ## 自备图片资源（可选）
 

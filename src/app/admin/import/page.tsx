@@ -1,12 +1,12 @@
 "use client";
 
 import { useState, useRef } from "react";
-import Button from "@/components/ui/Button";
 import Link from "next/link";
 
 interface ImportResult {
   success: boolean;
   title: string;
+  id?: string;
   slug?: string;
   source?: string;
   error?: string;
@@ -15,6 +15,7 @@ interface ImportResult {
 export default function ImportPage() {
   const [uploading, setUploading] = useState(false);
   const [results, setResults] = useState<ImportResult[]>([]);
+  const [error, setError] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleUpload = async () => {
@@ -22,16 +23,26 @@ export default function ImportPage() {
     if (!files || files.length === 0) return;
 
     setUploading(true);
+    setError("");
     const fd = new FormData();
     for (let i = 0; i < files.length; i++) {
       fd.append("files", files[i]);
     }
 
-    const res = await fetch("/api/import", { method: "POST", body: fd });
-    const data = await res.json();
-    setResults(data.results || []);
-    setUploading(false);
-    if (fileRef.current) fileRef.current.value = "";
+    try {
+      const res = await fetch("/api/import", { method: "POST", body: fd });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error || `导入失败: ${res.status}`);
+        return;
+      }
+      setResults(data.results || []);
+    } catch {
+      setError("网络错误，导入失败");
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -53,8 +64,8 @@ export default function ImportPage() {
 
       <p className="mb-4 text-sm text-purple-400 dark:text-purple-500">
         上传 Markdown (.md)、Word (.docx)、HTML (.html) 或纯文本 (.txt)。
-        Word (.docx) 自动转 Markdown。支持 YAML frontmatter（标题/标签/摘要）。
-        导入后为草稿状态。
+        Word (.docx) 自动转 Markdown。支持 YAML frontmatter：title、slug、tags、excerpt、category、coverImage、published。
+        默认导入为草稿，设置 published: true 时会直接发布。
       </p>
 
       <div
@@ -72,6 +83,7 @@ export default function ImportPage() {
           accept=".md,.docx,.html,.htm,.txt"
           multiple
           onChange={handleUpload}
+          disabled={uploading}
           className="hidden"
           id="import-file-input"
         />
@@ -82,6 +94,12 @@ export default function ImportPage() {
           {uploading ? "导入中..." : "选择文件"}
         </label>
       </div>
+
+      {error && (
+        <div className="mb-4 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400">
+          {error}
+        </div>
+      )}
 
       {results.length > 0 && (
         <div className="rounded-2xl border border-pink-100 bg-white p-4 dark:border-purple-800/30 dark:bg-purple-950/30">
@@ -103,8 +121,8 @@ export default function ImportPage() {
                   {r.source && <span className="ml-1 text-xs opacity-60">(.{r.source})</span>}
                 </span>
                 <span className="text-xs">
-                  {r.success ? (
-                    <Link href={`/admin/articles/${r.slug}`} className="underline">
+                  {r.success && r.id ? (
+                    <Link href={`/admin/articles/${r.id}`} className="underline">
                       编辑
                     </Link>
                   ) : (

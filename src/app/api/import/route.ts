@@ -1,23 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/lib/auth";
-import { slugify, extractHashTags, autoExcerpt } from "@/lib/utils";
+import { slugify, extractHashTags } from "@/lib/utils";
+import { normalizeMarkdown, parseMarkdownDocument, parseOptionalDate } from "@/lib/content";
 import mammoth from "mammoth";
 
-function extractTitle(content: string, filename: string): string {
-  const fmMatch = content.match(/^---\s*\n(?:.*\n)*?title:\s*(.+)\n(?:.*\n)*?---/);
-  if (fmMatch) return fmMatch[1].trim().replace(/['"]/g, "");
-  const h1Match = content.match(/^#\s+(.+)$/m);
-  if (h1Match) return h1Match[1].trim();
-  return filename.replace(/\.\w+$/i, "").replace(/[-_]/g, " ");
-}
+type MammothWithMarkdown = typeof mammoth & {
+  convertToMarkdown(input: { buffer: Buffer }): Promise<{ value: string }>;
+};
 
-function extractTags(content: string): string[] {
-  const fmMatch = content.match(/^---\s*\n(?:.*\n)*?tags:\s*\[(.+)\]\s*\n(?:.*\n)*?---/);
-  if (fmMatch) return fmMatch[1].split(",").map((t) => t.trim().replace(/['"]/g, "")).filter(Boolean);
-  const fmListMatch = content.match(/^---\s*\n(?:.*\n)*?tags:\s*\n((?:\s*-\s*.+\n)+)(?:.*\n)*?---/);
-  if (fmListMatch) return fmListMatch[1].split("\n").map((t) => t.replace(/^\s*-\s*/, "").trim()).filter(Boolean);
-  return [];
+interface ImportResult {
+  success: boolean;
+  title: string;
+  id?: string;
+  slug?: string;
+  source?: string;
+  error?: string;
 }
 
 export async function POST(request: NextRequest) {
@@ -29,7 +27,7 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const files = formData.getAll("files") as File[];
-    const results: { success: boolean; title: string; slug?: string; source?: string; error?: string }[] = [];
+    const results: ImportResult[] = [];
 
     for (const file of files) {
       try {
@@ -39,8 +37,7 @@ export async function POST(request: NextRequest) {
         // Convert based on file type
         if (ext === "docx") {
           const buf = Buffer.from(await file.arrayBuffer());
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-          const result = await (mammoth as any).convertToMarkdown({ buffer: buf }) as { value: string };
+          const result = await (mammoth as MammothWithMarkdown).convertToMarkdown({ buffer: buf });
           raw = result.value;
           if (!raw.trim()) {
             results.push({ success: false, title: file.name, error: "文档为空" });
@@ -53,21 +50,26 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
-        // Remove BOM and normalize line endings
-        raw = raw.replace(/^﻿/, "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+        raw = normalizeMarkdown(raw);
 
         // For plain text, wrap in markdown-friendly format
         if (ext === "txt") {
           raw = raw.replace(/</g, "&lt;").replace(/>/g, "&gt;");
         }
 
-        const title = extractTitle(raw, file.name);
-        const slug = slugify(title);
-        const tags = extractTags(raw);
-        const excerpt = autoExcerpt(raw);
+        const parsed = parseMarkdownDocument(raw, file.name);
+        const title = parsed.title;
+        const slug = parsed.slug;
+        const content = parsed.content.trim() || raw.trim();
+        const excerpt = parsed.excerpt;
+        const published = parsed.frontmatter.published ?? false;
+        const publishedAt = published ? parseOptionalDate(parsed.frontmatter.date) || new Date() : null;
+        const coverImage = parsed.frontmatter.coverImage || null;
 
-        // Strip YAML frontmatter only (keep headings)
-        const cleanContent = raw.replace(/^---[\s\S]*?---\n*/, "").trim();
+        if (!content) {
+          results.push({ success: false, title, error: "文档内容为空" });
+          continue;
+        }
 
         // Check slug
         const existing = await prisma.post.findUnique({ where: { slug } });
@@ -77,8 +79,8 @@ export async function POST(request: NextRequest) {
         }
 
         // Merge tags + auto-detected
-        const autoTags = extractHashTags(raw);
-        const allTags = [...new Set([...tags, ...autoTags])];
+        const autoTags = extractHashTags(content);
+        const allTags = [...new Set([...parsed.frontmatter.tags, ...autoTags])];
 
         const tagConnects = [];
         for (const tagName of allTags) {
@@ -91,19 +93,33 @@ export async function POST(request: NextRequest) {
           tagConnects.push({ tagId: tag.id });
         }
 
-        await prisma.post.create({
+        const category = parsed.frontmatter.category
+          ? await prisma.category.upsert({
+              where: { slug: slugify(parsed.frontmatter.category) },
+              update: {},
+              create: {
+                name: parsed.frontmatter.category,
+                slug: slugify(parsed.frontmatter.category),
+              },
+            })
+          : null;
+
+        const post = await prisma.post.create({
           data: {
             title,
             slug,
-            content: cleanContent || raw,
+            content,
             excerpt,
-            published: false,
+            coverImage,
+            published,
+            publishedAt,
+            categoryId: category?.id,
             tags: tagConnects.length > 0 ? { create: tagConnects } : undefined,
           },
         });
 
-        results.push({ success: true, title, slug, source: ext });
-      } catch (e) {
+        results.push({ success: true, title, id: post.id, slug, source: ext });
+      } catch {
         results.push({ success: false, title: file.name, error: "解析失败" });
       }
     }

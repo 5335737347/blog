@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { slugify, extractHashTags, autoExcerpt } from "@/lib/utils";
+import { parseMarkdownDocument, parseOptionalDate } from "@/lib/content";
 
 // POST /api/publish — publish article via API key
 export async function POST(request: NextRequest) {
@@ -18,13 +19,20 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { title, content, slug, tags, excerpt, coverImage } = body;
+    const { title, content, slug, tags, excerpt, coverImage, category, published, date } = body;
 
-    if (!title?.trim() || !content?.trim()) {
-      return NextResponse.json({ error: "标题和内容不能为空" }, { status: 400 });
+    if (!content?.trim()) {
+      return NextResponse.json({ error: "内容不能为空" }, { status: 400 });
     }
 
-    const finalSlug = slug?.trim() || slugify(title);
+    const parsed = parseMarkdownDocument(content, title || "untitled.md");
+    const finalTitle = title?.trim() || parsed.title;
+    const finalSlug = slug?.trim() ? slugify(slug) : parsed.slug;
+    const finalContent = parsed.content.trim();
+
+    if (!finalTitle || !finalContent) {
+      return NextResponse.json({ error: "标题和内容不能为空" }, { status: 400 });
+    }
 
     // Check uniqueness
     const existing = await prisma.post.findUnique({ where: { slug: finalSlug } });
@@ -33,9 +41,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Resolve tags: user-provided + auto-extracted from content
-    const userTags: string[] = tags || [];
-    const autoTags = extractHashTags(content);
-    const allTagNames = [...new Set([...userTags, ...autoTags])];
+    const userTags: string[] = Array.isArray(tags) ? tags : [];
+    const autoTags = extractHashTags(finalContent);
+    const allTagNames = [...new Set([...userTags, ...parsed.frontmatter.tags, ...autoTags])];
     const tagConnects = [];
     for (const name of allTagNames) {
       const tagSlug = slugify(name);
@@ -47,15 +55,29 @@ export async function POST(request: NextRequest) {
       tagConnects.push({ tagId: tag.id });
     }
 
+    const categoryName = category?.trim() || parsed.frontmatter.category;
+    const resolvedCategory = categoryName
+      ? await prisma.category.upsert({
+          where: { slug: slugify(categoryName) },
+          update: {},
+          create: { name: categoryName, slug: slugify(categoryName) },
+        })
+      : null;
+    const shouldPublish = published ?? parsed.frontmatter.published ?? true;
+    const publishedAt = shouldPublish
+      ? parseOptionalDate(date || parsed.frontmatter.date) || new Date()
+      : null;
+
     const post = await prisma.post.create({
       data: {
-        title: title.trim(),
+        title: finalTitle,
         slug: finalSlug,
-        excerpt: excerpt?.trim() || autoExcerpt(content) || null,
-        content: content.trim(),
-        coverImage: coverImage?.trim() || null,
-        published: true,
-        publishedAt: new Date(),
+        excerpt: excerpt?.trim() || parsed.frontmatter.excerpt || autoExcerpt(finalContent) || null,
+        content: finalContent,
+        coverImage: coverImage?.trim() || parsed.frontmatter.coverImage || null,
+        published: shouldPublish,
+        publishedAt,
+        categoryId: resolvedCategory?.id,
         tags: tagConnects.length > 0 ? { create: tagConnects } : undefined,
       },
     });
@@ -67,12 +89,13 @@ export async function POST(request: NextRequest) {
           id: post.id,
           slug: post.slug,
           title: post.title,
+          published: post.published,
           url: `${process.env.SITE_URL || "http://localhost:3000"}/articles/${post.slug}`,
         },
       },
       { status: 201 }
     );
-  } catch (e) {
+  } catch {
     return NextResponse.json({ error: "发布失败" }, { status: 500 });
   }
 }

@@ -12,6 +12,9 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
     "db:reset": "prisma migrate reset",
+    "publish:note": "node scripts/publish-note.mjs",
+    "publish:draft": "node scripts/publish-note.mjs --draft",
+    "publish:post": "node scripts/publish-note.mjs --publish",
     "update": "git checkout . && git pull && npm install --silent && npx prisma generate && npx prisma migrate deploy && npm run build && pm2 restart blog"
   },
   "prisma": {
