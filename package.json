@@ -15,7 +15,7 @@
     "publish:note": "node scripts/publish-note.mjs",
     "publish:draft": "node scripts/publish-note.mjs --draft",
     "publish:post": "node scripts/publish-note.mjs --publish",
-    "update": "git checkout . && git pull && npm install --silent && npx prisma generate && npx prisma migrate deploy && npm run build && pm2 restart blog"
+    "update": "node scripts/update.mjs"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -25,6 +25,7 @@
     "@uiw/react-md-editor": "^4.1.1",
     "bcryptjs": "^3.0.3",
     "feed": "^5.2.1",
+    "github-slugger": "^2.0.0",
     "jose": "^6.2.3",
     "mammoth": "^1.12.0",
     "marked": "^18.0.5",

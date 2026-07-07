@@ -1,4 +1,5 @@
 import slugifyLib from "slugify";
+import GithubSlugger from "github-slugger";
 
 export function slugify(text: string): string {
   const result = slugifyLib(text, { lower: true, strict: true, locale: "zh" });
@@ -57,13 +58,25 @@ export function readingTime(content: string): number {
   return Math.max(1, Math.ceil(words / 300));
 }
 
+function cleanHeadingText(raw: string): string {
+  return raw
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/[*_~]/g, "")
+    .replace(/<[^>]+>/g, "")
+    .trim();
+}
+
 export function extractHeadings(content: string): { level: number; text: string; id: string }[] {
   const headings: { level: number; text: string; id: string }[] = [];
+  const slugger = new GithubSlugger();
   for (const line of content.split("\n")) {
     const m = line.match(/^(#{1,3})\s+(.+)$/);
     if (m) {
-      const text = m[2].trim();
-      const id = text.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9一-鿿-]/g, "");
+      const text = cleanHeadingText(m[2]);
+      if (!text) continue;
+      const id = slugger.slug(text);
       headings.push({ level: m[1].length, text, id });
     }
   }

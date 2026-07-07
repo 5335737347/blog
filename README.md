@@ -180,7 +180,31 @@ pm2 save
 npm run update
 ```
 
-等价于 `git checkout . && git pull && npm install && npx prisma generate && npx prisma migrate deploy && npm run build && pm2 restart blog`
+更新脚本会执行：
+
+1. 检查 tracked 文件是否有本地改动，有改动则中止，避免静默丢文件。
+2. `git pull --ff-only` 拉取最新代码。
+3. `npm ci --include=dev` 安装锁定依赖。
+4. `npx prisma generate` 生成 Prisma Client。
+5. 备份 SQLite 数据库到 `backups/`。
+6. `npx prisma migrate deploy` 执行迁移。
+7. `npm run build` 构建生产包。
+8. `pm2 restart blog --update-env` 重启服务并刷新环境变量。
+
+可选参数：
+
+```bash
+npm run update -- --skip-backup
+npm run update -- --skip-build
+npm run update -- --skip-restart
+npm run update -- --allow-dirty
+```
+
+如果 PM2 进程名不是 `blog`：
+
+```bash
+PM2_APP_NAME=your-app-name npm run update
+```
 
 ### 注意事项
 

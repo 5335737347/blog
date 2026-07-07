@@ -9,7 +9,10 @@ export default function TableOfContents({ content }: TocProps) {
   if (headings.length < 2) return null;
 
   return (
-    <nav className="mb-8 rounded-2xl border-2 border-pink-100 bg-pink-50/30 p-4 dark:border-purple-800/30 dark:bg-purple-950/30">
+    <nav
+      className="mb-8 rounded-2xl border-2 border-pink-100 bg-pink-50/30 p-4 dark:border-purple-800/30 dark:bg-purple-950/30"
+      aria-label="文章目录"
+    >
       <h3 className="mb-2 text-sm font-semibold text-purple-900 dark:text-purple-100">
         📑 目录
       </h3>
@@ -21,7 +24,7 @@ export default function TableOfContents({ content }: TocProps) {
           >
             <a
               href={`#${h.id}`}
-              className="text-sm text-purple-500 hover:text-pink-500 dark:text-purple-400 dark:hover:text-pink-400 transition-colors"
+              className="block rounded-lg px-2 py-1 text-sm text-purple-500 transition-colors hover:bg-pink-50 hover:text-pink-500 dark:text-purple-400 dark:hover:bg-purple-900/30 dark:hover:text-pink-400"
             >
               {h.text}
             </a>
