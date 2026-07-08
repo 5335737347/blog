@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react";
 import Link from "next/link";
+import { readApiData, readApiError } from "@/lib/api-client";
 
 interface ImportResult {
   success: boolean;
@@ -31,11 +32,11 @@ export default function ImportPage() {
 
     try {
       const res = await fetch("/api/import", { method: "POST", body: fd });
-      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data.error || `导入失败: ${res.status}`);
+        setError(await readApiError(res, `导入失败: ${res.status}`));
         return;
       }
+      const data = await readApiData<{ results: ImportResult[] }>(res);
       setResults(data.results || []);
     } catch {
       setError("网络错误，导入失败");

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import CommentForm from "./CommentForm";
 import CommentList from "./CommentList";
 import type { CommentWithReplies } from "@/types";
+import { readApiData } from "@/lib/api-client";
 
 interface CommentSectionProps {
   postId: string;
@@ -19,7 +20,7 @@ export default function CommentSection({ postId }: CommentSectionProps) {
     try {
       const res = await fetch(`/api/comments?postId=${postId}`);
       if (res.ok) {
-        const data = await res.json();
+        const data = await readApiData<CommentWithReplies[]>(res);
         setComments(data);
       }
     } catch {
@@ -30,7 +31,10 @@ export default function CommentSection({ postId }: CommentSectionProps) {
   }, [postId]);
 
   useEffect(() => {
-    fetchComments();
+    const id = window.setTimeout(() => {
+      void fetchComments();
+    }, 0);
+    return () => window.clearTimeout(id);
   }, [fetchComments]);
 
   const handleSuccess = () => {

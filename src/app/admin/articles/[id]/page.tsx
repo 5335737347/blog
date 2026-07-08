@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import ArticleForm from "@/components/admin/ArticleForm";
+import { readApiData } from "@/lib/api-client";
 
 interface ArticleData {
   id: string;
@@ -25,7 +26,7 @@ export default function EditArticlePage() {
     fetch(`/api/articles/${id}`)
       .then((res) => {
         if (!res.ok) throw new Error("Not found");
-        return res.json();
+        return readApiData<ArticleData>(res);
       })
       .then((data) => {
         setArticle(data);

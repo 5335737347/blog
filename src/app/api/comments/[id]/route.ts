@@ -1,6 +1,16 @@
-import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { NextRequest } from "next/server";
 import { getAuthUser } from "@/lib/auth";
+import { apiError, apiSuccess, apiUnauthorized, errorMessage } from "@/lib/api-response";
+import { deleteComment, moderateComment } from "@/server/comments/comment-service";
+import { isServiceError } from "@/server/errors";
+
+function handleCommentError(error: unknown, fallback: string) {
+  if (isServiceError(error)) {
+    return apiError(error.message, error.status, error.code);
+  }
+  console.error(fallback, errorMessage(error));
+  return apiError(fallback);
+}
 
 // PUT /api/comments/[id] — approve/reject comment (admin)
 export async function PUT(
@@ -9,26 +19,15 @@ export async function PUT(
 ) {
   const user = await getAuthUser(request);
   if (!user) {
-    return NextResponse.json({ error: "未登录" }, { status: 401 });
+    return apiUnauthorized();
   }
 
   const { id } = await params;
 
   try {
-    const body = await request.json();
-    const { approved } = body;
-
-    const comment = await prisma.comment.update({
-      where: { id },
-      data: { approved },
-    });
-
-    return NextResponse.json({
-      ...comment,
-      createdAt: comment.createdAt.toISOString(),
-    });
-  } catch {
-    return NextResponse.json({ error: "操作失败" }, { status: 500 });
+    return apiSuccess(await moderateComment(id, await request.json()));
+  } catch (error) {
+    return handleCommentError(error, "操作失败");
   }
 }
 
@@ -39,11 +38,14 @@ export async function DELETE(
 ) {
   const user = await getAuthUser(request);
   if (!user) {
-    return NextResponse.json({ error: "未登录" }, { status: 401 });
+    return apiUnauthorized();
   }
 
   const { id } = await params;
 
-  await prisma.comment.delete({ where: { id } });
-  return NextResponse.json({ success: true });
+  try {
+    return apiSuccess(await deleteComment(id));
+  } catch (error) {
+    return handleCommentError(error, "删除失败");
+  }
 }

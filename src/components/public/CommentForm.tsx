@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Textarea from "@/components/ui/Textarea";
+import { readApiError } from "@/lib/api-client";
 
 interface CommentFormProps {
   postId: string;
@@ -46,8 +47,7 @@ export default function CommentForm({
         }),
       });
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "提交失败");
+        throw new Error(await readApiError(res, "提交失败"));
       }
       setAuthor("");
       setEmail("");

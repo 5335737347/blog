@@ -1,7 +1,15 @@
-import { NextResponse } from "next/server";
-import { clearAuthCookie } from "@/lib/auth";
+import { apiError, apiSuccess, errorMessage } from "@/lib/api-response";
+import { logoutAdmin } from "@/server/auth/auth-service";
+
+function handleAuthError(error: unknown, fallback: string) {
+  console.error(fallback, errorMessage(error));
+  return apiError(fallback);
+}
 
 export async function POST() {
-  await clearAuthCookie();
-  return NextResponse.json({ success: true });
+  try {
+    return apiSuccess(await logoutAdmin());
+  } catch (error) {
+    return handleAuthError(error, "退出失败");
+  }
 }

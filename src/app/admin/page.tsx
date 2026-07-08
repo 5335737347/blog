@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import Button from "@/components/ui/Button";
 import { formatDate } from "@/lib/utils";
+import { readApiData, readApiError } from "@/lib/api-client";
 
 interface ArticleItem {
   id: string;
@@ -21,13 +22,16 @@ export default function AdminDashboard() {
 
   const fetchArticles = useCallback(async () => {
     const res = await fetch("/api/articles?published=all&limit=50");
-    const data = await res.json();
+    const data = await readApiData<{ items: ArticleItem[] }>(res);
     setArticles(data.items);
     setLoading(false);
   }, []);
 
   useEffect(() => {
-    fetchArticles();
+    const id = window.setTimeout(() => {
+      void fetchArticles();
+    }, 0);
+    return () => window.clearTimeout(id);
   }, [fetchArticles]);
 
   const handleTogglePublish = async (article: ArticleItem) => {
@@ -37,8 +41,7 @@ export default function AdminDashboard() {
       body: JSON.stringify({ published: !article.published }),
     });
     if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      alert(`操作失败: ${err.error || res.status}`);
+      alert(`操作失败: ${await readApiError(res, String(res.status))}`);
       return;
     }
     fetchArticles();
@@ -48,7 +51,7 @@ export default function AdminDashboard() {
     if (!confirm("确定要删除这篇文章吗？")) return;
     const res = await fetch(`/api/articles/${id}`, { method: "DELETE" });
     if (!res.ok) {
-      alert(`删除失败: ${res.status}`);
+      alert(`删除失败: ${await readApiError(res, String(res.status))}`);
       return;
     }
     fetchArticles();

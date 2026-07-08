@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useMusicPlayerVisible } from "./MusicToggle";
+import { readApiData } from "@/lib/api-client";
 
 interface Track {
   id: string;
@@ -25,7 +26,7 @@ export default function MusicPlayer() {
 
   useEffect(() => {
     fetch("/api/music")
-      .then((r) => r.json())
+      .then((r) => readApiData<Track[]>(r))
       .then((data) => {
         setTracks(data);
         // Auto-play first track on load

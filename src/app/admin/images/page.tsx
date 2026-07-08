@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import Button from "@/components/ui/Button";
+import { readApiData } from "@/lib/api-client";
 
 interface ImageItem {
   name: string;
@@ -26,12 +27,17 @@ export default function ImagesAdminPage() {
   const fetchImages = useCallback(async () => {
     const res = await fetch("/api/images");
     if (res.ok) {
-      setImages(await res.json());
+      setImages(await readApiData<ImageItem[]>(res));
     }
     setLoading(false);
   }, []);
 
-  useEffect(() => { fetchImages(); }, [fetchImages]);
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      void fetchImages();
+    }, 0);
+    return () => window.clearTimeout(id);
+  }, [fetchImages]);
 
   const handleUpload = async () => {
     const file = fileRef.current?.files?.[0];

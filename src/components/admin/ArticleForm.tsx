@@ -7,6 +7,7 @@ import Input from "@/components/ui/Input";
 import Textarea from "@/components/ui/Textarea";
 import ArticleEditor from "./ArticleEditor";
 import { slugify } from "@/lib/utils";
+import { readApiData, readApiError } from "@/lib/api-client";
 
 interface Tag {
   id: string;
@@ -62,10 +63,10 @@ export default function ArticleForm({
 
   useEffect(() => {
     fetch("/api/tags")
-      .then((r) => r.json())
+      .then((r) => readApiData<Tag[]>(r))
       .then(setTags);
     fetch("/api/categories")
-      .then((r) => r.json())
+      .then((r) => readApiData<Category[]>(r))
       .then(setCategories);
   }, []);
 
@@ -116,12 +117,11 @@ export default function ArticleForm({
       });
 
       if (res.ok) {
-        const data = await res.json();
+        const data = await readApiData<{ id: string }>(res);
         router.push(`/admin/articles/${data.id}`);
         router.refresh();
       } else {
-        const data = await res.json();
-        setError(data.error || "保存失败");
+        setError(await readApiError(res, "保存失败"));
       }
     } catch {
       setError("网络错误");

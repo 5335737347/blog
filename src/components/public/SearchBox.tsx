@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import { readApiData } from "@/lib/api-client";
 
 interface Result {
   slug: string;
@@ -17,15 +18,14 @@ export default function SearchBox() {
 
   useEffect(() => {
     if (query.length < 2) {
-      setResults([]);
       return;
     }
     const t = setTimeout(async () => {
       const res = await fetch(`/api/articles?limit=50`);
-      const data = await res.json();
+      const data = await readApiData<{ items: Result[] }>(res);
       const q = query.toLowerCase();
       const filtered = data.items.filter(
-        (a: any) =>
+        (a) =>
           a.title.toLowerCase().includes(q) ||
           (a.excerpt || "").toLowerCase().includes(q)
       );
@@ -42,6 +42,8 @@ export default function SearchBox() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  const visibleResults = query.length < 2 ? [] : results;
+
   return (
     <div ref={ref} className="relative">
       <input
@@ -55,9 +57,9 @@ export default function SearchBox() {
         onFocus={() => setOpen(true)}
         className="w-full rounded-xl border-2 border-pink-200 bg-white px-3 py-2 text-sm text-purple-900 placeholder-pink-300 focus:border-purple-400 focus:outline-none dark:border-purple-800 dark:bg-purple-950 dark:text-purple-100 dark:placeholder-purple-600"
       />
-      {open && results.length > 0 && (
+      {open && visibleResults.length > 0 && (
         <div className="absolute left-0 top-full z-50 mt-1 w-full rounded-xl border-2 border-pink-200 bg-white shadow-lg dark:border-purple-800 dark:bg-purple-950">
-          {results.map((r) => (
+          {visibleResults.map((r) => (
             <Link
               key={r.slug}
               href={`/articles/${r.slug}`}

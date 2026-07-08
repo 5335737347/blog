@@ -1,8 +1,16 @@
-import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { NextRequest } from "next/server";
 import { getAuthUser } from "@/lib/auth";
-import { unlink } from "fs/promises";
-import path from "path";
+import { apiError, apiSuccess, apiUnauthorized, errorMessage } from "@/lib/api-response";
+import { isServiceError } from "@/server/errors";
+import { deleteMusicTrack } from "@/server/media/media-service";
+
+function handleMediaError(error: unknown, fallback: string) {
+  if (isServiceError(error)) {
+    return apiError(error.message, error.status, error.code);
+  }
+  console.error(fallback, errorMessage(error));
+  return apiError(fallback);
+}
 
 // DELETE /api/music/[id]
 export async function DELETE(
@@ -11,25 +19,13 @@ export async function DELETE(
 ) {
   const user = await getAuthUser(request);
   if (!user) {
-    return NextResponse.json({ error: "未登录" }, { status: 401 });
+    return apiUnauthorized();
   }
 
   const { id } = await params;
-  const track = await prisma.music.findUnique({ where: { id } });
-  if (!track) {
-    return NextResponse.json({ error: "不存在" }, { status: 404 });
+  try {
+    return apiSuccess(await deleteMusicTrack(id));
+  } catch (error) {
+    return handleMediaError(error, "删除失败");
   }
-
-  // Delete local file if it's not an external URL
-  if (track.url.startsWith("/music/")) {
-    try {
-      const filePath = path.join(process.cwd(), "public", track.url);
-      await unlink(filePath);
-    } catch {
-      // File may already be gone — ignore
-    }
-  }
-
-  await prisma.music.delete({ where: { id } });
-  return NextResponse.json({ success: true });
 }

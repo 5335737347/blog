@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
+import { readApiData, readApiError } from "@/lib/api-client";
 
 interface Track {
   id: string;
@@ -26,11 +27,16 @@ export default function MusicAdminPage() {
 
   const fetchTracks = useCallback(async () => {
     const res = await fetch("/api/music");
-    setTracks(await res.json());
+    setTracks(await readApiData<Track[]>(res));
     setLoading(false);
   }, []);
 
-  useEffect(() => { fetchTracks(); }, [fetchTracks]);
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      void fetchTracks();
+    }, 0);
+    return () => window.clearTimeout(id);
+  }, [fetchTracks]);
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,8 +53,8 @@ export default function MusicAdminPage() {
       fetchTracks();
       if (fileRef.current) fileRef.current.value = "";
     } else {
-      const d = await res.json();
-      setMessage("❌ " + (d.error || "上传失败"));
+      const error = await readApiError(res, "上传失败");
+      setMessage("❌ " + error);
     }
     setUploading(false);
   };
@@ -65,8 +71,8 @@ export default function MusicAdminPage() {
       setExtTitle(""); setExtArtist(""); setExtUrl("");
       fetchTracks();
     } else {
-      const d = await res.json();
-      setMessage("❌ " + (d.error || "添加失败"));
+      const error = await readApiError(res, "添加失败");
+      setMessage("❌ " + error);
     }
   };
 

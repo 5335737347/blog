@@ -1,0 +1,1330 @@
+openapi: 3.2.0
+info:
+  title: kpblog API
+  version: 2.1.0
+  description: |
+    kpblog 后端 JSON API 契约。
+
+    所有 `/api/*` JSON 接口统一使用 envelope:
+
+    - 成功: `{ "success": true, "data": ... }`
+    - 失败: `{ "success": false, "error": { "code": "...", "message": "..." } }`
+
+    `/rss.xml` 等非 JSON 内容接口不包含在本文件中。
+servers:
+  - url: http://localhost:3000
+    description: Local development
+  - url: https://kpblog.cc
+    description: Production
+tags:
+  - name: Auth
+  - name: Articles
+  - name: Comments
+  - name: Taxonomy
+  - name: Media
+  - name: Settings
+  - name: Publishing
+
+paths:
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Admin login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginInput"
+      responses:
+        "200":
+          description: Logged in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/auth/logout:
+    post:
+      tags: [Auth]
+      summary: Clear admin session cookie
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LogoutResponse"
+
+  /api/auth/me:
+    get:
+      tags: [Auth]
+      summary: Get current admin session
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: Current admin user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthMeResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/auth/key:
+    get:
+      tags: [Auth]
+      summary: Get current admin API key
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiKeyResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [Auth]
+      summary: Regenerate current admin API key
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: New API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiKeyResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/articles:
+    get:
+      tags: [Articles]
+      summary: List articles
+      description: |
+        Public requests return published articles only.
+        Authenticated admin requests can pass `published=all` or `published=draft`.
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+        - name: tag
+          in: query
+          schema:
+            type: string
+          description: Filter by tag slug.
+        - name: category
+          in: query
+          schema:
+            type: string
+          description: Filter by category slug.
+        - name: published
+          in: query
+          schema:
+            type: string
+            enum: [all, draft, published]
+          description: Admin-only publication filter.
+      responses:
+        "200":
+          description: Paginated articles
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArticleListResponse"
+    post:
+      tags: [Articles]
+      summary: Create article
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ArticleCreateInput"
+      responses:
+        "201":
+          description: Article created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PostDetailResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/articles/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [Articles]
+      summary: Get article by id
+      description: Draft articles require an authenticated admin session.
+      responses:
+        "200":
+          description: Article detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PostDetailResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Articles]
+      summary: Update article
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ArticleUpdateInput"
+      responses:
+        "200":
+          description: Article updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PostDetailResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      tags: [Articles]
+      summary: Delete article
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: Article deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/comments:
+    get:
+      tags: [Comments]
+      summary: List comments
+      description: |
+        With `postId`, returns approved public comment threads for that post.
+        Without `postId`, requires an admin session and returns the moderation list.
+      parameters:
+        - name: postId
+          in: query
+          schema:
+            type: string
+        - name: approved
+          in: query
+          schema:
+            type: string
+            enum: [pending, approved, "true", "false"]
+          description: Admin moderation filter. Ignored when `postId` is provided.
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Public comment threads or admin comment list
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/CommentListResponse"
+                  - $ref: "#/components/schemas/AdminCommentListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [Comments]
+      summary: Submit comment
+      description: New comments are created with `pendingReview=true` and are hidden until approved.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CommentCreateInput"
+      responses:
+        "201":
+          description: Comment submitted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommentCreateResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/comments/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    put:
+      tags: [Comments]
+      summary: Approve or reject comment
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CommentModerationInput"
+      responses:
+        "200":
+          description: Comment updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminCommentResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      tags: [Comments]
+      summary: Delete comment
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: Comment deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/categories:
+    get:
+      tags: [Taxonomy]
+      summary: List categories
+      responses:
+        "200":
+          description: Categories
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CategoryListResponse"
+
+  /api/tags:
+    get:
+      tags: [Taxonomy]
+      summary: List tags
+      responses:
+        "200":
+          description: Tags
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TagListResponse"
+
+  /api/settings:
+    get:
+      tags: [Settings]
+      summary: Get public settings
+      responses:
+        "200":
+          description: Settings map
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SettingsResponse"
+    put:
+      tags: [Settings]
+      summary: Update settings
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SettingsUpdateInput"
+      responses:
+        "200":
+          description: Settings updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpdateResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/upload:
+    post:
+      tags: [Media]
+      summary: Upload image
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "201":
+          description: Image uploaded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/images:
+    get:
+      tags: [Media]
+      summary: List uploaded images
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: Images
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImageListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      tags: [Media]
+      summary: Delete uploaded image
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: file
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Image deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/music:
+    get:
+      tags: [Media]
+      summary: List music tracks
+      responses:
+        "200":
+          description: Music tracks
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MusicListResponse"
+    post:
+      tags: [Media]
+      summary: Upload local music file or add external music URL
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/MusicUploadInput"
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MusicUrlInput"
+      responses:
+        "201":
+          description: Music track created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MusicResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/music/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    delete:
+      tags: [Media]
+      summary: Delete music track
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: Music track deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/import:
+    post:
+      tags: [Publishing]
+      summary: Import note files
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [files]
+              properties:
+                files:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+      responses:
+        "201":
+          description: Import results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/publish:
+    post:
+      tags: [Publishing]
+      summary: Publish Markdown via API key
+      security:
+        - bearerApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PublishInput"
+      responses:
+        "201":
+          description: Published article
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublishResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: session
+    bearerApiKey:
+      type: http
+      scheme: bearer
+      bearerFormat: kp API key
+
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    Page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 50
+        default: 10
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiFailure"
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiFailure"
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiFailure"
+    Conflict:
+      description: Conflict
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiFailure"
+    InternalError:
+      description: Internal error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiFailure"
+
+  schemas:
+    ApiFailure:
+      type: object
+      required: [success, error]
+      properties:
+        success:
+          type: boolean
+          const: false
+        error:
+          $ref: "#/components/schemas/ApiError"
+
+    ApiError:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [BAD_REQUEST, UNAUTHORIZED, NOT_FOUND, CONFLICT, INTERNAL_ERROR]
+        message:
+          type: string
+
+    LoginInput:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+          format: password
+
+    LoginResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [loggedIn]
+              properties:
+                loggedIn:
+                  type: boolean
+                  const: true
+
+    LogoutResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [loggedOut]
+              properties:
+                loggedOut:
+                  type: boolean
+                  const: true
+
+    AuthMeResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [authenticated, username]
+              properties:
+                authenticated:
+                  type: boolean
+                  const: true
+                username:
+                  type: string
+
+    ApiKeyResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [apiKey]
+              properties:
+                apiKey:
+                  type:
+                    - string
+                    - "null"
+
+    Envelope:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+          const: true
+        data: {}
+
+    DeleteResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [deleted]
+              properties:
+                deleted:
+                  type: boolean
+                  const: true
+
+    UpdateResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [updated]
+              properties:
+                updated:
+                  type: boolean
+                  const: true
+
+    Category:
+      type: object
+      required: [id, name, slug, postCount]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        postCount:
+          type: integer
+
+    Tag:
+      type: object
+      required: [id, name, slug, postCount]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        postCount:
+          type: integer
+
+    TagRef:
+      type: object
+      required: [name, slug]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+
+    CategoryRef:
+      type:
+        - object
+        - "null"
+      required: [name, slug]
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+
+    PostSummary:
+      type: object
+      required: [id, slug, title, excerpt, coverImage, published, publishedAt, createdAt, updatedAt, category, tags]
+      properties:
+        id:
+          type: string
+        slug:
+          type: string
+        title:
+          type: string
+        excerpt:
+          type:
+            - string
+            - "null"
+        coverImage:
+          type:
+            - string
+            - "null"
+        published:
+          type: boolean
+        publishedAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        category:
+          $ref: "#/components/schemas/CategoryRef"
+        tags:
+          type: array
+          items:
+            $ref: "#/components/schemas/TagRef"
+
+    PostDetail:
+      allOf:
+        - $ref: "#/components/schemas/PostSummary"
+        - type: object
+          required: [content, categoryId]
+          properties:
+            content:
+              type: string
+            categoryId:
+              type:
+                - string
+                - "null"
+
+    ArticleListResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [items, total, page, pageSize, totalPages]
+              properties:
+                items:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/PostSummary"
+                total:
+                  type: integer
+                page:
+                  type: integer
+                pageSize:
+                  type: integer
+                totalPages:
+                  type: integer
+
+    PostDetailResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/PostDetail"
+
+    ArticleCreateInput:
+      type: object
+      required: [title, content]
+      properties:
+        title:
+          type: string
+        slug:
+          type: string
+        excerpt:
+          type:
+            - string
+            - "null"
+        content:
+          type: string
+        coverImage:
+          type:
+            - string
+            - "null"
+        published:
+          type: boolean
+          default: false
+        categoryId:
+          type:
+            - string
+            - "null"
+        tagIds:
+          type: array
+          items:
+            type: string
+
+    ArticleUpdateInput:
+      type: object
+      properties:
+        title:
+          type: string
+        slug:
+          type: string
+        excerpt:
+          type:
+            - string
+            - "null"
+        content:
+          type: string
+        coverImage:
+          type:
+            - string
+            - "null"
+        published:
+          type: boolean
+        categoryId:
+          type:
+            - string
+            - "null"
+        tagIds:
+          type: array
+          items:
+            type: string
+
+    CommentReply:
+      type: object
+      required: [id, author, email, content, createdAt]
+      properties:
+        id:
+          type: string
+        author:
+          type: string
+        email:
+          type:
+            - string
+            - "null"
+        content:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    CommentThread:
+      allOf:
+        - $ref: "#/components/schemas/CommentReply"
+        - type: object
+          required: [replies]
+          properties:
+            replies:
+              type: array
+              items:
+                $ref: "#/components/schemas/CommentReply"
+
+    CommentListResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/CommentThread"
+
+    CommentCreateInput:
+      type: object
+      required: [postId, author, content]
+      properties:
+        postId:
+          type: string
+        parentId:
+          type:
+            - string
+            - "null"
+        author:
+          type: string
+        email:
+          type:
+            - string
+            - "null"
+          format: email
+        content:
+          type: string
+          maxLength: 2000
+
+    CommentCreateResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [id, pendingReview]
+              properties:
+                id:
+                  type: string
+                pendingReview:
+                  type: boolean
+                  const: true
+
+    CommentModerationInput:
+      type: object
+      required: [approved]
+      properties:
+        approved:
+          type: boolean
+
+    AdminComment:
+      type: object
+      required: [id, author, email, content, approved, createdAt, postId, parentId, post, parent]
+      properties:
+        id:
+          type: string
+        author:
+          type: string
+        email:
+          type:
+            - string
+            - "null"
+        content:
+          type: string
+        approved:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        postId:
+          type: string
+        parentId:
+          type:
+            - string
+            - "null"
+        post:
+          type: object
+          required: [id, title, slug]
+          properties:
+            id:
+              type: string
+            title:
+              type: string
+            slug:
+              type: string
+        parent:
+          type:
+            - object
+            - "null"
+          required: [id, author]
+          properties:
+            id:
+              type: string
+            author:
+              type: string
+
+    AdminCommentResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/AdminComment"
+
+    AdminCommentListResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [items, total, page, pageSize, totalPages]
+              properties:
+                items:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/AdminComment"
+                total:
+                  type: integer
+                page:
+                  type: integer
+                pageSize:
+                  type: integer
+                totalPages:
+                  type: integer
+
+    CategoryListResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/Category"
+
+    TagListResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/Tag"
+
+    SettingsResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              additionalProperties:
+                type: string
+              example:
+                blog_title: "鲲鹏の博客"
+                blog_description: "一个 CS 学生的二次元技术博客"
+
+    SettingsUpdateInput:
+      type: object
+      properties:
+        blog_title:
+          type: string
+        blog_description:
+          type: string
+
+    UploadResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [url]
+              properties:
+                url:
+                  type: string
+                  example: /images/example.webp
+
+    ImageItem:
+      type: object
+      required: [name, url, size, modified]
+      properties:
+        name:
+          type: string
+        url:
+          type: string
+        size:
+          type: integer
+        modified:
+          type: string
+          format: date-time
+
+    ImageListResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/ImageItem"
+
+    MusicTrack:
+      type: object
+      required: [id, title, artist, url, createdAt]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        artist:
+          type:
+            - string
+            - "null"
+        url:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    MusicListResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/MusicTrack"
+
+    MusicResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/MusicTrack"
+
+    MusicUploadInput:
+      type: object
+      required: [file]
+      properties:
+        file:
+          type: string
+          format: binary
+        title:
+          type: string
+        artist:
+          type: string
+
+    MusicUrlInput:
+      type: object
+      required: [title, url]
+      properties:
+        title:
+          type: string
+        artist:
+          type:
+            - string
+            - "null"
+        url:
+          type: string
+
+    ImportResult:
+      type: object
+      required: [success, title]
+      properties:
+        success:
+          type: boolean
+        title:
+          type: string
+        id:
+          type: string
+        slug:
+          type: string
+        source:
+          type: string
+        error:
+          type: string
+
+    ImportResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [imported, failed, results]
+              properties:
+                imported:
+                  type: integer
+                failed:
+                  type: integer
+                results:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/ImportResult"
+
+    PublishInput:
+      type: object
+      required: [content]
+      properties:
+        title:
+          type: string
+        content:
+          type: string
+        slug:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        excerpt:
+          type: string
+        coverImage:
+          type: string
+        category:
+          type: string
+        published:
+          type: boolean
+        date:
+          type: string
+          description: Any date string accepted by JavaScript Date.
+
+    PublishResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [post]
+              properties:
+                post:
+                  type: object
+                  required: [id, slug, title, published, url]
+                  properties:
+                    id:
+                      type: string
+                    slug:
+                      type: string
+                    title:
+                      type: string
+                    published:
+                      type: boolean
+                    url:
+                      type: string

@@ -1,30 +1,16 @@
-import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { apiError, apiSuccess, errorMessage } from "@/lib/api-response";
+import { listCategories } from "@/server/taxonomy/taxonomy-service";
+
+function handleTaxonomyError(error: unknown, fallback: string) {
+  console.error(fallback, errorMessage(error));
+  return apiError(fallback);
+}
 
 // GET /api/categories — list all categories
 export async function GET() {
-  const categories = await prisma.category.findMany({
-    orderBy: { name: "asc" },
-    select: {
-      id: true,
-      name: true,
-      slug: true,
-      _count: {
-        select: {
-          posts: {
-            where: { published: true },
-          },
-        },
-      },
-    },
-  });
-
-  return NextResponse.json(
-    categories.map((c) => ({
-      id: c.id,
-      name: c.name,
-      slug: c.slug,
-      postCount: c._count.posts,
-    }))
-  );
+  try {
+    return apiSuccess(await listCategories());
+  } catch (error) {
+    return handleTaxonomyError(error, "读取失败");
+  }
 }

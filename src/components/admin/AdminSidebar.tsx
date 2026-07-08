@@ -3,10 +3,12 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { readApiData } from "@/lib/api-client";
 
 const links = [
   { href: "/admin", label: "📝 文章管理", exact: true },
   { href: "/admin/articles/new", label: "✨ 新建文章" },
+  { href: "/admin/comments", label: "💬 评论审核" },
   { href: "/admin/import", label: "📥 导入笔记" },
   { href: "/admin/images", label: "🖼️ 图片管理" },
   { href: "/admin/music", label: "🎵 音乐管理" },
@@ -20,7 +22,9 @@ export default function AdminSidebar() {
 
   useEffect(() => {
     fetch("/api/auth/me")
-      .then((res) => (res.ok ? res.json() : null))
+      .then((res) =>
+        res.ok ? readApiData<{ authenticated: boolean; username: string }>(res) : null
+      )
       .then((data) => data && setUsername(data.username))
       .catch(() => {});
   }, []);

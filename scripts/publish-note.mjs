@@ -51,12 +51,13 @@ const response = await fetch(apiUrl, {
   body: JSON.stringify(body),
 });
 
-const data = await response.json().catch(() => ({}));
-if (!response.ok) {
+const payload = await response.json().catch(() => ({}));
+if (!response.ok || payload.success === false) {
   console.error(`发布失败: ${response.status}`);
-  console.error(JSON.stringify(data, null, 2));
+  console.error(JSON.stringify(payload.error || payload, null, 2));
   process.exit(1);
 }
 
+const data = payload.success === true ? payload.data : payload;
 console.log(`已提交: ${path.basename(file)}`);
 console.log(JSON.stringify(data, null, 2));

@@ -1,32 +1,32 @@
-import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { getAuthUser } from "@/lib/auth";
-import crypto from "crypto";
+import { apiError, apiSuccess, errorMessage } from "@/lib/api-response";
+import {
+  getCurrentUserApiKey,
+  regenerateCurrentUserApiKey,
+} from "@/server/auth/auth-service";
+import { isServiceError } from "@/server/errors";
+
+function handleAuthError(error: unknown, fallback: string) {
+  if (isServiceError(error)) {
+    return apiError(error.message, error.status, error.code);
+  }
+  console.error(fallback, errorMessage(error));
+  return apiError(fallback);
+}
 
 // GET /api/auth/key — get current user's API key
 export async function GET() {
-  const user = await getAuthUser();
-  if (!user) {
-    return NextResponse.json({ error: "未登录" }, { status: 401 });
+  try {
+    return apiSuccess(await getCurrentUserApiKey());
+  } catch (error) {
+    return handleAuthError(error, "读取 API Key 失败");
   }
-
-  const u = await prisma.user.findUnique({ where: { id: user.userId } });
-  return NextResponse.json({ apiKey: u?.apiKey || null });
 }
 
 // POST /api/auth/key — regenerate API key
 export async function POST() {
-  const user = await getAuthUser();
-  if (!user) {
-    return NextResponse.json({ error: "未登录" }, { status: 401 });
+  try {
+    return apiSuccess(await regenerateCurrentUserApiKey());
+  } catch (error) {
+    return handleAuthError(error, "生成 API Key 失败");
   }
-
-  const apiKey = `kp_${crypto.randomBytes(24).toString("hex")}`;
-
-  await prisma.user.update({
-    where: { id: user.userId },
-    data: { apiKey },
-  });
-
-  return NextResponse.json({ apiKey });
 }

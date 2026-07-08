@@ -1,30 +1,16 @@
-import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { apiError, apiSuccess, errorMessage } from "@/lib/api-response";
+import { listTags } from "@/server/taxonomy/taxonomy-service";
+
+function handleTaxonomyError(error: unknown, fallback: string) {
+  console.error(fallback, errorMessage(error));
+  return apiError(fallback);
+}
 
 // GET /api/tags — list all tags with post counts
 export async function GET() {
-  const tags = await prisma.tag.findMany({
-    orderBy: { name: "asc" },
-    select: {
-      id: true,
-      name: true,
-      slug: true,
-      _count: {
-        select: {
-          posts: {
-            where: { post: { published: true } },
-          },
-        },
-      },
-    },
-  });
-
-  return NextResponse.json(
-    tags.map((t) => ({
-      id: t.id,
-      name: t.name,
-      slug: t.slug,
-      postCount: t._count.posts,
-    }))
-  );
+  try {
+    return apiSuccess(await listTags());
+  } catch (error) {
+    return handleTaxonomyError(error, "读取失败");
+  }
 }

@@ -3,6 +3,7 @@
 import { useState, useEffect, type FormEvent } from "react";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
+import { readApiData } from "@/lib/api-client";
 
 export default function SettingsPage() {
   const [title, setTitle] = useState("");
@@ -13,8 +14,8 @@ export default function SettingsPage() {
 
   useEffect(() => {
     Promise.all([
-      fetch("/api/settings").then((r) => r.json()),
-      fetch("/api/auth/key").then((r) => r.json()),
+      fetch("/api/settings").then((r) => readApiData<Record<string, string>>(r)),
+      fetch("/api/auth/key").then((r) => readApiData<{ apiKey: string | null }>(r)),
     ])
       .then(([settings, keyData]) => {
         setTitle(settings.blog_title || "鲲鹏の博客");
@@ -46,7 +47,7 @@ export default function SettingsPage() {
   const handleRegenerateKey = async () => {
     const res = await fetch("/api/auth/key", { method: "POST" });
     if (res.ok) {
-      const data = await res.json();
+      const data = await readApiData<{ apiKey: string }>(res);
       setApiKey(data.apiKey);
     }
   };

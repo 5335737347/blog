@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useSyncExternalStore } from "react";
 
 type EffectType = "sakura" | "stars" | "snow" | "none";
 
@@ -8,25 +8,47 @@ type EffectType = "sakura" | "stars" | "snow" | "none";
 let _effect: EffectType = "none";
 const _listeners: (() => void)[] = [];
 
+function isEffectType(value: string | null): value is EffectType {
+  return value === "sakura" || value === "stars" || value === "snow" || value === "none";
+}
+
+function emitEffectChange() {
+  _listeners.forEach((fn) => fn());
+}
+
+function subscribeEffect(listener: () => void) {
+  _listeners.push(listener);
+  return () => {
+    const index = _listeners.indexOf(listener);
+    if (index >= 0) _listeners.splice(index, 1);
+  };
+}
+
+function getEffectSnapshot() {
+  return _effect;
+}
+
 export function useEffectType(): [EffectType, (e: EffectType) => void] {
-  const [, force] = useState(0);
+  const effect = useSyncExternalStore(
+    subscribeEffect,
+    getEffectSnapshot,
+    getEffectSnapshot
+  );
 
   useEffect(() => {
-    const stored = localStorage.getItem("blog-effect") as EffectType | null;
-    if (stored === "sakura" || stored === "stars" || stored === "snow" || stored === "none") {
+    const stored = localStorage.getItem("blog-effect");
+    if (isEffectType(stored) && stored !== _effect) {
       _effect = stored;
-      force((n) => n + 1);
+      emitEffectChange();
     }
-    const id = _listeners.push(() => force((n) => n + 1)) - 1;
-    return () => { _listeners.splice(id, 1); };
   }, []);
 
   return [
-    _effect,
+    effect,
     (e: EffectType) => {
       _effect = e;
       localStorage.setItem("blog-effect", e);
-      _listeners.forEach((fn) => fn());
+      emitEffectChange();
     },
   ];
 }
@@ -55,15 +77,10 @@ function generateParticles(count: number): Particle[] {
 
 export default function FallingEffects() {
   const [effect] = useEffectType();
-  const [particles, setParticles] = useState<Particle[]>([]);
-
-  useEffect(() => {
-    if (effect === "none") {
-      setParticles([]);
-    } else {
-      setParticles(generateParticles(35));
-    }
-  }, [effect]);
+  const particles = useMemo(
+    () => (effect === "none" ? [] : generateParticles(35)),
+    [effect]
+  );
 
   if (effect === "none" || particles.length === 0) return null;
 

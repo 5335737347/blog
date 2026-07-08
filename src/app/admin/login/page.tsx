@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
+import { readApiError } from "@/lib/api-client";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -26,8 +27,7 @@ export default function LoginPage() {
       if (res.ok) {
         router.push("/admin");
       } else {
-        const data = await res.json();
-        setError(data.error || "登录失败");
+        setError(await readApiError(res, "登录失败"));
       }
     } catch {
       setError("网络错误");
