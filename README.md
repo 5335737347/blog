@@ -95,6 +95,7 @@ NEXT_PUBLIC_SITE_URL="https://你的域名"
 | `npm run dev:web` / `npm run dev:api` | 单独启动一个应用 |
 | `npm run build` | 依次构建 API 与 Web |
 | `npm run start:web` / `npm run start:api` | 单独启动生产应用 |
+| `npm run update` | 安全拉取、检查、备份、迁移、构建并重载生产服务 |
 | `npm run check` | lint、类型检查和全部测试 |
 | `npm run lint` | 检查所有 workspace 与脚本 |
 | `npm run typecheck` | 检查根项目及所有 workspace |

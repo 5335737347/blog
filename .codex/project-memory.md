@@ -173,6 +173,19 @@ Last updated: 2026-07-21 (Asia/Shanghai)
 - The documentation pass validated all local Markdown links across 11 files,
   parsed the OpenAPI YAML successfully, and passed `git diff --check`.
 
+## Completed 2026-07-21 update workflow hardening
+
+- The production update script now prevents concurrent runs with a stale-aware
+  repository lock and rejects unknown command-line options.
+- Its safe default path pulls with fast-forward only, installs dependencies,
+  generates Prisma Client, runs the full workspace check before production data
+  changes, backs up SQLite, deploys migrations, and builds both applications.
+- A successful PM2 reload is followed by `pm2 save` and retrying internal API
+  and Web health checks. Recovery-only flags can skip individual expensive or
+  environment-dependent steps without weakening the default update path.
+- `--allow-dirty` remains non-destructive: it permits local changes to exist but
+  does not overwrite them or bypass Git merge-conflict protection.
+
 ## Source organization
 
 - Public components are organized by domain under `apps/web/src/components/public/`:
