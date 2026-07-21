@@ -1,29 +1,107 @@
 # 后续维护计划
 
-Last checkpoint: 2026-07-21 Web/API Monorepo separation
+Last checkpoint: 2026-07-21 私有管理端隔离方案确认
 
-## 当前状态
+## 当前已部署状态
 
 - 单 Git 仓库由 npm workspaces 管理。
-- `apps/web` 是独立 Next.js 应用，不含 Route Handlers、Prisma 或 JWT 密钥。
-- `apps/api` 是独立 Fastify 应用，负责全部数据和安全边界。
-- `packages/contracts` 保存 Web/API 共享的可序列化契约。
-- 浏览器通过 Web 同域 `/api/*` 代理访问 API；SSR 通过 `API_INTERNAL_URL` 直连。
-- API 与 Web 可分别构建、启动，并由 PM2 作为两个进程管理。
-- lint、类型检查、服务测试、Fastify 注入测试和生产构建均已通过。
+- `apps/web` 是监听 `127.0.0.1:3001` 的 Next.js 应用，目前仍同时包含公开页面和管理页面。
+- `apps/api` 是监听 `127.0.0.1:3002` 的 Fastify 应用，负责全部数据和安全边界。
+- Nginx 仅公开 Web 的 80/443；API 不直接暴露。
+- `packages/contracts` 保存跨进程共享的可序列化契约。
+- PM2 当前管理 `blog-web` 与 `blog-api` 两个进程。
+- lint、类型检查、服务测试、Fastify 注入测试和双应用生产构建均已通过。
 
-## 下一优先级
+以上是当前事实。下述管理端方案在完成代码、部署和验收前不得写成“已经上线”。
 
-1. 为登录、注册、文章 CRUD、评论审核、媒体上传和设置增加浏览器级端到端测试。
-2. 在 CI 中固定运行 `npm ci`、`npm run check` 和 `npm run build`。
-3. 部署前演练 `ecosystem.config.cjs` 与 Nginx 配置，并验证 Cookie、真实客户端 IP 和上传大小限制。
-4. 在 Web/API 分主机或多副本前，将 `apps/web/public` 中的上传媒体迁移到对象存储。
-5. 随接口演进逐步扩大 `packages/contracts` 覆盖面，并持续同步 `docs/openapi.yaml`。
+## 已批准目标：私有管理端
+
+目标是在同一仓库、同一服务器中增加独立 `apps/admin`，并从公开 Web 完全移除管理界面：
+
+```text
+Public Internet
+      │ HTTPS :443
+      ▼
+    Nginx ───────────────> Web 127.0.0.1:3001
+
+Trusted device + removable Ed25519 key
+      │ restricted SSH local forward
+      └──────────────────> Admin 127.0.0.1:3003
+
+Web/Admin ───────────────> API 127.0.0.1:3002 ──> SQLite/media
+```
+
+约束：
+
+- Nginx 不为 Admin 配置公网反向代理，防火墙不开放 3003。
+- Admin 只能通过受限 SSH 本地转发访问；端口号和隐藏路径不作为安全措施。
+- 使用 OpenSSH Ed25519 标准认证，不实现自定义“动态密钥”算法，也不允许网页读取或上传私钥。
+- SSH 私钥使用强口令并保存在加密可移动介质；服务器只保存公钥，并准备独立恢复密钥。
+- 专用 SSH 账号禁止密码、Shell、PTY、代理和任意端口转发，仅允许转发到 `127.0.0.1:3003`。
+- Admin 应用仍要求管理员身份，API 对每个管理操作继续执行服务端授权。
+- 手机或其他电脑只有在可信、能使用密钥并建立 SSH 隧道时才允许管理；不为移动便利开放公网 Admin。
+
+## 实施阶段
+
+### 阶段 1：契约与 API 边界
+
+1. 清点现有管理页面使用的全部 API，并将管理操作统一规划到 `/api/admin/*`。
+2. 将普通用户登录与管理员登录分离；公开登录端点不得签发管理员会话。
+3. 管理员 Cookie、会话和撤销机制与普通用户分离，并设置更短有效期。
+4. 在 Contracts、Fastify injection 测试、服务测试和 OpenAPI 中同步新边界。
+5. 为公网无法取得管理员会话、普通用户无法调用管理接口增加回归测试。
+
+### 阶段 2：创建 Admin 应用
+
+1. 新建 `apps/admin` Next.js workspace，默认仅监听 `127.0.0.1:3003`。
+2. 将 `apps/web/src/app/admin`、管理组件和管理专属客户端迁移到 Admin。
+3. Admin 只通过 HTTP 和 `@kpblog/contracts` 使用 API，不导入 Prisma、API 服务或 JWT 密钥。
+4. 为 Admin 增加独立类型检查、生产构建和浏览器级登录/CRUD 验证。
+
+### 阶段 3：移除公开管理面
+
+1. 从 `apps/web` 删除管理路由、管理组件和管理会话预检。
+2. Web 不代理 `/api/admin/*`，公开站点的 `/admin` 在真实路由层面不存在。
+3. 验证公开站点、普通登录注册、评论、RSS、sitemap 和 CLI 发布不受影响。
+
+### 阶段 4：服务器访问边界
+
+1. PM2 增加 `blog-admin`，更新脚本构建、重载、保存并健康检查三个进程。
+2. 创建专用 SSH 隧道账号，登记日常公钥和独立恢复公钥。
+3. 通过 sshd 约束禁止 Shell 和任意转发，只放行 `127.0.0.1:3003`。
+4. 保持 Nginx 仅代理 Web，保持 UFW 仅公开 SSH、HTTP、HTTPS。
+5. 在桌面和至少一种移动设备上演练密钥解锁、隧道建立、管理登录和安全退出。
+
+### 阶段 5：切换与恢复演练
+
+1. 切换前备份 SQLite、媒体和生产环境配置，并完成一次恢复验证。
+2. 验证公开网络无法连接 3002/3003，也无法获得管理员会话。
+3. 验证密钥撤销、管理员密码变更、全部会话失效和恢复密钥接管。
+4. 确认新架构稳定后再删除旧兼容路径；历史由 Git 保存，不保留双后台实现。
+
+## 验收标准
+
+- `https://站点域名/admin` 不存在真实管理路由。
+- 公网扫描只能看到 SSH、HTTP、HTTPS，3001/3002/3003 均不直接暴露。
+- 没有获准 SSH 私钥时，无法建立到 Admin 的网络连接。
+- 隧道密钥不能获得通用服务器 Shell，也不能转发到其他目标。
+- 普通用户凭据和普通会话无法升级为 Admin。
+- Admin 私钥内容、口令、恢复材料和设备路径未进入 Git、日志或应用配置；公钥指纹
+  可以进入受控的运维清单，用于核对和撤销密钥。
+- `npm run check && npm run build` 通过，Web、API、Admin 的关键浏览器流程通过。
+- 更新、备份、恢复、密钥撤销和服务器重启后的进程恢复均有成功演练记录。
+
+## 其他下一优先级
+
+1. 建立 SQLite、媒体和生产配置的自动加密异地备份及保留策略。
+2. 为公开登录、注册、评论与管理端 CRUD 增加端到端测试。
+3. 在 CI 中固定运行 `npm ci`、`npm run check` 和 `npm run build`。
+4. 在 Web/API 分主机或多副本前，将上传媒体迁移到对象存储。
 
 ## 每次变更检查
 
 - 先读 `.codex/project-memory.md`；修改 Next.js 前读当前安装版本文档。
-- 接口变化同时检查 API、Web 调用方、Contracts、测试和 OpenAPI。
+- 接口变化同时检查 API、Web/Admin 调用方、Contracts、测试和 OpenAPI。
 - 数据库变化必须包含 migration。
-- 不提交 `.env*`、数据库、备份、上传媒体、构建目录或真实密钥。
+- 不提交 `.env*`、数据库、备份、上传媒体、构建目录或任何私钥材料。
 - 提交前检查 `git status`、`git diff --cached`、`git diff`，再运行 `npm run check && npm run build`。

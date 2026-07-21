@@ -43,6 +43,16 @@ npm run start:api
 - 上传同时受 Nginx、Fastify multipart 和媒体服务校验约束。
 - 新数据库字段必须配套 Prisma migration。
 
+## 计划中的 Admin API 边界
+
+私有 Admin 拆分尚未实施。目标是将管理操作统一到 `/api/admin/*`，把管理员登录、
+Cookie/会话和普通用户登录明确分离；公开登录端点不得为 `ADMIN` 角色签发会话，公开
+Web 也不得转发管理命名空间。
+
+SSH 隧道只限制 Admin UI 的网络入口，不能替代 API 授权。每个管理端点仍须验证独立
+管理员会话和角色，并补充“公网无法取得管理员会话、普通用户无法升级权限”的注入
+测试。详细迁移顺序见 [`docs/next-plan.md`](../../docs/next-plan.md)。
+
 ## 新增功能顺序
 
 1. 明确请求与响应 DTO。

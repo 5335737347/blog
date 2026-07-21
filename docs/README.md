@@ -6,13 +6,13 @@
 
 | 文档 | 适用场景 |
 |---|---|
-| [总体架构](architecture.md) | 理解 Web、API、Contracts、数据库和媒体之间的关系 |
+| [总体架构](architecture.md) | 理解当前 Web/API 边界及已批准的私有 Admin 目标架构 |
 | [开发规范](development.md) | 修改代码、增加接口、执行验证和准备提交 |
 | [环境变量](environment.md) | 创建本地或生产环境配置 |
 | [部署手册](deployment.md) | 使用 PM2、Nginx 和更新脚本部署单机实例 |
 | [内容工作流](content-workflow.md) | 从 Markdown/Obsidian 导入或发布文章 |
 | [OpenAPI](openapi.yaml) | 查询 HTTP 接口、请求和响应契约 |
-| [后续计划](next-plan.md) | 查看当前技术债和下一阶段工作 |
+| [后续计划](next-plan.md) | 查看私有 Admin 迁移阶段、验收标准和其他技术债 |
 
 ## 应用文档
 

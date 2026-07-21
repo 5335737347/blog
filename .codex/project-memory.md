@@ -154,6 +154,43 @@ Last updated: 2026-07-21 (Asia/Shanghai)
   `docs/` for architecture/environment/deployment/workflows, and app-level
   READMEs for the Next.js, Fastify, and Contracts framework boundaries.
 
+## Decided 2026-07-21 private Admin separation (not implemented)
+
+- The current deployment still serves the management UI from `apps/web`; do not
+  describe the private Admin topology as deployed until its migration, tests,
+  process configuration, and server rollout are complete.
+- The approved target remains one Git repository but adds `apps/admin` as an
+  independently built Next.js application. Public Web must contain no Admin
+  pages, components, precheck proxy, or Admin API forwarding after the cutover.
+- Target single-machine processes are Web on `127.0.0.1:3001`, API on
+  `127.0.0.1:3002`, and Admin on `127.0.0.1:3003`. Nginx exposes only Web;
+  neither API nor Admin receives a public listener or public reverse proxy.
+- Admin access uses an OpenSSH local-forward tunnel authenticated by a dedicated
+  Ed25519 key. Use OpenSSH's standard fresh-challenge signature and encrypted
+  session protocol; do not invent a custom rotating-key or browser-uploaded
+  private-key protocol.
+- The dedicated SSH principal must disable SSH password authentication and be
+  shell-less, with local forwarding restricted to `127.0.0.1:3003`. The private
+  key itself must still have a strong passphrase. Possession of that key must
+  not grant a general server shell. Admin application authentication and API
+  role authorization remain required as defense in depth.
+- Private keys never enter Git, application environment files, the server, or
+  browser uploads. Keep the passphrase-protected key on encrypted removable
+  storage and keep an independently generated offline recovery key. exFAT/FAT
+  mode bits are not a security boundary; use an encrypted container, strict
+  mount mask, hardware-backed key, or load an encrypted key through a short-lived
+  agent on a trusted device.
+- Any trusted desktop or mobile device may manage the site if it can use the
+  removable key, establish the restricted SSH local forward, and render the
+  Admin UI. Do not weaken the public network boundary merely for mobile access.
+- Admin HTTP endpoints must move under a distinct `/api/admin/*` boundary.
+  Public user authentication must refuse to issue an Admin session, public Web
+  must not proxy that namespace, and API authorization must continue to verify
+  Admin identity on every protected operation.
+- Admin and public-user cookies/sessions must be distinct. The Admin session
+  should be shorter lived and revocable; password changes and key revocation
+  must have documented recovery procedures.
+
 ## Completed 2026-07-21 documentation standardization
 
 - `README.md` is the concise repository entry point and must link to detailed
@@ -270,20 +307,22 @@ npm run build
 - Generate asymmetric keys during deployment/rotation and persist them. Never
   generate a new signing key on every application start or per PM2 process.
 
-## Repository state warning
+## Repository state
 
-- At the time of this memory update, the working tree contained many staged,
-  unstaged, and untracked changes that predated or overlapped the upgrade.
-- No final Git commit was created during the conversation.
-- Review `git status`, `git diff --cached`, and `git diff` before committing.
-- `docs/niri-nvidia-issues.md` is unrelated to the blog upgrade and should not be
-  included accidentally.
+- The Web/API Monorepo migration, production listener hardening, and update
+  workflow hardening have been committed and pushed to `origin/main`.
+- Continue reviewing `git status`, `git diff --cached`, and `git diff` before
+  every commit; server-local environment files, databases, backups, uploaded
+  media, and private keys must remain outside Git.
 
 ## Recommended next work
 
-1. Review and create a clean commit for the completed upgrade.
-2. Supply real owner profile content later through
+1. Implement the approved private Admin separation in staged, independently
+   verifiable changes; keep the current Admin deployment working until cutover.
+2. Add automated encrypted off-host backups for SQLite, uploaded media, and
+   production configuration, with a tested restore procedure.
+3. Supply real owner profile content later through
    `apps/web/src/config/profile.ts` or a future admin-managed profile model.
-3. Add broader Fastify authorization tests and browser-level interaction tests.
-4. Consider object storage/CDN before moving beyond single-machine deployment.
-5. Consider Ed25519 JWT rotation only when independent services need verification.
+4. Add broader Fastify authorization tests and browser-level interaction tests.
+5. Consider object storage/CDN before moving beyond single-machine deployment.
+6. Consider Ed25519 JWT rotation only when independent services need verification.

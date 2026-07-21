@@ -35,6 +35,16 @@ npm run start:web
 - 浏览器请求使用相对 `/api/*`，SSR 请求使用 `API_INTERNAL_URL`。
 - Proxy 只改善导航体验，API 授权才是安全边界。
 
+## 计划中的 Admin 迁移
+
+当前管理路由和组件仍在 Web 中，必须保持可用直到私有 Admin 切换完成。已批准的目标
+是在同一 Monorepo 新建 `apps/admin`，将全部管理页面、组件和会话预检迁出；完成后
+Web 不再包含 `/admin` 路由，也不代理 `/api/admin/*`。
+
+迁移期间不要继续扩大 Web 内的管理功能，也不要建立跨应用源码导入。共用类型进入
+`@kpblog/contracts`，复用 UI 应通过明确的共享包设计处理，不能把 Admin 实现重新
+耦合回公开 Web。阶段与验收标准见 [`docs/next-plan.md`](../../docs/next-plan.md)。
+
 ## Server/Client Component
 
 - 页面默认保持 Server Component。
