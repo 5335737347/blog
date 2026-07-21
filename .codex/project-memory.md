@@ -147,6 +147,9 @@ Last updated: 2026-07-21 (Asia/Shanghai)
   storage before deploying Web and API to separate hosts.
 - PM2 uses `ecosystem.config.cjs` to run `blog-api` and `blog-web` separately.
   Nginx proxies public traffic only to Web on port 3001.
+- Production Web startup explicitly binds Next.js to `127.0.0.1`; Next.js 16
+  otherwise defaults `next start` to `0.0.0.0`. Keep both the Web workspace
+  start script and PM2 configuration loopback-only behind Nginx.
 - Formal documentation now uses a layered structure: root README as the entry,
   `docs/` for architecture/environment/deployment/workflows, and app-level
   READMEs for the Next.js, Fastify, and Contracts framework boundaries.

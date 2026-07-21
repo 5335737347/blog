@@ -20,7 +20,7 @@ module.exports = {
       name: "blog-web",
       cwd: path.join(repositoryRoot, "apps/web"),
       script: path.join(repositoryRoot, "node_modules/next/dist/bin/next"),
-      args: "start --port 3001",
+      args: "start --hostname 127.0.0.1 --port 3001",
       interpreter: "node",
       autorestart: true,
       max_memory_restart: "768M",
