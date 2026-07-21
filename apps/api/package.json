@@ -1,0 +1,32 @@
+{
+  "name": "@kpblog/api",
+  "version": "2.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json && tsc-alias -p tsconfig.json",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "tsx --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.0.2",
+    "@fastify/cors": "^11.1.0",
+    "@fastify/multipart": "^9.2.1",
+    "@prisma/adapter-better-sqlite3": "7.8.0",
+    "@prisma/client": "7.8.0",
+    "@kpblog/contracts": "*",
+    "bcryptjs": "^3.0.3",
+    "dotenv": "^17.4.2",
+    "fastify": "^5.6.2",
+    "github-slugger": "^2.0.0",
+    "jose": "^6.2.3",
+    "libphonenumber-js": "^1.13.9",
+    "mammoth": "^1.12.0",
+    "slugify": "^1.6.9"
+  },
+  "devDependencies": {
+    "tsc-alias": "^1.8.16"
+  }
+}

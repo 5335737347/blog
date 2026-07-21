@@ -1,97 +1,70 @@
-# Obsidian 到 kpblog.cc 内容工作流
+# 内容发布工作流
 
-目标：把学习计划中的笔记、项目日志、题解和复盘稳定沉淀到博客。
+文章可以通过管理后台批量导入，也可以使用仓库脚本调用发布 API。真实 API Key 只保存在本地环境变量中。
 
-## 路径约定
-
-| 内容 | 路径 |
-|---|---|
-| Obsidian vault | `/home/mx/Documents/note` |
-| 博客源码 | `/home/mx/Project/blog` |
-| 本地公开草稿 | `content/drafts` |
-| 后台导入页面 | `/admin/import` |
-| API 发布接口 | `/api/publish` |
-
-## Markdown frontmatter
-
-博客导入和 API 发布都支持这些字段：
+## Frontmatter
 
 ```markdown
 ---
 title: 文章标题
 slug: article-slug
-tags: [学习路线, 全栈, AI]
+tags: [学习路线, 全栈]
 excerpt: 一句话摘要
 category: 技术
 coverImage: /images/example.webp
 published: false
-date: 2026-07-07
+date: 2026-07-21
 ---
 ```
 
-字段说明：
-
 | 字段 | 说明 |
 |---|---|
-| `title` | 文章标题。没有时会读取一级标题。 |
-| `slug` | URL 片段。没有时会从标题生成。 |
-| `tags` | 标签数组，也会自动识别正文中的 `#tag`。 |
-| `excerpt` | 摘要。没有时会自动从正文生成。 |
-| `category` | 分类。不存在时会自动创建。 |
-| `coverImage` | 封面图 URL。 |
-| `published` | 是否发布。导入默认草稿，API 默认发布。 |
-| `date` | 发布时间。无效或为空时使用当前时间。 |
+| `title` | 必填语义；省略时尝试读取一级标题 |
+| `slug` | URL 片段；省略时由标题生成 |
+| `tags` | 标签数组 |
+| `excerpt` | 摘要；省略时从正文生成 |
+| `category` | 分类；不存在时由服务创建 |
+| `coverImage` | 站内或绝对封面 URL |
+| `published` | 导入默认草稿，API 模式可由参数覆盖 |
+| `date` | 发布时间；无效值会被拒绝或使用服务默认值 |
 
 ## 后台导入
 
-适合批量导入 Obsidian 整理后的 `.md` 文件。
-
-1. 启动项目：`npm run dev`
-2. 打开 `/admin/import`
-3. 上传 `.md`、`.docx`、`.html` 或 `.txt`
-4. 导入结果中点击“编辑”检查内容
-5. 确认无误后发布
+1. 运行 `npm run dev`。
+2. 登录 `/admin/import`。
+3. 上传支持的 Markdown、DOCX、HTML 或文本文件。
+4. 查看导入结果并进入编辑页校对。
+5. 确认标题、slug、摘要、分类和标签后发布。
 
 ## 命令行发布
 
-先设置 API Key：
+在 `.env.local` 中设置：
 
-```bash
-export KPBLOG_API_KEY="你的 API Key"
+```env
+KPBLOG_API_URL="http://localhost:3001/api/publish"
+KPBLOG_API_KEY="后台生成的密钥"
 ```
 
-本地导入为草稿：
+导入草稿：
 
 ```bash
 npm run publish:draft -- content/drafts/example.md
 ```
 
-发布到线上：
+直接发布：
 
 ```bash
-KPBLOG_API_URL=https://kpblog.cc/api/publish npm run publish:post -- content/drafts/example.md
+npm run publish:post -- content/drafts/example.md
 ```
 
-不要把 `KPBLOG_API_KEY` 写入脚本、README、博客文章或 Git 仓库。
-
-## 每周内容闭环
+## 发布前检查
 
 ```text
-周一：算法题解短笔记
-周二：课程笔记
-周三：博客项目开发日志
-周四：把基础知识应用到博客项目
-周五：整理公开草稿
-周日：发布或更新 1 篇博客，做周复盘
-```
-
-## 公开前检查
-
-```text
-[ ] 没有 API Key、账号密码、私人路径或隐私内容
-[ ] 标题和 slug 清晰
-[ ] tags 不超过 5 个
-[ ] 摘要能说明文章解决什么问题
-[ ] 代码块能正常渲染
-[ ] 文章里有自己的实际项目经验
+[ ] 不含密码、Token、API Key、私人路径或个人隐私
+[ ] 标题和 slug 清晰且稳定
+[ ] 摘要准确说明文章内容
+[ ] 分类和标签数量合理
+[ ] 图片 URL 可以公开访问
+[ ] 代码块、公式、表格和标题层级渲染正常
+[ ] 草稿/发布状态符合预期
 ```

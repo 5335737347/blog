@@ -1,9 +1,29 @@
-import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import crypto from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
 
-const prisma = new PrismaClient();
+function loadEnvFile(file: string) {
+  if (!existsSync(file)) return;
+  const text = readFileSync(file, "utf8");
+  for (const line of text.split(/\r?\n/)) {
+    const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);
+    if (!match || process.env[match[1]] !== undefined) continue;
+    process.env[match[1]] = match[2].replace(/^["']|["']$/g, "");
+  }
+}
+
+loadEnvFile(".env.local");
+loadEnvFile(".env");
+
+function envText(name: string, fallback: string): string {
+  return process.env[name]?.trim() || fallback;
+}
 
 async function main() {
+  if (process.env.NODE_ENV === "production" && process.env.ALLOW_PRODUCTION_SEED !== "true") {
+    throw new Error("Refusing to reset production data. Set ALLOW_PRODUCTION_SEED=true to continue.");
+  }
+  const { prisma } = await import("../apps/api/src/lib/prisma");
   console.log("🌱 Seeding database...");
 
   // Clean existing data
@@ -15,21 +35,35 @@ async function main() {
   await prisma.user.deleteMany();
   await prisma.setting.deleteMany();
 
-  // Create admin user (password: fengzhitanxi04..)
-  const hashedPassword = await bcrypt.hash("fengzhitanxi04..", 10);
+  // Create admin user.
+  const adminUsername = envText("ADMIN_USERNAME", "admin");
+  const adminDisplayName = envText("ADMIN_DISPLAY_NAME", "管理员");
+  const configuredAdminPassword = process.env.ADMIN_PASSWORD?.trim();
+  const adminPassword =
+    configuredAdminPassword || crypto.randomBytes(18).toString("base64url");
+  const hashedPassword = await bcrypt.hash(adminPassword, 10);
   const admin = await prisma.user.create({
     data: {
-      username: "admin",
+      username: adminUsername,
       password: hashedPassword,
     },
   });
-  console.log(`  ✓ Admin user created`);
+  await prisma.$executeRaw`
+    UPDATE "User"
+    SET "displayName" = ${adminDisplayName}, "role" = 'ADMIN'
+    WHERE "id" = ${admin.id}
+  `;
+  console.log(`  ✓ Admin user created: ${adminUsername}`);
+  if (!configuredAdminPassword) {
+    console.log(`  ⚠ Temporary admin password: ${adminPassword}`);
+    console.log("    Set ADMIN_PASSWORD before seeding to choose your own password.");
+  }
 
   // Create categories
   const tech = await prisma.category.create({
     data: { name: "技术", slug: "tech" },
   });
-  const life = await prisma.category.create({
+  await prisma.category.create({
     data: { name: "生活", slug: "life" },
   });
   console.log(`  ✓ Categories: tech, life`);
@@ -149,7 +183,7 @@ TypeScript 是前端开发的必备技能，值得投入时间学习。
     },
   });
 
-  const post3 = await prisma.post.create({
+  await prisma.post.create({
     data: {
       slug: "my-coding-setup",
       title: "我的开发环境配置",
@@ -219,5 +253,6 @@ main()
     process.exit(1);
   })
   .finally(async () => {
+    const { prisma } = await import("../apps/api/src/lib/prisma");
     await prisma.$disconnect();
   });

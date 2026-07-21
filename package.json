@@ -1,12 +1,27 @@
 {
-  "name": "blog",
+  "name": "kp-blog-workspace",
   "version": "2.1.0",
   "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint",
+    "dev": "node scripts/dev.mjs",
+    "dev:web": "npm run dev --workspace @kpblog/web",
+    "dev:api": "npm run dev --workspace @kpblog/api",
+    "build": "npm run build --workspace @kpblog/api && npm run build --workspace @kpblog/web",
+    "build:web": "npm run build --workspace @kpblog/web",
+    "build:api": "npm run build --workspace @kpblog/api",
+    "start:web": "npm run start --workspace @kpblog/web",
+    "start:api": "npm run start --workspace @kpblog/api",
+    "start:pm2": "pm2 startOrReload ecosystem.config.cjs --update-env",
+    "lint": "eslint apps packages scripts tests",
+    "typecheck": "tsc --noEmit && npm run typecheck --workspaces --if-present",
+    "test": "npm run test:services && npm run test --workspace @kpblog/api",
+    "test:services": "tsx --test tests/*.test.ts",
+    "check": "npm run lint && npm run typecheck && npm test",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
@@ -17,38 +32,30 @@
     "publish:post": "node scripts/publish-note.mjs --publish",
     "update": "node scripts/update.mjs"
   },
-  "prisma": {
-    "seed": "tsx prisma/seed.ts"
-  },
-  "dependencies": {
-    "@prisma/client": "^5.22.0",
-    "@uiw/react-md-editor": "^4.1.1",
-    "bcryptjs": "^3.0.3",
-    "feed": "^5.2.1",
-    "github-slugger": "^2.0.0",
-    "jose": "^6.2.3",
-    "mammoth": "^1.12.0",
-    "next": "16.2.9",
-    "react": "19.2.4",
-    "react-dom": "19.2.4",
-    "react-markdown": "^10.1.0",
-    "rehype-highlight": "^7.0.2",
-    "rehype-katex": "^7.0.1",
-    "rehype-slug": "^6.0.0",
-    "remark-gfm": "^4.0.1",
-    "remark-math": "^6.0.0",
-    "slugify": "^1.6.9"
-  },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.2.9",
-    "prisma": "^5.22.0",
-    "tailwindcss": "^4",
+    "eslint-config-next": "16.2.10",
+    "prisma": "7.8.0",
     "tsx": "^4.22.4",
     "typescript": "^5"
+  },
+  "allowScripts": {
+    "better-sqlite3@12.11.1": true,
+    "prisma@7.8.0": true,
+    "@prisma/engines@7.8.0": true,
+    "sharp@0.34.5": true,
+    "esbuild@0.28.1": true,
+    "unrs-resolver@1.12.2": true
+  },
+  "overrides": {
+    "next": {
+      "postcss": "8.5.10"
+    },
+    "@prisma/dev": {
+      "@hono/node-server": "1.19.13"
+    }
   }
 }

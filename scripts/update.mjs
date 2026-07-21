@@ -4,7 +4,6 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 
 const args = new Set(process.argv.slice(2));
-const PM2_APP_NAME = process.env.PM2_APP_NAME || "blog";
 
 function printHelp() {
   console.log(`Usage: npm run update -- [options]
@@ -13,12 +12,10 @@ Options:
   --allow-dirty    Allow tracked local changes before pulling
   --skip-backup    Skip SQLite database backup
   --skip-install   Skip npm install/ci
-  --skip-build     Skip next build
-  --skip-restart   Skip PM2 restart
+  --skip-build     Skip API and Web production builds
+  --skip-restart   Skip PM2 start/reload
   --help           Show this help
 
-Environment:
-  PM2_APP_NAME     PM2 process name, default: blog
 `);
 }
 
@@ -144,8 +141,8 @@ if (!args.has("--skip-build")) {
 }
 
 if (!args.has("--skip-restart")) {
-  section("Restart PM2 process");
-  run("pm2", ["restart", PM2_APP_NAME, "--update-env"]);
+  section("Start or reload API and Web processes");
+  run("pm2", ["startOrReload", "ecosystem.config.cjs", "--update-env"]);
 }
 
 section("Done");

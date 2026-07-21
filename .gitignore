@@ -14,8 +14,9 @@
 /coverage
 
 # next.js
-/.next/
-/out/
+**/.next/
+**/out/
+**/dist/
 
 # production
 /build
@@ -46,5 +47,8 @@ next-env.d.ts
 /prisma/dev.db
 /prisma/dev.db-journal
 
-# uploaded images
-/public/images/*
+# uploaded media
+/apps/web/public/images/*
+/apps/web/public/music/*
+!/apps/web/public/images/home/
+!/apps/web/public/images/home/*.webp

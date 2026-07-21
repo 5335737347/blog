@@ -4,32 +4,36 @@ generator client {
 
 datasource db {
   provider = "sqlite"
-  url      = env("DATABASE_URL")
 }
 
 model User {
-  id        String   @id @default(cuid())
-  username  String   @unique
-  password  String
-  apiKey    String?  @unique
-  createdAt DateTime @default(now())
+  id          String    @id @default(cuid())
+  username    String    @unique
+  email       String?   @unique
+  phone       String?   @unique
+  displayName String?
+  password    String
+  role        String    @default("USER")
+  apiKey      String?   @unique
+  createdAt   DateTime  @default(now())
+  comments    Comment[]
 }
 
 model Post {
-  id          String     @id @default(cuid())
-  slug        String     @unique
+  id          String    @id @default(cuid())
+  slug        String    @unique
   title       String
   excerpt     String?
   content     String
   contentHtml String?
   coverImage  String?
-  published   Boolean    @default(false)
+  published   Boolean   @default(false)
   publishedAt DateTime?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   categoryId String?
-  category   Category? @relation(fields: [categoryId], references: [id])
+  category   Category?   @relation(fields: [categoryId], references: [id])
   tags       TagOnPost[]
   comments   Comment[]
 
@@ -53,28 +57,32 @@ model Tag {
 model TagOnPost {
   postId String
   tagId  String
-  post   Post @relation(fields: [postId], references: [id], onDelete: Cascade)
-  tag    Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  post   Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
   @@id([postId, tagId])
 }
 
 model Comment {
-  id        String    @id @default(cuid())
+  id        String   @id @default(cuid())
   author    String
   email     String?
   content   String
-  approved  Boolean   @default(false)
-  createdAt DateTime  @default(now())
+  approved  Boolean  @default(false)
+  createdAt DateTime @default(now())
 
   postId String
-  post   Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  post   Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   parentId String?
   parent   Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
   replies  Comment[] @relation("CommentReplies")
 
   @@index([postId, approved])
+  @@index([userId])
 }
 
 model Music {
@@ -89,4 +97,24 @@ model Setting {
   id    String @id @default(cuid())
   key   String @unique
   value String
+}
+
+model VerificationCode {
+  key       String   @id
+  hash      String
+  expiresAt DateTime
+  attempts  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt], map: "EmailVerificationCode_expiresAt_idx")
+  @@map("EmailVerificationCode")
+}
+
+model RateLimitBucket {
+  key       String   @id
+  count     Int      @default(1)
+  resetAt   DateTime
+  updatedAt DateTime @updatedAt
+
+  @@index([resetAt])
 }

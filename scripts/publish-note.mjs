@@ -21,7 +21,7 @@ await loadEnvFile(".env");
 const args = process.argv.slice(2);
 const file = args.find((arg) => !arg.startsWith("--"));
 const apiUrlArg = args.find((arg) => arg.startsWith("--url="));
-const apiUrl = apiUrlArg?.slice("--url=".length) || process.env.KPBLOG_API_URL || "http://localhost:3000/api/publish";
+const apiUrl = apiUrlArg?.slice("--url=".length) || process.env.KPBLOG_API_URL || "http://localhost:3001/api/publish";
 const apiKey = process.env.KPBLOG_API_KEY;
 const forceDraft = args.includes("--draft") || process.env.KPBLOG_PUBLISH_MODE === "draft";
 const forcePublish = args.includes("--publish") || process.env.KPBLOG_PUBLISH_MODE === "publish";

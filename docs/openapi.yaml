@@ -10,10 +10,13 @@ info:
     - 成功: `{ "success": true, "data": ... }`
     - 失败: `{ "success": false, "error": { "code": "...", "message": "..." } }`
 
-    `/rss.xml` 等非 JSON 内容接口不包含在本文件中。
+    Web 浏览器通过同域 `/api/*` 访问；Next.js 将请求代理到独立 Fastify
+    进程。`/rss.xml` 等由 Web 输出的非 JSON 内容不包含在本文件中。
 servers:
-  - url: http://localhost:3000
-    description: Local development
+  - url: http://localhost:3001
+    description: Local same-origin Web proxy
+  - url: http://127.0.0.1:3002
+    description: Local Fastify API (private)
   - url: https://kpblog.cc
     description: Production
 tags:
@@ -24,12 +27,164 @@ tags:
   - name: Media
   - name: Settings
   - name: Publishing
+  - name: Public
+  - name: Health
 
 paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Check the independent API process
+      servers:
+        - url: http://127.0.0.1:3002
+          description: Direct Fastify API
+      responses:
+        "200":
+          description: API is ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Envelope"
+
+  /api/public/settings:
+    get:
+      tags: [Public]
+      summary: Get public blog title and description
+      responses:
+        "200":
+          description: Public settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Envelope"
+
+  /api/public/layout:
+    get:
+      tags: [Public]
+      summary: Get public layout tags, recent posts, and settings
+      responses:
+        "200":
+          description: Public layout data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Envelope"
+
+  /api/public/article-index:
+    get:
+      tags: [Public]
+      summary: Get the server-rendered article index payload
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Paginated published articles
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArticleListResponse"
+
+  /api/public/articles/{slug}:
+    parameters:
+      - name: slug
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Public]
+      summary: Get a published article by slug
+      responses:
+        "200":
+          description: Published article or null
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Envelope"
+
+  /api/public/tags/{slug}:
+    parameters:
+      - name: slug
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Public]
+      summary: Get a tag archive page payload
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Tag metadata and paginated articles
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Envelope"
+
+  /api/public/categories/{slug}:
+    parameters:
+      - name: slug
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Public]
+      summary: Get a category archive page payload
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Category metadata and paginated articles
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Envelope"
+
+  /api/public/rss-data:
+    get:
+      tags: [Public]
+      summary: Get data used by the Web RSS route
+      responses:
+        "200":
+          description: Published posts and public settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Envelope"
+
+  /api/public/sitemap-data:
+    get:
+      tags: [Public]
+      summary: Get data used by the Web sitemap route
+      responses:
+        "200":
+          description: Published post, tag, and category identifiers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Envelope"
+
+  /api/location/country:
+    get:
+      tags: [Public]
+      summary: Infer a registration country from trusted request headers
+      responses:
+        "200":
+          description: ISO country code when available
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Envelope"
+
   /api/auth/login:
     post:
       tags: [Auth]
-      summary: Admin login
+      summary: User or admin login
       requestBody:
         required: true
         content:
@@ -47,13 +202,77 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a public user account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterInput"
+      responses:
+        "201":
+          description: Registered and logged in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/auth/registration-options:
+    get:
+      tags: [Auth]
+      summary: Get the registration methods available in the current environment
+      responses:
+        "200":
+          description: Email and phone registration availability
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegistrationOptionsResponse"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/auth/verification-code:
+    post:
+      tags: [Auth]
+      summary: Send an email or phone registration verification code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerificationCodeInput"
+      responses:
+        "200":
+          description: Verification code created and delivered when the selected service is configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VerificationCodeResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/InternalError"
 
   /api/auth/logout:
     post:
       tags: [Auth]
-      summary: Clear admin session cookie
+      summary: Clear current session cookie
       responses:
         "200":
           description: Logged out
@@ -65,7 +284,7 @@ paths:
   /api/auth/me:
     get:
       tags: [Auth]
-      summary: Get current admin session
+      summary: Get current authenticated user session
       security:
         - sessionCookie: []
       responses:
@@ -86,7 +305,7 @@ paths:
         - sessionCookie: []
       responses:
         "200":
-          description: API key
+          description: API key status. The stored key value is not returned.
           content:
             application/json:
               schema:
@@ -100,7 +319,7 @@ paths:
         - sessionCookie: []
       responses:
         "200":
-          description: New API key
+          description: New API key. This is the only time the raw key is returned.
           content:
             application/json:
               schema:
@@ -206,6 +425,8 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/InternalError"
     delete:
@@ -570,6 +791,8 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "409":
           $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -620,6 +843,18 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/ApiFailure"
+    Forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiFailure"
+    TooManyRequests:
+      description: Too many requests
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiFailure"
     NotFound:
       description: Not found
       content:
@@ -656,19 +891,129 @@ components:
       properties:
         code:
           type: string
-          enum: [BAD_REQUEST, UNAUTHORIZED, NOT_FOUND, CONFLICT, INTERNAL_ERROR]
+          enum: [BAD_REQUEST, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, TOO_MANY_REQUESTS, INTERNAL_ERROR]
         message:
           type: string
 
     LoginInput:
       type: object
-      required: [username, password]
+      required: [password]
       properties:
         username:
           type: string
+        identifier:
+          type: string
+          description: Username, email, or E.164-style phone number.
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+          pattern: "^\\+[1-9][0-9]{6,14}$"
         password:
           type: string
           format: password
+
+    RegisterInput:
+      type: object
+      required: [username, verificationChannel, verificationCode, password]
+      description: The contact field matching verificationChannel is required.
+      properties:
+        username:
+          type: string
+          minLength: 2
+          maxLength: 32
+        displayName:
+          type:
+            - string
+            - "null"
+          maxLength: 32
+        email:
+          type:
+            - string
+            - "null"
+          format: email
+        phone:
+          type:
+            - string
+            - "null"
+          pattern: "^\\+[1-9][0-9]{6,14}$"
+        verificationChannel:
+          type: string
+          enum: [email, phone]
+        verificationCode:
+          type: string
+          pattern: "^\\d{6}$"
+        password:
+          type: string
+          format: password
+          minLength: 8
+
+    VerificationCodeInput:
+      type: object
+      required: [channel, target]
+      properties:
+        channel:
+          type: string
+          enum: [email, phone]
+        target:
+          type: string
+          description: Email address or E.164-style phone number matching channel.
+
+    VerificationCodeResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [sent, channel, target, expiresAt]
+              properties:
+                sent:
+                  type: boolean
+                  description: True when a message was delivered; false only in development fallback mode.
+                channel:
+                  type: string
+                  enum: [email, phone]
+                target:
+                  type: string
+                expiresAt:
+                  type: string
+                  format: date-time
+                debugCode:
+                  type: string
+                  description: Returned only in development when the selected delivery service is not configured.
+
+    RegistrationOptionsResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [email, phone]
+              properties:
+                email:
+                  type: boolean
+                phone:
+                  type: boolean
+
+    SessionUser:
+      type: object
+      required: [authenticated, username, displayName, role]
+      properties:
+        authenticated:
+          type: boolean
+          const: true
+        username:
+          type: string
+        displayName:
+          type:
+            - string
+            - "null"
+        role:
+          type: string
+          enum: [ADMIN, USER]
 
     LoginResponse:
       allOf:
@@ -677,11 +1022,13 @@ components:
           properties:
             data:
               type: object
-              required: [loggedIn]
+              required: [loggedIn, user]
               properties:
                 loggedIn:
                   type: boolean
                   const: true
+                user:
+                  $ref: "#/components/schemas/SessionUser"
 
     LogoutResponse:
       allOf:
@@ -702,14 +1049,7 @@ components:
         - type: object
           properties:
             data:
-              type: object
-              required: [authenticated, username]
-              properties:
-                authenticated:
-                  type: boolean
-                  const: true
-                username:
-                  type: string
+              $ref: "#/components/schemas/SessionUser"
 
     ApiKeyResponse:
       allOf:
@@ -718,12 +1058,15 @@ components:
           properties:
             data:
               type: object
-              required: [apiKey]
+              required: [hasApiKey, apiKey]
               properties:
+                hasApiKey:
+                  type: boolean
                 apiKey:
                   type:
                     - string
                     - "null"
+                  description: Present only immediately after regeneration.
 
     Envelope:
       type: object
@@ -949,16 +1292,12 @@ components:
 
     CommentReply:
       type: object
-      required: [id, author, email, content, createdAt]
+      required: [id, author, content, createdAt]
       properties:
         id:
           type: string
         author:
           type: string
-        email:
-          type:
-            - string
-            - "null"
         content:
           type: string
         createdAt:
@@ -988,7 +1327,7 @@ components:
 
     CommentCreateInput:
       type: object
-      required: [postId, author, content]
+      required: [postId, content]
       properties:
         postId:
           type: string
@@ -997,7 +1336,9 @@ components:
             - string
             - "null"
         author:
-          type: string
+          type:
+            - string
+            - "null"
         email:
           type:
             - string

@@ -1,0 +1,452 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ===== 纯白、天蓝与桃花红色板 ===== */
+:root {
+  --font-geist-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-geist-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  --background: #ffffff;
+  --background-deep: #f4faff;
+  --foreground: #26354d;
+  --primary: #ef5f7a;
+  --primary-light: #ffc4d0;
+  --secondary: #4da9e8;
+  --secondary-light: #d8efff;
+  --accent: #72c4f2;
+  --accent-light: #e4f5ff;
+  --card-bg: #ffffff;
+  --card-border: #dcebf6;
+  --muted: #65758b;
+  color-scheme: light;
+}
+
+.dark {
+  --background: #151b2a;
+  --background-deep: #1c2638;
+  --foreground: #f7faff;
+  --primary: #ff8da3;
+  --primary-light: #9d4057;
+  --secondary: #80c8f5;
+  --secondary-light: #365f7d;
+  --accent: #91d2f7;
+  --accent-light: #3e6b86;
+  --card-bg: #1d2739;
+  --card-border: #35445a;
+  --muted: #aab8ca;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-light: var(--primary-light);
+  --color-secondary: var(--secondary);
+  --color-accent: var(--accent);
+  --color-card-bg: var(--card-bg);
+  --color-card-border: var(--card-border);
+  --color-muted: var(--muted);
+  /* Existing utility classes map to one restrained editorial palette. */
+  --color-pink-50: #fff5f7;
+  --color-pink-100: #ffe5eb;
+  --color-pink-200: #ffcbd6;
+  --color-pink-300: #ffa2b4;
+  --color-pink-400: #f97891;
+  --color-pink-500: #ef5f7a;
+  --color-pink-600: #d93c5c;
+  --color-pink-700: #b72d49;
+  --color-pink-800: #982840;
+  --color-pink-900: #81263a;
+  --color-pink-950: #480f1d;
+  --color-purple-50: #f7faff;
+  --color-purple-100: #edf3fa;
+  --color-purple-200: #dbe6f2;
+  --color-purple-300: #bdcee1;
+  --color-purple-400: #94abc3;
+  --color-purple-500: #738ba6;
+  --color-purple-600: #596f89;
+  --color-purple-700: #485a70;
+  --color-purple-800: #3e4d5f;
+  --color-purple-900: #344151;
+  --color-purple-950: #1f2938;
+  --color-sky-50: #f2faff;
+  --color-sky-100: #e0f4ff;
+  --color-sky-200: #b9e6ff;
+  --color-sky-300: #7fd3fa;
+  --color-sky-400: #4dbbf0;
+  --color-sky-500: #4da9e8;
+  --color-sky-600: #2786c9;
+  --color-sky-700: #216ba3;
+  --color-sky-800: #205b87;
+  --color-sky-900: #1f4c70;
+  --color-sky-950: #153149;
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+/* ===== 全局样式 ===== */
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  background-image: none;
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 5rem;
+}
+
+button, a, input, textarea, select {
+  -webkit-tap-highlight-color: transparent;
+}
+
+:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--primary) 70%, transparent);
+  outline-offset: 3px;
+}
+
+.skip-link {
+  position: fixed;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 100;
+  transform: translateY(-160%);
+  border-radius: 0.75rem;
+  padding: 0.7rem 1rem;
+  color: white;
+  background: var(--secondary);
+  font-size: 0.875rem;
+  font-weight: 700;
+  transition: transform 150ms ease;
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+.surface-panel {
+  border: 1px solid color-mix(in srgb, var(--card-border) 88%, transparent);
+  border-radius: 1.5rem;
+  background: color-mix(in srgb, var(--card-bg) 92%, transparent);
+  box-shadow: 0 18px 50px -38px rgba(56, 117, 164, 0.3);
+  backdrop-filter: blur(18px);
+}
+
+.nav-link, .footer-link {
+  border-radius: 0.75rem;
+  padding: 0.55rem 0.8rem;
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-weight: 650;
+  transition: color 160ms ease, background-color 160ms ease;
+}
+
+.nav-link:hover, .footer-link:hover {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--primary-light) 20%, transparent);
+}
+
+.icon-button {
+  display: inline-grid;
+  width: 2.5rem;
+  height: 2.5rem;
+  place-items: center;
+  border-radius: 999px;
+  color: var(--muted);
+  transition: color 160ms ease, background-color 160ms ease, transform 160ms ease;
+}
+
+.icon-button:hover {
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary-light) 22%, transparent);
+  transform: translateY(-1px);
+}
+
+.primary-link, .secondary-link, .pagination-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 0.7rem 1.15rem;
+  font-size: 0.875rem;
+  font-weight: 750;
+  transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+}
+
+.primary-link {
+  color: white;
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  box-shadow: 0 12px 30px -15px var(--primary);
+}
+
+.secondary-link, .pagination-link {
+  color: var(--foreground);
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+}
+
+.primary-link:hover, .secondary-link:hover, .pagination-link:hover {
+  transform: translateY(-2px);
+}
+
+.section-kicker {
+  color: var(--primary);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.empty-state {
+  border: 1px dashed var(--card-border);
+  border-radius: 1.25rem;
+  padding: 3rem 1.5rem;
+  text-align: center;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--card-bg) 70%, transparent);
+}
+
+.dark body { background-image: none; }
+
+/* ===== 🌟 可爱滚动条 ===== */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--background);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--primary-light);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
+}
+
+/* ===== ✨ 选中文字 ===== */
+::selection {
+  background: var(--primary-light);
+  color: var(--foreground);
+}
+
+/* ===== 🎀 装饰动画 ===== */
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-4px); }
+}
+
+@keyframes sparkle {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(0.95); }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+.animate-sparkle {
+  animation: sparkle 2s ease-in-out infinite;
+}
+
+@keyframes fade-in-up {
+  0% { opacity: 0; transform: translateY(20px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes wallpaper-reveal {
+  from { opacity: 0.35; transform: scale(1.015); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes search-icon-in {
+  from { opacity: 0; transform: translateY(4px) scale(0.85); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.5s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ===== 🌸 樱花飘落动画 ===== */
+@keyframes sakura-fall {
+  0% {
+    transform: translateY(-10%) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(110vh) rotate(360deg);
+    opacity: 0;
+  }
+}
+
+@keyframes sakura-sway {
+  0%, 100% { margin-left: 0; }
+  50% { margin-left: 30px; }
+}
+
+/* ===== 📝 Markdown 渲染 ===== */
+.markdown-content :is(h1, h2, h3)[id] {
+  position: relative;
+}
+
+.markdown-content :is(h1, h2, h3)[id]:hover::before {
+  content: "#";
+  position: absolute;
+  left: -1.2em;
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.markdown-content a {
+  overflow-wrap: anywhere;
+}
+
+.markdown-table-scroll {
+  margin: 1.5rem 0;
+  overflow-x: auto;
+  border-radius: 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--card-border) 80%, transparent);
+}
+
+.dark .markdown-table-scroll {
+  border-color: color-mix(in srgb, var(--card-border) 80%, transparent);
+}
+
+.markdown-table-scroll table {
+  margin: 0;
+  min-width: 100%;
+}
+
+.markdown-image-frame {
+  margin: 2rem 0;
+}
+
+.markdown-image-frame img {
+  width: 100%;
+  border-radius: 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--card-border) 90%, transparent);
+}
+
+.dark .markdown-image-frame img {
+  border-color: color-mix(in srgb, var(--card-border) 90%, transparent);
+}
+
+.markdown-image-frame figcaption {
+  margin-top: 0.5rem;
+  text-align: center;
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+
+.markdown-task-checkbox {
+  margin-right: 0.5rem;
+  accent-color: var(--primary);
+}
+
+/* ===== 📝 代码块 ===== */
+.markdown-code-frame {
+  position: relative;
+  max-width: 100%;
+  overflow: hidden;
+  background: #16201b !important;
+  border: 1px solid rgba(147, 178, 162, 0.22);
+  border-left: 3px solid #789886;
+  border-radius: 0.75rem;
+  margin: 1.5rem 0;
+}
+
+.markdown-code-block {
+  margin: 0 !important;
+  max-width: 100%;
+  overflow-x: auto;
+  border: 0;
+  border-radius: 0;
+  background: transparent !important;
+  padding: 1rem;
+}
+
+.markdown-code-block code {
+  display: block;
+  white-space: pre;
+  word-wrap: normal;
+  background: transparent !important;
+  color: #e5ebe6;
+  line-height: 1.7;
+}
+
+.markdown-code-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-bottom: 1px solid rgba(147, 178, 162, 0.18);
+  padding: 0.55rem 0.65rem;
+  background: rgba(11, 17, 14, 0.8);
+}
+
+.markdown-code-language {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: rgba(159, 183, 167, 0.9);
+}
+
+.markdown-copy-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 0.375rem;
+  background: rgba(255,255,255,0.06);
+  padding: 0.25rem 0.55rem;
+  font-size: 11px;
+  color: rgba(255,255,255,0.72);
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.markdown-copy-button:hover {
+  background: rgba(184, 92, 63, 0.38);
+  color: #fff;
+}
+
+/* Syntax highlight overrides for theme match */
+.hljs-keyword { color: #dca994; }
+.hljs-string { color: #a9c7b7; }
+.hljs-number { color: #91c1b8; }
+.hljs-comment { color: #738078; }
+.hljs-function { color: #d5b477; }
+.hljs-title { color: #dca994; }
+.hljs-built_in { color: #91c1b8; }
+
+/* ===== 🖨️ 打印样式 ===== */
+@media print {
+  header, footer, nav, .fixed, .sticky,
+  [class*="BackToTop"], [class*="MusicPlayer"],
+  [class*="EffectsToggle"], [class*="FallingEffects"],
+  [class*="Sidebar"], [class*="SearchBox"],
+  [class*="CommentSection"], [class*="TableOfContents"] {
+    display: none !important;
+  }
+  body { background: white !important; color: black !important; }
+  main { max-width: 100% !important; padding: 0 !important; }
+  .prose { max-width: 100% !important; }
+  pre { white-space: pre-wrap !important; border: 1px solid #ddd !important; }
+  a { color: #2563eb !important; }
+}
