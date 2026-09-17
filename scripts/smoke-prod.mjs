@@ -11,7 +11,7 @@
  * 前置条件：已执行过 `npm run build`。
  */
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -43,25 +43,63 @@ const env = {
   JWT_SECRET: "prod-smoke-secret-at-least-32-characters",
   API_PORT: String(apiPort),
   API_HOST: "127.0.0.1",
-  // 必须指向本脚本自己的 API 实例。项目的 env 加载用 `override: false`，
-  // 进程已有该变量时 .env 不会覆盖它，所以这里必须显式覆盖，
-  // 否则会继承到外部（例如部署验证脚本）设置的值。
+  // 必须指向本脚本自己的 API 实例。
+  //
+  // 只靠进程环境变量**不够**：Next 会把 `next.config.ts` 里的 rewrite 目标
+  // 编译进构建产物（`.next`），而构建是在服务器仓库里、用仓库 `.env` 完成的。
+  // 于是服务器上出现「API 起在 3312、Web 却去连 .env 里的 3002」的假失败——
+  // 开发机上 `.env` 通常没有 API_INTERNAL_URL，所以复现不出来。
+  // 真正生效的是 webRoot 下临时写入的 `.env.local`（见 writeWebEnvOverride）。
   API_INTERNAL_URL: `http://127.0.0.1:${apiPort}`,
   SITE_URL: `http://127.0.0.1:${webPort}`,
   NEXT_PUBLIC_SITE_URL: `http://127.0.0.1:${webPort}`,
   SMOKE_SEED_DATABASE_URL: `file:${path.join(tempDir, "prod-smoke.db")}`,
 };
 
+/**
+ * 给被测 Web 实例写一份 `.env.local`。
+ *
+ * Next 的 env 加载顺序是 `.env.<env>.local` → `.env.local` → `.env.<env>` → `.env`，
+ * 其中 `.env.local` 对已存在的进程变量是**覆盖**语义。把冒烟自己的 API 地址写进
+ * 这里，Web 就一定会连到临时实例，而不是仓库 `.env` 指向的生产 API。
+ * 结束后恢复原文件（原本不存在就删除），不留下任何痕迹。
+ */
+const webEnvFile = path.join(webRoot, ".env.local");
+function writeWebEnvOverride() {
+  if (existsSync(webEnvFile)) {
+    console.error(
+      `[失败] ${path.relative(repositoryRoot, webEnvFile)} 已存在，冒烟会覆盖它。` +
+        "请先移走该文件再运行。"
+    );
+    process.exit(1);
+  }
+  writeFileSync(
+    webEnvFile,
+    [
+      "# 由 scripts/smoke-prod.mjs 临时生成，运行结束后删除。",
+      `API_INTERNAL_URL="http://127.0.0.1:${apiPort}"`,
+      `SITE_URL="http://127.0.0.1:${webPort}"`,
+      `NEXT_PUBLIC_SITE_URL="http://127.0.0.1:${webPort}"`,
+      "",
+    ].join("\n")
+  );
+}
+function removeWebEnvOverride() {
+  try { rmSync(webEnvFile, { force: true }); } catch { /* ignore */ }
+}
+
 const children = [];
 function shutdown(code) {
   for (const child of children) {
     try { child.kill("SIGTERM"); } catch { /* ignore */ }
   }
+  removeWebEnvOverride();
   try { rmSync(tempDir, { recursive: true, force: true }); } catch { /* ignore */ }
   process.exit(code);
 }
 process.on("exit", () => {
   // 兜底清理：正常路径已清过，这里覆盖异常退出（SIGKILL 除外，已由 .gitignore 兜底）
+  removeWebEnvOverride();
   try { rmSync(tempDir, { recursive: true, force: true }); } catch { /* ignore */ }
 });
 process.on("SIGINT", () => shutdown(130));
@@ -109,6 +147,7 @@ console.log("[2/4] 写入冒烟数据");
 run(process.execPath, [path.join(repositoryRoot, "apps/api/scripts/smoke-seed.mjs")], "冒烟数据播种");
 
 console.log("[3/4] 启动 API 与 Web（生产模式）");
+writeWebEnvOverride();
 const api = spawn(process.execPath, ["apps/api/dist/index.js"], { cwd: repositoryRoot, env, stdio: ["ignore", "pipe", "pipe"] });
 const web = spawn(bin("next"), ["start", "--port", String(webPort), "--hostname", "127.0.0.1"], {
   cwd: webRoot,

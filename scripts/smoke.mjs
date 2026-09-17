@@ -12,7 +12,7 @@
  * 已有服务时也可以直接跑：BASE_URL=http://127.0.0.1:3001 node scripts/smoke-web.mjs
  */
 import { spawn, spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -30,9 +30,11 @@ const env = {
   JWT_SECRET: "smoke-test-secret-at-least-32-characters",
   API_PORT: String(apiPort),
   API_HOST: "127.0.0.1",
-  // 必须指向本脚本自己的 API 实例。项目的 env 加载用 `override: false`，
-  // 进程已有该变量时 .env 不会覆盖它，所以这里必须显式覆盖，
-  // 否则会继承到外部（例如部署验证脚本）设置的值。
+  // 必须指向本脚本自己的 API 实例。
+  //
+  // 只设进程变量不够：仓库 `.env` 里若配置了 API_INTERNAL_URL（服务器上就是
+  // 这样），被测 Web 实例会去连它而不是临时实例。真正生效的是 webRoot 下的
+  // `.env.local`，见 writeWebEnvOverride（与 smoke-prod.mjs 同一机制）。
   API_INTERNAL_URL: `http://127.0.0.1:${apiPort}`,
   SITE_URL: `http://127.0.0.1:${webPort}`,
   NEXT_PUBLIC_SITE_URL: `http://127.0.0.1:${webPort}`,
@@ -45,20 +47,53 @@ const env = {
   NEXT_DIST_DIR: path.join("tmp", `smoke-${process.pid}`),
 };
 
+/**
+ * 给被测 Web 实例写一份 `.env.local`，让它在 dev 形态下也连临时 API。
+ *
+ * Next 的 env 加载顺序里 `.env.local` 对已存在的进程变量是覆盖语义，
+ * 因此这是唯一能稳定压过仓库 `.env` 的位置。结束后删除，不留痕迹。
+ */
+const webEnvFile = path.join(repositoryRoot, "apps", "web", ".env.local");
+function writeWebEnvOverride() {
+  if (existsSync(webEnvFile)) {
+    console.error(
+      "[失败] apps/web/.env.local 已存在，冒烟会覆盖它。请先移走该文件再运行。"
+    );
+    process.exit(1);
+  }
+  writeFileSync(
+    webEnvFile,
+    [
+      "# 由 scripts/smoke.mjs 临时生成，运行结束后删除。",
+      `API_INTERNAL_URL="http://127.0.0.1:${apiPort}"`,
+      `SITE_URL="http://127.0.0.1:${webPort}"`,
+      `NEXT_PUBLIC_SITE_URL="http://127.0.0.1:${webPort}"`,
+      "",
+    ].join("\n")
+  );
+}
+function removeWebEnvOverride() {
+  try { rmSync(webEnvFile, { force: true }); } catch { /* ignore */ }
+}
+
 /** 冒烟实例的构建目录（相对 apps/web），结束时一并删除。 */
 const webDistDir = path.join(repositoryRoot, "apps", "web", env.NEXT_DIST_DIR);
+
+writeWebEnvOverride();
 
 const children = [];
 function shutdown(code) {
   for (const child of children) {
     try { child.kill("SIGTERM"); } catch { /* ignore */ }
   }
+  removeWebEnvOverride();
   try { rmSync(tempDir, { recursive: true, force: true }); } catch { /* ignore */ }
   try { rmSync(webDistDir, { recursive: true, force: true }); } catch { /* ignore */ }
   process.exit(code);
 }
 process.on("exit", () => {
   // 兜底清理：正常路径已清过，这里覆盖异常退出（SIGKILL 除外，已由 .gitignore 兜底）
+  removeWebEnvOverride();
   try { rmSync(webDistDir, { recursive: true, force: true }); } catch { /* ignore */ }
   try { rmSync(tempDir, { recursive: true, force: true }); } catch { /* ignore */ }
 });

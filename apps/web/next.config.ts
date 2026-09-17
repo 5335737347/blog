@@ -6,6 +6,7 @@ import { loadProjectEnv, repositoryRoot } from "../../scripts/load-env.mjs";
 // 此前这里自己解析 .env 路径，还用 `__dirname` 拼相对位置。
 loadProjectEnv();
 
+
 // 顺带删掉了原本对 DATABASE_URL 的归一化：web 侧从来不用它（架构规则是
 // 「Web 不直接连接 Prisma」），那段是死代码，而且是第三套与别处都不同的
 // `file:./dev.db` 解析方式——留着只会让人以为 web 会碰数据库。
