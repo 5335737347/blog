@@ -497,6 +497,31 @@ they need a Chromium binary (found via `CHROME_BIN` or the Playwright cache).
   coverage thresholds, tests for the public SSR data surface, and the approved
   private Admin separation.
 
+## Completed 2026-09-17 mobile navigation consolidation
+
+- The owner reported "two navigation bars" on a phone-width viewport. The cause was
+  real duplication, not a rendering bug: the header's hamburger menu listed
+  article / archive / about / now / messages while the bottom tab bar listed
+  home / article / archive / messages / about — five of six destinations appeared
+  twice, and neither surface linked to the account or logout on mobile
+  (`AuthNav` only renders inside the menu when signed in, and the header's own
+  auth buttons are `lg:`-only).
+- Owner's decision: **keep the header menu, delete the bottom bar** (do not
+  reintroduce a second navigation surface). `MobileTabBar.tsx` is deleted, the
+  `pb-14` reservation under `<main>` is gone, `BackToTop` no longer reserves room
+  for it, and the cookie notice sits flush at `bottom-0`.
+- The header menu gained the interaction it was missing: an overlay scrim that
+  closes on click, `overflow: hidden` on `<body>` with scrollbar-width
+  compensation while open, Escape to close, `max-h` + internal scrolling, and
+  `html[data-menu-open]` so bottom-anchored overlays (the cookie notice, whose
+  z-index is above the scrim) step aside.
+- `scripts/smoke-web.mjs` now asserts at mobile width that no `position: fixed`
+  bottom-anchored `<nav>` exists and that the menu button is still present, so the
+  duplicate surface cannot come back unnoticed.
+- Files: `apps/web/src/components/public/layout/{Header,PublicChrome,BackToTop,CookieNotice}.tsx`,
+  `apps/web/src/app/globals.css`, `scripts/smoke-web.mjs`, plus the design plan and
+  deployment checklist entries that described the removed tab bar.
+
 ## Completed 2026-09-17 production deployment (hardening release)
 
 - Deployed to the single production host behind Nginx: repository `/home/ubuntu/blog`,

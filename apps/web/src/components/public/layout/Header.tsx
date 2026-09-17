@@ -49,6 +49,36 @@ export default function Header({ blogTitle }: { blogTitle: string }) {
 
   const menuVisible = menuOpen && menuPath === pathname;
 
+  /**
+   * 菜单展开时锁定背景滚动并支持 Esc 关闭。
+   *
+   * 之前的菜单是「浮在内容上的一层」，背景仍可滚动、点空白处也不关闭，
+   * 小屏上很容易误触到下面的内容。锁滚动用 `overflow: hidden` 并补偿
+   * 滚动条宽度，避免锁定时页面横向跳动。
+   */
+  useEffect(() => {
+    if (!menuVisible) return;
+    const { body } = document;
+    const previousOverflow = body.style.overflow;
+    const previousPadding = body.style.paddingRight;
+    const scrollbar = window.innerWidth - document.documentElement.clientWidth;
+    body.style.overflow = "hidden";
+    if (scrollbar > 0) body.style.paddingRight = `${scrollbar}px`;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMenuOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    // 让其它贴底浮层（Cookie 提示的 z-index 比遮罩高）在菜单打开时让位，
+    // 否则它会浮在菜单之上，既碍眼又可能被误点。
+    document.documentElement.dataset.menuOpen = "true";
+    return () => {
+      body.style.overflow = previousOverflow;
+      body.style.paddingRight = previousPadding;
+      window.removeEventListener("keydown", onKeyDown);
+      delete document.documentElement.dataset.menuOpen;
+    };
+  }, [menuVisible]);
+
   // 只有首页 hero 之上才允许出现「透明 + 白字」形态
   const overHero = isHome && !scrolled;
 
@@ -146,11 +176,23 @@ export default function Header({ blogTitle }: { blogTitle: string }) {
         </div>
       </div>
 
+      {/* 遮罩：点菜单以外的区域关闭。放在菜单之前，z-index 低于菜单本身。 */}
+      {menuVisible && (
+        <button
+          type="button"
+          aria-label="关闭菜单"
+          tabIndex={-1}
+          data-print="hide"
+          onClick={() => setMenuOpen(false)}
+          className="fixed inset-0 top-16 z-40 cursor-default bg-slate-900/40 backdrop-blur-[2px] lg:hidden"
+        />
+      )}
+
       {menuVisible && (
         <nav
           id={MENU_ID}
           aria-label="移动端菜单"
-          className="absolute inset-x-0 top-full border-b border-line bg-bg px-5 pb-4 pt-2 shadow-float lg:hidden"
+          className="absolute inset-x-0 top-full z-50 max-h-[calc(100svh-4rem)] overflow-y-auto border-b border-line bg-bg px-5 pb-4 pt-2 shadow-float lg:hidden"
         >
           <ul className="grid">
             {NAV.map((item) => {

@@ -479,6 +479,30 @@ await new Promise((r) => setTimeout(r, 500));
 const drawerClosed = await evaluate(readerPage.sessionId, `!document.getElementById('toc-drawer')`).catch(() => false);
 check("点击目录项后抽屉关闭", drawerNav.clicked && drawerClosed, JSON.stringify({ ...drawerNav, drawerClosed }));
 
+/**
+ * 移动端导航只有一套。
+ *
+ * 底部标签栏与头部汉堡菜单曾经指向同一批目标（首页/文章/归档/留言/关于
+ * vs 文章/归档/个人介绍/近况/留言），小屏上出现两套等价导航，已移除标签栏。
+ * 这条断言防止它被无意间加回来。
+ */
+const navSurfaces = await evaluate(readerPage.sessionId, `(() => {
+  const labels = [...document.querySelectorAll('nav')].map((n) => n.getAttribute('aria-label') || '');
+  return {
+    labelled: labels.filter(Boolean),
+    fixedBottom: [...document.querySelectorAll('nav')].filter((n) => {
+      const cs = getComputedStyle(n);
+      return cs.position === 'fixed' && parseInt(cs.bottom || '9999', 10) <= 4;
+    }).length,
+    menuButton: !!document.querySelector('button[aria-controls="mobile-menu"]'),
+  };
+})()`);
+check(
+  "移动端只有一套导航（无底部标签栏，菜单入口仍在）",
+  navSurfaces.fixedBottom === 0 && navSurfaces.menuButton === true,
+  JSON.stringify(navSurfaces)
+);
+
 await closePage(readerPage);
 
 /* 4. 内容断言：确认渲染的是真实数据，而不是空状态 */

@@ -132,7 +132,7 @@ export default function SettingsPage() {
           👤 个人资料
         </h3>
         <p className="mb-5 text-sm text-purple-400 dark:text-purple-500">
-          用于「个人介绍」「近况」「相册」三个页面与页脚。保存后 60 秒内全站生效。
+          用于「个人介绍」「近况」两个页面与页脚。保存后 60 秒内全站生效。
         </p>
         <ProfileForm />
       </div>

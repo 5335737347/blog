@@ -615,6 +615,11 @@ header[data-over-hero] .icon-button:hover {
   }
 }
 
+/* 移动端菜单展开时，贴底浮层（Cookie 提示）让位：它的 z-index 高于菜单遮罩。 */
+html[data-menu-open] [data-print="hide"].fixed.inset-x-0 {
+  display: none;
+}
+
 /* ===== 正文排版（阅读器）===== */
 .reading {
   font-size: 1.0625rem;

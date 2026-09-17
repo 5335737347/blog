@@ -16,6 +16,7 @@ export default function BackToTop() {
   }, []);
 
   // 文章页右下角已经有目录抽屉按钮，回到顶部上移一层避免重叠。
+  // （此处不再为移动端底部标签栏让位：那个标签栏已移除。）
   const isArticlePage = /^\/articles\/[^/]+$/.test(pathname);
 
   return (
@@ -25,7 +26,7 @@ export default function BackToTop() {
       aria-label="回到顶部"
       data-print="hide"
       className={`fixed right-4 z-40 grid h-10 w-10 place-items-center rounded-full border border-line bg-surface text-ink-2 shadow-float transition-all duration-200 hover:text-primary-deep lg:right-6 lg:h-11 lg:w-11 ${
-        isArticlePage ? "bottom-36 lg:bottom-6" : "bottom-20 lg:bottom-6"
+        isArticlePage ? "bottom-20 lg:bottom-6" : "bottom-6"
       } ${
         visible ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-12 opacity-0"
       }`}

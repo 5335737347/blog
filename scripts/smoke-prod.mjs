@@ -11,7 +11,7 @@
  * 前置条件：已执行过 `npm run build`。
  */
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";

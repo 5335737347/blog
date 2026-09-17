@@ -37,7 +37,7 @@ export default function CookieNotice() {
 
   if (!visible) return null;
 
-  // 贴底窄条：不遮挡首屏主内容（hero 搜索、文章封面），也不与移动端标签栏重叠。
+  // 贴底窄条：不遮挡首屏主内容（hero 搜索、文章封面）。
   //
   // 这里用 `role="region"` 而不是 `role="dialog"`：这是一条不阻塞操作的通知，
   // 不是对话框——`dialog` 在 `<aside>` 上也不是允许的 ARIA 角色
@@ -48,7 +48,7 @@ export default function CookieNotice() {
       aria-labelledby="cookie-notice-title"
       aria-describedby="cookie-notice-description"
       data-print="hide"
-      className="fixed inset-x-0 bottom-14 z-[90] border-t border-line bg-surface/95 px-4 py-2.5 backdrop-blur-md lg:bottom-0"
+      className="fixed inset-x-0 bottom-0 z-[90] border-t border-line bg-surface/95 px-4 py-2.5 backdrop-blur-md"
     >
       <div className="mx-auto flex max-w-content flex-wrap items-center gap-x-3 gap-y-2">
         <LockIcon className="hidden h-4 w-4 shrink-0 text-accent-deep sm:block" />
