@@ -79,9 +79,13 @@ if [ "$healthy" != "1" ]; then
 fi
 echo "API 入口可运行，/health 返回 ok"
 kill "$API_PID" 2>/dev/null
+wait "$API_PID" 2>/dev/null
 
 echo "=== 按 PM2 的方式启动 Web（next start 127.0.0.1:3101）==="
-(cd apps/web && node ../../node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port 3101) > ./verify-web.log 2>&1 &
+# 用 `exec` 让子 shell 被 node 替换：否则 $! 拿到的是子 shell 的 PID，
+# kill 只结束子 shell，node 仍占着端口——本脚本此前就这样留下过残留服务，
+# 进而让下一次运行的端口预检直接失败。
+(cd apps/web && exec node ../../node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port 3101) > ./verify-web.log 2>&1 &
 WEB_PID=$!
 up=0
 for _ in $(seq 1 25); do
@@ -92,14 +96,21 @@ done
 if [ "$up" != "1" ]; then
   echo "--- Web 日志 ---"; head -20 ./verify-web.log
   kill "$WEB_PID" 2>/dev/null
+  wait "$WEB_PID" 2>/dev/null
   fail WEB_BOOT_FAILED 16
 fi
 echo "Web 入口可运行，首页返回 200"
 kill "$WEB_PID" 2>/dev/null
+wait "$WEB_PID" 2>/dev/null
 
 # 冒烟检查是 `npm run update` 的最后一环，也是最依赖环境的一环（需要浏览器）。
 # 它在这里跑通，服务器上才不会再遇到新的意外。
+#
+# 加硬超时：冒烟自己会起两个实例，若环境异常（端口被占、浏览器有问题）会等很久；
+# 部署流程里不允许出现「卡住不返回」。
 echo "=== 浏览器冒烟（对生产构建）==="
-npm run smoke:prod || fail SMOKE_FAILED 22
+if ! timeout 420 npm run smoke:prod; then
+  fail SMOKE_FAILED 22
+fi
 
 echo "RESULT: ALL_DEPLOY_CHECKS_PASSED"
