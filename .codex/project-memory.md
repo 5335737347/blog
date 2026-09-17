@@ -549,6 +549,19 @@ they need a Chromium binary (found via `CHROME_BIN` or the Playwright cache).
   metadata key silently discards the layout's version of that same key. When adding
   a page that sets `alternates`, `openGraph` or `twitter`, use the shared helpers
   instead of hand-writing the object.
+- **Follow-on fix found by the deploy smoke**: the table of contents is derived from
+  the raw Markdown (`extractHeadings`), so after `#` was demoted to `h2` for
+  rendering, the TOC still listed the article title as a level-1 entry. That entry
+  can never become active (it sits at the top of the body) and clicking it does
+  nothing visible. `extractHeadings` now skips level-1 headings and shifts the
+  remaining levels down by one, matching what `MarkdownContent` renders. If you
+  change heading handling again, change both places: the renderer's
+  `remarkDemoteHeadings` and this extractor.
+- The deploy smoke's TOC assertion was also measuring the wrong thing: it parked the
+  heading at the very top of the viewport, inside the highlight observer's
+  `-96px 0px -70% 0px` dead band, so the highlight legitimately did not update. It
+  now scrolls the heading to ~120px and polls for up to ~10 s. Keep such interaction
+  assertions condition-based rather than "act then sleep".
 
 ## Completed 2026-09-17 production deployment (hardening release)
 
