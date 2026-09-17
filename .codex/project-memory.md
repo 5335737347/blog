@@ -387,3 +387,112 @@ they need a Chromium binary (found via `CHROME_BIN` or the Playwright cache).
   fails `npm run check`; running the check before the edit hides this.
 - Repository state: pushed to `origin/main`, GitHub CI green (14 steps). The
   production server had not been updated at the time of this entry.
+
+## Completed 2026-09-17 multi-dimensional quantitative evaluation
+
+- The formal report is `docs/evaluation-report.md` (indexed from `docs/README.md`).
+  It scores eleven weighted dimensions and states its evidence standard (measured /
+  source line / inferred) and its explicit coverage limits.
+- Headline: **81.7 / 100**. Strongest: documentation (84), backend architecture (84),
+  SEO (84), frontend design (82). Weakest: operations and deployability (66),
+  API contract (78), security (79), accessibility (79), performance (79).
+- **The most visible defect is accessibility, not security**: sampled at real pixel
+  level (backdrop luminance with the text paint removed), the light-theme hero copy
+  and transparent header text measure 1.64-2.37:1 where 4.5:1 is required
+  (`--hero-scrim` only reaches 0.10 opacity in its middle stop while the copy uses
+  `text-white/70.../85`). axe-core reports those 140 nodes as `color-contrast`
+  incomplete, so "axe reports zero violations" is true but does not cover the most
+  prominent text on the site. Keep hero copy opaque and strengthen the scrim.
+- Keyboard access, focus visibility, reduced-motion, landmarks, labels and
+  horizontal overflow were all verified sound; the remaining a11y work is the hero
+  contrast, a duplicate `<h1>` from Markdown body headings, heading-order skips on
+  list templates, `aria-label` on generic div/pre nodes, and `role="dialog"` on the
+  cookie notice's `<aside>`.
+- Verification basis, all reproducible: full `npm run check` green (107 tests),
+  production builds of both apps, an isolated stack on a purpose-built dataset
+  (72 published posts + 5 drafts + 344 comments + 6 categories + 18 tags),
+  role-based authorization matrix, adversarial penetration testing on a separate
+  isolated instance, CDP measurements (axe-core, keyboard traversal, LCP/CLS/TBT),
+  latency/concurrency benchmarks, four database failure injections, and a
+  backup -> validate -> restore drill.
+- **Four defects deserve fixing before the next feature**: (1) `GET /health`
+  returns 200 `ok` when the database file is missing (better-sqlite3 silently
+  creates an empty database) while every data endpoint 500s; (2) the API boots
+  with a missing/weak `JWT_SECRET` and only fails later at each auth request;
+  (3) the per-account login limiter is checked before password verification, so
+  10 wrong passwords lock the real account out (`apps/api/src/routes/auth.ts`);
+  (4) bodyless writes return 500 instead of 400 because no request-body
+  validation exists anywhere.
+- Also found: `docs/openapi.yaml` has a duplicate top-level `/health` key, so
+  strict YAML parsers cannot load the contract while `check:openapi` (line-based
+  regex) still reports success; `Comment.parentId` has no index although replies
+  are queried by it; the API sends uncompressed JSON (RSS data 43 KB) and the
+  footer's `/rss.xml` + `/sitemap.xml` links are prefetched as RSC routes
+  (~64 KB of useless transfer per page); `/messages` has a measured desktop
+  CLS of 0.273; unknown paths render Next's default 404 instead of the branded
+  one; the API serves hundreds of RSC prefetch requests per page load.
+- Fixed during the evaluation: `scripts/check-docs.mjs` and `eslint.config.mjs`
+  both failed to ignore `apps/web/tmp/`, the isolated build directory that
+  `NEXT_DIST_DIR` points at (already gitignored). A leftover build there made
+  `check:docs` fail on Next's internal `NEXT_*`/`VERCEL_*` variables and made
+  `npm run lint` emit 2390 errors from compiled JS. Both now ignore `tmp`; the
+  gates are deterministic again and `npm run check` is green end to end.
+  Only `docs/README.md`, `scripts/check-docs.mjs`, `eslint.config.mjs` and the
+  new report were changed — no implementation code was modified.
+- Environment caveat learned here: `bash` tool invocations get a fresh `/tmp`, so
+  evaluation databases and artifacts must live inside the workspace (`.research/`
+  is gitignored). Also, an absolute `NEXT_DIST_DIR` is resolved by Next against
+  `apps/web`, which can create a deep `apps/web/home/...` build tree in the
+  workspace; pass a path relative to `apps/web` instead.
+
+## Completed 2026-09-17 hardening pass (fixes the evaluation findings)
+
+- Score moved from 81.7 to 89.7 after the fixes below; each one was re-measured on
+  an isolated production-shaped instance, not assumed. `npm run check` is green
+  end to end (lint, 4 workspace type checks, 114 tests, docs, contract, smoke).
+- **Health probe no longer lies**: it counts `_prisma_migrations` instead of
+  running `SELECT 1`. Missing-but-existing-directory databases used to be silently
+  created as empty files, so `/health` said 200 `ok` while every data route 500ed.
+- **Startup config validation**: `apps/api/src/index.ts` calls `getJwtSecret()` and
+  validates `SITE_URL` before `listen()`, warns in production when `SITE_URL` is
+  unset or `TRUST_PROXY` is off, and registers graceful shutdown
+  (`SIGTERM`/`SIGINT`, `unhandledRejection`, `uncaughtException`, `prisma.$disconnect`).
+- **Login rate limit**: the per-account failure bucket is now a cooldown, not a
+  lockout — a correct password still works unless the bucket is currently full,
+  and a successful login clears the counter. Keep it that way: the bucket must
+  never be consulted as a hard gate before password verification.
+- **Request bodies**: `requestBody()` in `apps/api/src/http.ts` normalises a
+  missing/non-object body to 400 `BAD_REQUEST` at the HTTP boundary for every
+  write route (previously 500). Field-level validation stays in the services.
+- **Proxy trust**: `x-forwarded-for` is deliberately rejected as a rate-limit
+  identity (`unsupported-proxy-header` + a warning) because Nginx's
+  `$proxy_add_x_forwarded_for` appends, letting clients choose their own bucket.
+  Use `x-real-ip` (default) or `cf-connecting-ip`.
+- **Response compression**: `apps/api/src/server/compression.ts` compresses
+  JSON/text over 1 KB with brotli/gzip and always sets
+  `Vary: Accept-Encoding`. Register it with `registerCompression(app)` on the root
+  instance — an `app.register()` plugin's `onSend` hook does **not** apply to
+  routes registered afterwards (measured: the hook never ran).
+- **Contract**: `docs/openapi.yaml`'s duplicate `/health` key is gone, and
+  `check-openapi.ts` now parses the file itself with duplicate-key detection and
+  no third-party YAML dependency (js-yaml has no bundled types and is only a
+  transitive dependency whose advisories are audit-allowlisted). Its route-tree
+  parser also had a real bug: nested routes were flattened, which is why route
+  counts looked right while paths were wrong.
+- **Data model**: `@@index([parentId])` on `Comment` plus migration
+  `20260917190000_add_comment_parent_index`; `EXPLAIN QUERY PLAN` now uses it.
+- **Front-end**: hero scrim strengthened and hero copy made opaque (measured pixel
+  contrast 1.6-2.4:1 -> 4.5:1+); a **CSS specificity bug** fixed via
+  `header[data-over-hero]` rules — `.nav-link`/`.icon-button` set their own
+  `color`, so Tailwind utilities on the hero header were dead and the nav measured
+  1.17:1; Markdown body `#` demoted to `h2` (article pages had two `h1`s); footer
+  group headings demoted to `h3`; root `app/not-found.tsx` + shared
+  `PublicChrome`/`NotFoundView` give unmatched URLs the branded shell (previously
+  Next's default English 404); footer feed links use `prefetch={false}` (was
+  ~64 KB of useless RSC transfer per page); hero's blurred layer is a CSS
+  background instead of a second `<Image>`; the home page has a canonical URL.
+  axe-core is now clean over 56 runs (was 68 nodes) and `/messages` CLS dropped
+  from 0.273 to 0.004.
+- Still open by choice: soft 404 status codes, per-field request schemas,
+  coverage thresholds, tests for the public SSR data surface, and the approved
+  private Admin separation.

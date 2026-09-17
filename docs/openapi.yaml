@@ -28,24 +28,11 @@ tags:
   - name: Settings
   - name: Publishing
   - name: Public
+  - name: Operations
+  - name: Profile
   - name: Health
 
 paths:
-  /health:
-    get:
-      tags: [Health]
-      summary: Check the independent API process
-      servers:
-        - url: http://127.0.0.1:3002
-          description: Direct Fastify API
-      responses:
-        "200":
-          description: API is ready
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Envelope"
-
   /api/public/settings:
     get:
       tags: [Public]
@@ -262,6 +249,8 @@ paths:
             schema:
               $ref: "#/components/schemas/LoginInput"
       responses:
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "200":
           description: Logged in
           content:
@@ -288,6 +277,8 @@ paths:
             schema:
               $ref: "#/components/schemas/RegisterInput"
       responses:
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "201":
           description: Registered and logged in
           content:
@@ -326,6 +317,8 @@ paths:
             schema:
               $ref: "#/components/schemas/VerificationCodeInput"
       responses:
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "200":
           description: Verification code created and delivered when the selected service is configured
           content:
@@ -358,6 +351,8 @@ paths:
                 email:
                   type: string
       responses:
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "200":
           description: Code requested
         "400":
@@ -388,6 +383,8 @@ paths:
                 newPassword:
                   type: string
       responses:
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "200":
           description: Password reset
         "400":
@@ -418,6 +415,8 @@ paths:
                 newPassword:
                   type: string
       responses:
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "200":
           description: Password changed
         "400":
@@ -435,6 +434,8 @@ paths:
         issued to this account becomes invalid immediately, so logging out on
         one device signs the account out everywhere.
       responses:
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "200":
           description: Logged out
           content:
@@ -465,6 +466,8 @@ paths:
       security:
         - sessionCookie: []
       responses:
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "200":
           description: API key status. The stored key value is not returned.
           content:
@@ -479,6 +482,8 @@ paths:
       security:
         - sessionCookie: []
       responses:
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "200":
           description: New API key. This is the only time the raw key is returned.
           content:
@@ -514,6 +519,14 @@ paths:
             type: string
             enum: [all, draft, published]
           description: Admin-only publication filter.
+        - name: q
+          in: query
+          schema:
+            type: string
+            maxLength: 100
+          description: >-
+            Case-insensitive keyword filter over title, excerpt, content and tag
+            names. The API truncates the value to 100 characters.
       responses:
         "200":
           description: Paginated articles
@@ -533,6 +546,8 @@ paths:
             schema:
               $ref: "#/components/schemas/ArticleCreateInput"
       responses:
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "201":
           description: Article created
           content:
@@ -574,6 +589,8 @@ paths:
             schema:
               $ref: "#/components/schemas/ArticleUpdateInput"
       responses:
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "200":
           description: Article updated
           content:
@@ -596,6 +613,8 @@ paths:
       security:
         - sessionCookie: []
       responses:
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "200":
           description: Article deleted
           content:
@@ -664,6 +683,10 @@ paths:
             schema:
               $ref: "#/components/schemas/CommentCreateInput"
       responses:
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "201":
           description: Comment submitted
           content:
@@ -693,6 +716,10 @@ paths:
             schema:
               $ref: "#/components/schemas/GuestbookEntryCreateInput"
       responses:
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
         "201":
           description: Entry submitted for review
           content:
@@ -719,6 +746,8 @@ paths:
             schema:
               $ref: "#/components/schemas/CommentModerationInput"
       responses:
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "200":
           description: Comment updated
           content:
@@ -735,6 +764,8 @@ paths:
       security:
         - sessionCookie: []
       responses:
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "200":
           description: Comment deleted
           content:
@@ -822,6 +853,8 @@ paths:
             schema:
               $ref: "#/components/schemas/SettingsUpdateInput"
       responses:
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "200":
           description: Settings updated
           content:
@@ -859,6 +892,8 @@ paths:
             schema:
               $ref: "#/components/schemas/MusicUrlInput"
       responses:
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "201":
           description: Music track created
           content:
@@ -881,6 +916,8 @@ paths:
       security:
         - sessionCookie: []
       responses:
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "200":
           description: Music track deleted
           content:
@@ -912,6 +949,8 @@ paths:
                     type: string
                     format: binary
       responses:
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "201":
           description: Import results
           content:
@@ -936,6 +975,8 @@ paths:
             schema:
               $ref: "#/components/schemas/PublishInput"
       responses:
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "201":
           description: Published article
           content:

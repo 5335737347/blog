@@ -21,6 +21,7 @@
 | [内容工作流](content-workflow.md) | 从 Markdown/Obsidian 导入或发布文章 |
 | [前端设计方案](design-plan.md) | 查看视觉体系、设计令牌、页面结构与前端改版顺序 |
 | [OpenAPI](openapi.yaml) | 查询 HTTP 接口、请求和响应契约 |
+| [量化评估报告](evaluation-report.md) | 查看多维度量化评估的得分、证据与修复清单 |
 | [后续计划](next-plan.md) | 查看私有 Admin 迁移阶段、验收标准和其他技术债 |
 
 ## 应用文档

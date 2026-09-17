@@ -5,7 +5,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repositoryRoot = path.resolve(fileURLToPath(new URL("../", import.meta.url)));
-const ignoredDirectories = new Set([".git", ".next", "coverage", "dist", "node_modules"]);
+// `tmp` 是冒烟检查与隔离实例的构建目录（见 apps/web 的 NEXT_DIST_DIR 用法），
+// 里面是 Next 的构建产物而不是源码。此前不在忽略列表里，于是残留的
+// apps/web/tmp/<dist>/server/middleware.js 会被当成源码扫描，把 Next 内部的
+// NEXT_* / VERCEL_* 变量报成「未写入 .env.example」，让 check:docs 在残留产物
+// 存在时限入假失败。
+const ignoredDirectories = new Set([".git", ".next", "coverage", "dist", "node_modules", "tmp"]);
 const markdownRoots = [
   "README.md",
   "docs",

@@ -24,6 +24,9 @@ const eslintConfig = defineConfig([
     "/.research/**",
     "/.npm-cache/**",
     "/backups/**",
+    // 冒烟检查与隔离实例的构建目录（NEXT_DIST_DIR 指向这里）。里面是编译后的
+    // JS，被扫到会报出成千上万条无意义的规则错误；`**/.next/**` 覆盖不到它。
+    "apps/web/tmp/**",
   ]),
 ]);
 
