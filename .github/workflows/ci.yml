@@ -39,17 +39,45 @@ jobs:
       - name: Generate Prisma Client
         run: npm run db:generate
 
-      - name: Validate workspace
-        run: npm run check
+      # 校验拆成独立步骤：原先合成一个 `npm run check`，失败时只能看到整条链挂了，
+      # 无法判断是哪一环。CI 与本地环境不同，定位成本远高于多写几行 YAML。
+      - name: Lint
+        run: npm run lint
 
-      - name: Build production applications
-        run: npm run build
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Check docs
+        run: npm run check:docs
+
+      - name: Check OpenAPI contract
+        run: npm run check:openapi
+
+      # 浏览器冒烟需要 Chromium。不依赖 runner 预装（不同镜像不一致），
+      # 显式安装并导出 CHROME_BIN；冒烟脚本自己也会兜底查找 PATH 上的 chromium。
+      - name: Prepare browser for smoke check
+        run: |
+          npx --yes playwright@1.56.0 install --with-deps chromium
+          CHROME_BIN="$(find "$HOME/.cache/ms-playwright" -type f \
+            \( -name chrome-headless-shell -o -name chrome \) 2>/dev/null | head -1)"
+          if [ -z "$CHROME_BIN" ] || [ ! -x "$CHROME_BIN" ]; then
+            echo "::error::找不到可用于冒烟检查的 Chromium"
+            exit 1
+          fi
+          echo "使用浏览器：$CHROME_BIN"
+          echo "CHROME_BIN=$CHROME_BIN" >> "$GITHUB_ENV"
 
       - name: Browser smoke check
         # 只做静态检查不够：本轮出现过 tsc 与生产构建都通过、
         # 只有真实渲染才暴露的缺陷（文章页运行时 500、音乐播放器面板消失）。
-        # 该步骤自建临时数据库与独立端口的实例，跑完自动清理。
+        # 该步骤自建临时数据库与独立端口的实例，并用 API 启动日志核对目标库，跑完自动清理。
         run: npm run smoke
+
+      - name: Build production applications
+        run: npm run build
 
       - name: Audit production dependencies
         # 在仓库内审计：--omit=dev 会覆盖各 workspace 的真实生产依赖。
