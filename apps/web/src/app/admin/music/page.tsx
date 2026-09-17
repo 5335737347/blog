@@ -26,9 +26,16 @@ export default function MusicAdminPage() {
   const [extUrl, setExtUrl] = useState("");
 
   const fetchTracks = useCallback(async () => {
-    const res = await fetch("/api/music");
-    setTracks(await readApiData<Track[]>(res));
-    setLoading(false);
+    setLoading(true);
+    try {
+      const res = await fetch("/api/music");
+      setTracks(await readApiData<Track[]>(res));
+    } catch (reason) {
+      setMessage(reason instanceof Error ? `❌ ${reason.message}` : "❌ 加载音乐失败");
+      setTracks([]);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -44,42 +51,59 @@ export default function MusicAdminPage() {
     if (!file) return;
 
     setUploading(true);
-    const fd = new FormData();
-    fd.append("file", file);
-    fd.append("title", file.name.replace(/\.[^.]+$/, ""));
-    const res = await fetch("/api/music", { method: "POST", body: fd });
-    if (res.ok) {
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("title", file.name.replace(/\.[^.]+$/, ""));
+      const res = await fetch("/api/music", { method: "POST", body: fd });
+      if (!res.ok) {
+        setMessage(`❌ ${await readApiError(res, "上传失败")}`);
+        return;
+      }
       setMessage("✅ 上传成功");
-      fetchTracks();
+      await fetchTracks();
       if (fileRef.current) fileRef.current.value = "";
-    } else {
-      const error = await readApiError(res, "上传失败");
-      setMessage("❌ " + error);
+    } catch {
+      setMessage("❌ 网络错误，上传失败");
+    } finally {
+      setUploading(false);
     }
-    setUploading(false);
   };
 
   const handleAddUrl = async () => {
     if (!extTitle || !extUrl) return;
-    const res = await fetch("/api/music", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: extTitle, artist: extArtist || null, url: extUrl }),
-    });
-    if (res.ok) {
+    try {
+      const res = await fetch("/api/music", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: extTitle, artist: extArtist || null, url: extUrl }),
+      });
+      if (!res.ok) {
+        setMessage(`❌ ${await readApiError(res, "添加失败")}`);
+        return;
+      }
       setMessage("✅ 添加成功");
-      setExtTitle(""); setExtArtist(""); setExtUrl("");
-      fetchTracks();
-    } else {
-      const error = await readApiError(res, "添加失败");
-      setMessage("❌ " + error);
+      setExtTitle("");
+      setExtArtist("");
+      setExtUrl("");
+      await fetchTracks();
+    } catch {
+      setMessage("❌ 网络错误，添加失败");
     }
   };
 
   const handleDelete = async (id: string) => {
     if (!confirm("删除这条音乐？")) return;
-    await fetch(`/api/music/${id}`, { method: "DELETE" });
-    fetchTracks();
+    try {
+      const res = await fetch(`/api/music/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        setMessage(`❌ ${await readApiError(res, "删除失败")}`);
+        return;
+      }
+      await fetchTracks();
+    } catch {
+      setMessage("❌ 网络错误，删除失败");
+    }
   };
 
   if (loading) return <p className="text-purple-400">加载中...</p>;
@@ -100,7 +124,13 @@ export default function MusicAdminPage() {
         <div className="rounded-2xl border-2 border-dashed border-pink-200 p-6 dark:border-purple-800/50">
           <h3 className="mb-3 font-semibold text-purple-900 dark:text-purple-100">📤 上传音乐文件</h3>
           <form onSubmit={handleUpload} className="flex flex-col gap-3">
-            <input ref={fileRef} type="file" accept=".mp3,.wav,.ogg,.webm" className="text-sm text-purple-600" />
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".mp3,.wav,.ogg,.webm"
+              aria-label="选择要上传的音乐文件"
+              className="text-sm text-purple-600"
+            />
             <Button type="submit" disabled={uploading} size="sm">
               {uploading ? "上传中..." : "上传"}
             </Button>
@@ -109,12 +139,12 @@ export default function MusicAdminPage() {
         </div>
 
         {/* External URL */}
-        <div className="rounded-2xl border-2 border-pink-200 p-6 dark:border-purple-800/50">
-          <h3 className="mb-3 font-semibold text-purple-900 dark:text-purple-100">🔗 添加外链</h3>
+        <div className="rounded-lg border border-purple-200 p-6 dark:border-purple-800/50">
+          <h3 className="mb-3 font-semibold text-purple-900 dark:text-purple-100">添加外链</h3>
           <div className="flex flex-col gap-2">
-            <Input placeholder="标题" value={extTitle} onChange={(e) => setExtTitle(e.target.value)} />
-            <Input placeholder="艺术家 (可选)" value={extArtist} onChange={(e) => setExtArtist(e.target.value)} />
-            <Input placeholder="音乐 URL" value={extUrl} onChange={(e) => setExtUrl(e.target.value)} />
+            <Input label="标题" placeholder="标题" value={extTitle} onChange={(e) => setExtTitle(e.target.value)} />
+            <Input label="艺术家" placeholder="艺术家 (可选)" value={extArtist} onChange={(e) => setExtArtist(e.target.value)} />
+            <Input label="音乐 URL" placeholder="音乐 URL" value={extUrl} onChange={(e) => setExtUrl(e.target.value)} />
             <Button size="sm" onClick={handleAddUrl}>添加</Button>
           </div>
         </div>

@@ -1,11 +1,28 @@
 import { Feed } from "feed";
-import type { NextRequest } from "next/server";
 import { getRssFeedData } from "@/lib/api/public-api";
 import { getSiteUrl } from "@/lib/env";
 
-export async function GET(request: NextRequest) {
-  const siteUrl = getSiteUrl() || request.nextUrl.origin;
-  const { posts, settings } = await getRssFeedData();
+export async function GET() {
+  const siteUrl = getSiteUrl();
+
+  let data: Awaited<ReturnType<typeof getRssFeedData>>;
+  try {
+    data = await getRssFeedData();
+  } catch (error) {
+    // 返回 503 而不是空 feed：空 feed 会让阅读器与聚合服务认为博客已清空，
+    // 503 + Retry-After 才是“稍后重试”的正确语义。
+    const reason = error instanceof Error ? error.message : String(error);
+    console.warn(`[rss] 无法获取内容数据（${reason}），返回 503。`);
+    return new Response("Feed temporarily unavailable", {
+      status: 503,
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Retry-After": "300",
+      },
+    });
+  }
+
+  const { posts, settings } = data;
 
   const feed = new Feed({
     title: settings.blogTitle,

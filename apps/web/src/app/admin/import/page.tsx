@@ -90,7 +90,7 @@ export default function ImportPage() {
         />
         <label
           htmlFor="import-file-input"
-          className="inline-flex cursor-pointer items-center justify-center rounded-2xl bg-gradient-to-r from-pink-400 to-purple-400 px-5 py-2 text-sm font-medium text-white shadow-md shadow-pink-200 transition-all duration-200 hover:from-pink-500 hover:to-purple-500 active:scale-95 dark:shadow-purple-900/30"
+          className="inline-flex cursor-pointer items-center justify-center rounded-md bg-sky-600 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-sky-700"
         >
           {uploading ? "导入中..." : "选择文件"}
         </label>

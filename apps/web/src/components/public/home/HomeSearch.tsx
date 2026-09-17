@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { readApiData } from "@/lib/api-client";
+import { SearchIcon } from "@/components/public/layout/SiteIcons";
 
 interface SearchResult {
   slug: string;
@@ -11,41 +12,32 @@ interface SearchResult {
   excerpt: string | null;
 }
 
-const SEARCH_HINTS = [
-  { label: "搜索文章、技术与生活记录…", icon: "search" },
-  { label: "今天想读点什么？", icon: "book" },
-  { label: "输入关键词，寻找一份灵感…", icon: "sparkle" },
-] as const;
-
-function SearchHintIcon({ name }: { name: (typeof SEARCH_HINTS)[number]["icon"] }) {
-  if (name === "book") {
-    return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true" className="h-5 w-5"><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 5.5c3.2-.8 5.7-.2 7.5 1.7v12c-1.8-1.9-4.3-2.5-7.5-1.7zM19.5 5.5c-3.2-.8-5.7-.2-7.5 1.7v12c1.8-1.9 4.3-2.5 7.5-1.7z" /></svg>;
-  }
-  if (name === "sparkle") {
-    return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true" className="h-5 w-5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3.5c.7 4.7 3.3 7.3 8 8-4.7.7-7.3 3.3-8 8-.7-4.7-3.3-7.3-8-8 4.7-.7 7.3-3.3 8-8Z" /></svg>;
-  }
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true" className="h-5 w-5"><circle cx="10.75" cy="10.75" r="6.25" /><path strokeLinecap="round" d="m15.5 15.5 4 4" /></svg>;
+function highlightMatch(text: string, query: string): ReactNode {
+  const q = query.trim();
+  if (q.length < 2) return text;
+  const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const parts = text.split(new RegExp(`(${escaped})`, "gi"));
+  return parts.map((part, i) =>
+    part.toLowerCase() === q.toLowerCase()
+      ? <mark key={i} className="rounded-xs bg-primary-soft px-0.5 text-primary-deep">{part}</mark>
+      : part
+  );
 }
 
+const PLACEHOLDER = "搜索文章、技术与生活记录…";
+
+/**
+ * 首页搜索：默认是 hero 上的玻璃输入框，聚焦后弹出结果面板。
+ */
 export default function HomeSearch() {
   const router = useRouter();
   const containerRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [open, setOpen] = useState(false);
-  const [hintIndex, setHintIndex] = useState(0);
 
   useEffect(() => {
-    const timer = window.setInterval(() => {
-      setHintIndex((index) => (index + 1) % SEARCH_HINTS.length);
-    }, 2800);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    if (query.trim().length < 2) {
-      return;
-    }
+    if (query.trim().length < 2) return;
     const controller = new AbortController();
     const timer = window.setTimeout(async () => {
       try {
@@ -84,51 +76,62 @@ export default function HomeSearch() {
     }
   };
 
-  const hint = SEARCH_HINTS[hintIndex];
-  const visibleResults = query.trim().length >= 2 ? results : [];
+  const showResults = open && query.trim().length >= 2;
 
   return (
-    <div ref={containerRef} className="relative mx-auto mt-8 w-full max-w-3xl text-left">
-      <div className="group flex h-14 items-center rounded-full border border-white/75 bg-white/90 px-5 shadow-[0_18px_50px_-22px_rgba(15,23,42,0.9)] backdrop-blur-xl transition focus-within:border-sky-300 focus-within:bg-white sm:h-16 sm:px-6">
-        <span key={hint.icon} className="mr-3 text-sky-500 [animation:search-icon-in_.35s_ease-out] sm:mr-4">
-          <SearchHintIcon name={hint.icon} />
-        </span>
+    <div ref={containerRef} className="relative w-full">
+      <div className="glass flex h-11 items-center rounded-sm px-3.5 transition-colors focus-within:border-white/60">
+        <SearchIcon className="mr-2.5 h-4 w-4 shrink-0 text-white/70" />
         <input
           type="search"
           role="combobox"
           aria-label="搜索文章"
-          aria-expanded={open && query.trim().length >= 2}
+          aria-expanded={showResults}
           aria-controls="home-search-results"
           aria-autocomplete="list"
           value={query}
-          placeholder={hint.label}
+          placeholder={PLACEHOLDER}
           onChange={(event) => {
             setQuery(event.target.value);
             setOpen(true);
           }}
           onFocus={() => setOpen(true)}
           onKeyDown={handleKeyDown}
-          className="min-w-0 flex-1 bg-transparent text-base font-medium text-slate-800 outline-none placeholder:text-slate-400 sm:text-lg"
+          className="min-w-0 flex-1 bg-transparent text-ui text-white outline-none placeholder:text-white/65"
         />
-        <span className="ml-3 hidden rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-bold text-slate-400 sm:block">ENTER</span>
+        <kbd className="ml-2 hidden rounded-xs border border-white/25 px-1.5 py-0.5 text-xs font-medium text-white/70 sm:block">
+          Enter
+        </kbd>
       </div>
 
-      {open && query.trim().length >= 2 && (
-        <div id="home-search-results" role="listbox" className="absolute inset-x-0 top-full z-30 mt-3 max-h-80 overflow-y-auto rounded-3xl border border-white/80 bg-white/95 p-2 shadow-2xl backdrop-blur-2xl">
-          {visibleResults.length > 0 ? visibleResults.map((result) => (
-            <Link
-              key={result.slug}
-              href={`/articles/${result.slug}`}
-              role="option"
-              aria-selected="false"
-              onClick={() => setOpen(false)}
-              className="block rounded-2xl px-4 py-3 text-slate-700 transition hover:bg-[linear-gradient(90deg,#fff1f5,#eff8ff)]"
-            >
-              <span className="block truncate text-sm font-bold">{result.title}</span>
-              {result.excerpt && <span className="mt-1 block truncate text-xs text-slate-500">{result.excerpt}</span>}
-            </Link>
-          )) : (
-            <p className="px-4 py-6 text-center text-sm text-slate-500">没有找到相关文章</p>
+      {showResults && (
+        <div
+          id="home-search-results"
+          role="listbox"
+          className="absolute inset-x-0 top-full z-30 mt-2 max-h-80 overflow-y-auto rounded-md border border-line bg-surface p-1.5 shadow-float"
+        >
+          {results.length > 0 ? (
+            results.map((result) => (
+              <Link
+                key={result.slug}
+                href={`/articles/${result.slug}`}
+                role="option"
+                aria-selected="false"
+                onClick={() => setOpen(false)}
+                className="block rounded-sm px-3 py-2.5 transition-colors hover:bg-surface-hover"
+              >
+                <span className="block truncate text-ui font-semibold text-ink">
+                  {highlightMatch(result.title, query)}
+                </span>
+                {result.excerpt && (
+                  <span className="mt-0.5 block truncate text-meta text-ink-3">
+                    {highlightMatch(result.excerpt.slice(0, 80), query)}
+                  </span>
+                )}
+              </Link>
+            ))
+          ) : (
+            <p className="px-3 py-6 text-center text-meta text-ink-3">没有找到相关文章</p>
           )}
         </div>
       )}

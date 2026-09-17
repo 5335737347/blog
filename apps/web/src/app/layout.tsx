@@ -55,7 +55,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="flex min-h-screen flex-col bg-[--background] text-[--foreground] antialiased">
+      <body className="flex min-h-screen flex-col bg-bg text-ink antialiased">
         <ThemeProvider>
           <MusicProvider>
             {children}

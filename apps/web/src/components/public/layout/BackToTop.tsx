@@ -1,46 +1,36 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { usePathname } from "next/navigation";
+import { ArrowUpIcon } from "./SiteIcons";
 
 export default function BackToTop() {
+  const pathname = usePathname();
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    const onScroll = () => {
-      setVisible(window.scrollY > window.innerHeight);
-    };
+    const onScroll = () => setVisible(window.scrollY > window.innerHeight);
+    onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  const scrollToTop = () => {
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
+  // 文章页右下角已经有目录抽屉按钮，回到顶部上移一层避免重叠。
+  const isArticlePage = /^\/articles\/[^/]+$/.test(pathname);
 
   return (
     <button
-      onClick={scrollToTop}
+      type="button"
+      onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
       aria-label="回到顶部"
-      className={`fixed bottom-6 right-6 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-pink-400 to-purple-400 text-white shadow-lg shadow-pink-200 transition-all duration-300 hover:from-pink-500 hover:to-purple-500 hover:scale-110 active:scale-90 dark:shadow-purple-900/30 ${
-        visible
-          ? "translate-y-0 opacity-100 scale-100"
-          : "translate-y-16 opacity-0 scale-75 pointer-events-none"
+      data-print="hide"
+      className={`fixed right-4 z-40 grid h-10 w-10 place-items-center rounded-full border border-line bg-surface text-ink-2 shadow-float transition-all duration-200 hover:text-primary-deep lg:right-6 lg:h-11 lg:w-11 ${
+        isArticlePage ? "bottom-36 lg:bottom-6" : "bottom-20 lg:bottom-6"
+      } ${
+        visible ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-12 opacity-0"
       }`}
     >
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        fill="none"
-        viewBox="0 0 24 24"
-        strokeWidth={2.5}
-        stroke="currentColor"
-        className="h-5 w-5"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          d="M4.5 15.75l7.5-7.5 7.5 7.5"
-        />
-      </svg>
+      <ArrowUpIcon className="h-4 w-4" />
     </button>
   );
 }

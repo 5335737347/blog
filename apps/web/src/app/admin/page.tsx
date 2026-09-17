@@ -19,12 +19,21 @@ interface ArticleItem {
 export default function AdminDashboard() {
   const [articles, setArticles] = useState<ArticleItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   const fetchArticles = useCallback(async () => {
-    const res = await fetch("/api/articles?published=all&limit=50");
-    const data = await readApiData<{ items: ArticleItem[] }>(res);
-    setArticles(data.items);
-    setLoading(false);
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/articles?published=all&limit=50");
+      const data = await readApiData<{ items: ArticleItem[] }>(res);
+      setArticles(data.items);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "加载文章失败");
+      setArticles([]);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -35,26 +44,34 @@ export default function AdminDashboard() {
   }, [fetchArticles]);
 
   const handleTogglePublish = async (article: ArticleItem) => {
-    const res = await fetch(`/api/articles/${article.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ published: !article.published }),
-    });
-    if (!res.ok) {
-      alert(`操作失败: ${await readApiError(res, String(res.status))}`);
-      return;
+    try {
+      const res = await fetch(`/api/articles/${article.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ published: !article.published }),
+      });
+      if (!res.ok) {
+        setError(await readApiError(res, "操作失败"));
+        return;
+      }
+      await fetchArticles();
+    } catch {
+      setError("网络错误，操作失败");
     }
-    fetchArticles();
   };
 
   const handleDelete = async (id: string) => {
     if (!confirm("确定要删除这篇文章吗？")) return;
-    const res = await fetch(`/api/articles/${id}`, { method: "DELETE" });
-    if (!res.ok) {
-      alert(`删除失败: ${await readApiError(res, String(res.status))}`);
-      return;
+    try {
+      const res = await fetch(`/api/articles/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        setError(await readApiError(res, "删除失败"));
+        return;
+      }
+      await fetchArticles();
+    } catch {
+      setError("网络错误，删除失败");
     }
-    fetchArticles();
   };
 
   if (loading) {
@@ -63,9 +80,14 @@ export default function AdminDashboard() {
 
   return (
     <div>
+      {error && (
+        <p role="alert" className="mb-4 rounded-xl bg-red-50 px-4 py-2 text-sm text-red-600 dark:bg-red-900/30 dark:text-red-300">
+          {error}
+        </p>
+      )}
       <div className="mb-6 flex items-center justify-between">
         <h2 className="text-xl font-semibold text-purple-950 dark:text-purple-50">
-          文章管理
+          📚 文章管理
           <span className="ml-2 text-sm font-normal text-purple-300 dark:text-purple-500">
             ({articles.length})
           </span>
@@ -76,7 +98,7 @@ export default function AdminDashboard() {
       </div>
 
       {articles.length === 0 ? (
-        <p className="py-20 text-center text-purple-300 dark:text-purple-500">🌸 暂无文章</p>
+        <p className="py-20 text-center text-purple-300 dark:text-purple-500">暂无文章</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">

@@ -1,27 +1,27 @@
 import type { Metadata } from "next";
-import ContentLayout from "@/components/public/layout/ContentLayout";
-import { MessageIcon } from "@/components/public/layout/SiteIcons";
+import PageShell, { PageHeader } from "@/components/public/layout/PageShell";
+import CommentSection from "@/components/public/comments/CommentSection";
+import { getSiteUrl } from "@/lib/env";
 
-export const metadata: Metadata = {
-  title: "留言",
-  description: "博客留言板",
-};
+export function generateMetadata(): Metadata {
+  const siteUrl = getSiteUrl();
+  return {
+    title: "留言",
+    description: "博客留言板",
+    alternates: { canonical: siteUrl ? `${siteUrl}/messages` : undefined },
+  };
+}
 
 export default function MessagesPage() {
   return (
-    <ContentLayout>
-      <section className="surface-panel p-6 sm:p-10">
-        <div className="flex items-center gap-3">
-          <span className="grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br from-pink-100 to-sky-100 text-sky-600 dark:from-purple-900/60 dark:to-sky-900/40 dark:text-sky-300">
-            <MessageIcon className="h-6 w-6" />
-          </span>
-          <div>
-            <p className="section-kicker">Guestbook</p>
-            <h1 className="mt-1 text-4xl font-black tracking-tight">留言</h1>
-          </div>
-        </div>
-        <div className="empty-state mt-8">独立留言板正在准备中，目前可以先在文章评论区交流。</div>
-      </section>
-    </ContentLayout>
+    <PageShell narrow>
+      <PageHeader
+        kicker="Guestbook"
+        title="留言"
+        description="这里可以聊任何话题。留言需要审核后才会公开显示。"
+      />
+      {/* 不传 postId 即为留言板模式。 */}
+      <CommentSection />
+    </PageShell>
   );
 }

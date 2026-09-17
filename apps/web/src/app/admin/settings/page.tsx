@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect, type FormEvent } from "react";
+import { useState, useEffect, useRef, type FormEvent } from "react";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
-import { readApiData } from "@/lib/api-client";
+import ProfileForm from "@/components/admin/settings/ProfileForm";
+import { readApiData, readApiError } from "@/lib/api-client";
 
 export default function SettingsPage() {
   const [title, setTitle] = useState("");
@@ -13,6 +14,14 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const messageTimer = useRef<number | null>(null);
+
+  // 卸载时清理定时器，避免对已卸载组件调用 setState。
+  useEffect(() => {
+    return () => {
+      if (messageTimer.current !== null) window.clearTimeout(messageTimer.current);
+    };
+  }, []);
 
   useEffect(() => {
     Promise.all([
@@ -25,7 +34,10 @@ export default function SettingsPage() {
         setHasApiKey(keyData.hasApiKey);
         setLoading(false);
       })
-      .catch(() => setLoading(false));
+      .catch((reason) => {
+        setMessage(reason instanceof Error ? `❌ ${reason.message}` : "❌ 加载设置失败");
+        setLoading(false);
+      });
   }, []);
 
   const handleSave = async (e: FormEvent) => {
@@ -39,7 +51,7 @@ export default function SettingsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ blog_title: title, blog_description: description }),
       });
-      setMessage(res.ok ? "✅ 设置已保存" : "❌ 保存失败");
+      setMessage(res.ok ? "✅ 设置已保存" : `❌ ${await readApiError(res, "保存失败")}`);
     } catch {
       setMessage("❌ 网络错误");
     } finally {
@@ -48,19 +60,34 @@ export default function SettingsPage() {
   };
 
   const handleRegenerateKey = async () => {
-    const res = await fetch("/api/auth/key", { method: "POST" });
-    if (res.ok) {
+    setMessage("");
+    try {
+      const res = await fetch("/api/auth/key", { method: "POST" });
+      if (!res.ok) {
+        setMessage(`❌ ${await readApiError(res, "API Key 生成失败")}`);
+        return;
+      }
       const data = await readApiData<{ apiKey: string; hasApiKey: boolean }>(res);
       setApiKey(data.apiKey);
       setHasApiKey(data.hasApiKey);
+    } catch {
+      setMessage("❌ 网络错误，API Key 生成失败");
     }
   };
 
-  const handleCopyKey = () => {
+  const handleCopyKey = async () => {
     if (apiKey) {
-      navigator.clipboard.writeText(apiKey);
-      setMessage("✅ API Key 已复制");
-      setTimeout(() => setMessage(""), 2000);
+      try {
+        await navigator.clipboard.writeText(apiKey);
+        setMessage("✅ API Key 已复制");
+        if (messageTimer.current !== null) window.clearTimeout(messageTimer.current);
+        messageTimer.current = window.setTimeout(() => {
+          setMessage("");
+          messageTimer.current = null;
+        }, 2000);
+      } catch {
+        setMessage("❌ 无法访问剪贴板，请手动复制 API Key");
+      }
     }
   };
 
@@ -97,6 +124,18 @@ export default function SettingsPage() {
           {saving ? "保存中..." : "保存设置"}
         </Button>
       </form>
+
+      {/* Personal profile section */}
+      <hr className="my-8 border-pink-100 dark:border-purple-800/30" />
+      <div className="max-w-2xl">
+        <h3 className="mb-3 text-lg font-semibold text-purple-950 dark:text-purple-50">
+          👤 个人资料
+        </h3>
+        <p className="mb-5 text-sm text-purple-400 dark:text-purple-500">
+          用于「个人介绍」「近况」「相册」三个页面与页脚。保存后 60 秒内全站生效。
+        </p>
+        <ProfileForm />
+      </div>
 
       {/* API Key section */}
       <hr className="my-8 border-pink-100 dark:border-purple-800/30" />

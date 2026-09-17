@@ -34,6 +34,10 @@ npm run start:web
 - 不读取 `JWT_SECRET`；会话状态通过 `/api/auth/me` 获取。
 - 浏览器请求使用相对 `/api/*`，SSR 请求使用 `API_INTERNAL_URL`。
 - Proxy 只改善导航体验，API 授权才是安全边界。
+- 注册页面只展示 API 声明为可用的渠道，不持有邮件、短信或 Turnstile 服务端密钥。
+
+注册投递和防刷边界见
+[`docs/registration-delivery.md`](../../docs/registration-delivery.md)。
 
 ## 计划中的 Admin 迁移
 

@@ -7,7 +7,8 @@ import Textarea from "@/components/ui/Textarea";
 import { readApiError } from "@/lib/api-client";
 
 interface CommentFormProps {
-  postId: string;
+  /** 省略即为留言板：提交到 /api/guestbook，归属由后端决定。 */
+  postId?: string;
   parentId?: string;
   currentUser: {
     username: string;
@@ -24,6 +25,7 @@ export default function CommentForm({
   onSuccess,
   onCancel,
 }: CommentFormProps) {
+  const isGuestbook = !postId;
   const [author, setAuthor] = useState("");
   const [email, setEmail] = useState("");
   const [content, setContent] = useState("");
@@ -37,18 +39,24 @@ export default function CommentForm({
       return;
     }
     if (!content.trim()) {
-      setError(currentUser ? "请填写评论内容" : "请填写昵称和评论内容");
+      setError(
+        currentUser
+          ? isGuestbook
+            ? "请填写留言内容"
+            : "请填写评论内容"
+          : "请填写昵称和内容"
+      );
       return;
     }
     setSubmitting(true);
     setError("");
 
     try {
-      const res = await fetch("/api/comments", {
+      const res = await fetch(isGuestbook ? "/api/guestbook" : "/api/comments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          postId,
+          ...(postId ? { postId } : {}),
           parentId: parentId || null,
           author: currentUser ? null : author.trim(),
           email: currentUser ? null : email.trim() || null,
@@ -70,13 +78,13 @@ export default function CommentForm({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+    <form onSubmit={handleSubmit} data-print="hide" className="flex flex-col gap-3">
       {error && (
-        <p role="alert" className="text-sm text-red-600 dark:text-red-400">{error}</p>
+        <p role="alert" className="text-meta text-danger">{error}</p>
       )}
       {currentUser ? (
-        <p className="text-xs text-purple-400 dark:text-purple-500">
-          以 {currentUser.displayName || currentUser.username} 身份评论
+        <p className="text-micro text-ink-3">
+          以 {currentUser.displayName || currentUser.username} 身份{isGuestbook ? "留言" : "评论"}
         </p>
       ) : (
         <div className="flex gap-3">
@@ -100,15 +108,15 @@ export default function CommentForm({
         </div>
       )}
       <Textarea
-        aria-label={parentId ? "回复内容" : "评论内容"}
-        placeholder="写下你的评论..."
+        aria-label={parentId ? "回复内容" : isGuestbook ? "留言内容" : "评论内容"}
+        placeholder={isGuestbook ? "写下你的留言..." : "写下你的评论..."}
         rows={4}
         value={content}
         onChange={(e) => setContent(e.target.value)}
       />
       <div className="flex gap-2">
         <Button type="submit" disabled={submitting} size="sm">
-          {submitting ? "提交中..." : parentId ? "回复" : "发表评论"}
+          {submitting ? "提交中..." : parentId ? "回复" : isGuestbook ? "发表留言" : "发表评论"}
         </Button>
         {onCancel && (
           <Button type="button" variant="ghost" size="sm" onClick={onCancel}>

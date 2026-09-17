@@ -28,6 +28,7 @@ interface ArticleFormData {
   coverImage: string;
   content: string;
   published: boolean;
+  publishedAt: string | null;
   categoryId: string;
   tagIds: string[];
 }
@@ -36,6 +37,15 @@ interface ArticleFormProps {
   initialData?: ArticleFormData;
   isEditing?: boolean;
   articleId?: string;
+}
+
+/** 把 ISO 时间串转成 <input type="datetime-local"> 需要的本地格式。 */
+function toLocalInput(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 export default function ArticleForm({
@@ -51,6 +61,8 @@ export default function ArticleForm({
   const [coverImage, setCoverImage] = useState(initialData?.coverImage || "");
   const [content, setContent] = useState(initialData?.content || "");
   const [published, setPublished] = useState(initialData?.published || false);
+  // datetime-local 需要 "YYYY-MM-DDTHH:mm"（本地时区）；从 ISO 串换算。
+  const [publishedAt, setPublishedAt] = useState(() => toLocalInput(initialData?.publishedAt));
   const [categoryId, setCategoryId] = useState(initialData?.categoryId || "");
   const [selectedTags, setSelectedTags] = useState<string[]>(
     initialData?.tagIds || []
@@ -62,12 +74,17 @@ export default function ArticleForm({
   const [error, setError] = useState("");
 
   useEffect(() => {
-    fetch("/api/tags")
-      .then((r) => readApiData<Tag[]>(r))
-      .then(setTags);
-    fetch("/api/categories")
-      .then((r) => readApiData<Category[]>(r))
-      .then(setCategories);
+    Promise.all([
+      fetch("/api/tags").then((response) => readApiData<Tag[]>(response)),
+      fetch("/api/categories").then((response) => readApiData<Category[]>(response)),
+    ])
+      .then(([nextTags, nextCategories]) => {
+        setTags(nextTags);
+        setCategories(nextCategories);
+      })
+      .catch((reason) => {
+        setError(reason instanceof Error ? reason.message : "加载分类和标签失败");
+      });
   }, []);
 
   const autoSlug = (t: string) => {
@@ -102,6 +119,8 @@ export default function ArticleForm({
       content: content.trim(),
       coverImage: coverImage.trim() || null,
       published,
+      // 空串表示「未指定」，服务端按发布状态自行决定（发布时取当前时间）
+      publishedAt: publishedAt ? new Date(publishedAt).toISOString() : null,
       categoryId: categoryId || null,
       tagIds: selectedTags,
     };
@@ -179,10 +198,14 @@ export default function ArticleForm({
 
       <div className="grid grid-cols-2 gap-6">
         <div>
-          <label className="mb-2 block text-sm font-medium text-purple-800 dark:text-purple-200">
+          <label
+            htmlFor="article-category"
+            className="mb-2 block text-sm font-medium text-purple-800 dark:text-purple-200"
+          >
             分类
           </label>
           <select
+            id="article-category"
             value={categoryId}
             onChange={(e) => setCategoryId(e.target.value)}
             className="w-full rounded-2xl border-2 border-pink-200 bg-white px-4 py-2.5 text-sm text-purple-950 focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-200 dark:border-purple-700 dark:bg-purple-950/50 dark:text-purple-100 dark:focus:border-pink-400 dark:focus:ring-pink-900/30 transition-all"
@@ -206,10 +229,10 @@ export default function ArticleForm({
                 key={tag.id}
                 type="button"
                 onClick={() => handleTagToggle(tag.id)}
-                className={`rounded-full px-3 py-1 text-xs font-medium transition-all hover:scale-105 ${
+                className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
                   selectedTags.includes(tag.id)
-                    ? "bg-gradient-to-r from-pink-400 to-purple-400 text-white shadow-sm shadow-pink-200 dark:from-pink-500 dark:to-purple-500"
-                    : "bg-pink-50 text-pink-600 hover:bg-pink-100 dark:bg-purple-900/20 dark:text-purple-300 dark:hover:bg-purple-900/40"
+                    ? "bg-sky-600 text-white"
+                    : "bg-purple-100 text-purple-700 hover:bg-purple-200 dark:bg-purple-800/40 dark:text-purple-300 dark:hover:bg-purple-800/60"
                 }`}
               >
                 {tag.name}
@@ -230,14 +253,30 @@ export default function ArticleForm({
             type="checkbox"
             checked={published}
             onChange={(e) => setPublished(e.target.checked)}
+            aria-label="切换发布状态"
             className="peer sr-only"
           />
-          <div className="h-6 w-11 rounded-full bg-pink-200 transition-colors peer-checked:bg-gradient-to-r peer-checked:from-pink-400 peer-checked:to-purple-400 peer-focus:ring-2 peer-focus:ring-purple-300 dark:bg-purple-800 dark:peer-focus:ring-purple-600" />
+          <div className="h-6 w-11 rounded-full bg-purple-200 transition-colors peer-checked:bg-sky-600 peer-focus:ring-2 peer-focus:ring-sky-300 dark:bg-purple-700 dark:peer-focus:ring-sky-700" />
           <div className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform peer-checked:translate-x-5" />
         </label>
         <span className="text-sm font-medium text-purple-800 dark:text-purple-200">
-          {published ? "✨ 已发布" : "📝 草稿"}
+          {published ? "已发布" : "草稿"}
         </span>
+      </div>
+
+      <div className="max-w-xs">
+        <Input
+          label="发布日期"
+          type="datetime-local"
+          value={publishedAt}
+          onChange={(e) => setPublishedAt(e.target.value)}
+          disabled={!published}
+        />
+        <p className="mt-1 text-xs text-purple-400 dark:text-purple-500">
+          {published
+            ? "留空则使用当前时间。回填旧文章时填写真实日期，归档与排序才会正确。"
+            : "草稿没有发布日期，发布时再填写。"}
+        </p>
       </div>
 
       <div className="flex gap-3">

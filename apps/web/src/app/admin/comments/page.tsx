@@ -8,6 +8,15 @@ import { formatDate } from "@/lib/utils";
 
 type CommentFilter = "pending" | "approved" | "all";
 
+/** 留言板与文章评论共用一张表，审核时需要按来源分开看。 */
+type ScopeFilter = "all" | "post" | "guestbook";
+
+const scopeFilters: { value: ScopeFilter; label: string }[] = [
+  { value: "all", label: "全部来源" },
+  { value: "post", label: "文章评论" },
+  { value: "guestbook", label: "留言板" },
+];
+
 interface AdminComment {
   id: string;
   author: string;
@@ -15,13 +24,16 @@ interface AdminComment {
   content: string;
   approved: boolean;
   createdAt: string;
-  postId: string;
+  /** 留言板留言的 postId 为 null。 */
+  postId: string | null;
   parentId: string | null;
+  /** "guestbook" 表示来自留言板。 */
+  scope: "post" | "guestbook";
   post: {
     id: string;
     title: string;
     slug: string;
-  };
+  } | null;
   parent: {
     id: string;
     author: string;
@@ -50,6 +62,7 @@ function filterParam(filter: CommentFilter) {
 
 export default function CommentsAdminPage() {
   const [filter, setFilter] = useState<CommentFilter>("pending");
+  const [scope, setScope] = useState<ScopeFilter>("all");
   const [comments, setComments] = useState<AdminComment[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
@@ -60,6 +73,7 @@ export default function CommentsAdminPage() {
     const params = new URLSearchParams({ limit: "50" });
     const approved = filterParam(filter);
     if (approved) params.set("approved", approved);
+    if (scope !== "all") params.set("scope", scope);
 
     try {
       const res = await fetch(`/api/comments?${params.toString()}`);
@@ -76,7 +90,7 @@ export default function CommentsAdminPage() {
     } finally {
       setLoading(false);
     }
-  }, [filter]);
+  }, [filter, scope]);
 
   useEffect(() => {
     const id = window.setTimeout(() => {
@@ -86,39 +100,63 @@ export default function CommentsAdminPage() {
   }, [fetchComments]);
 
   const handleModerate = async (id: string, approved: boolean) => {
-    const res = await fetch(`/api/comments/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ approved }),
-    });
+    try {
+      const res = await fetch(`/api/comments/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ approved }),
+      });
 
-    if (!res.ok) {
-      setMessage(await readApiError(res, "操作失败"));
-      return;
+      if (!res.ok) {
+        setMessage(await readApiError(res, "操作失败"));
+        return;
+      }
+      await fetchComments();
+    } catch {
+      setMessage("网络错误，操作失败");
     }
-    await fetchComments();
   };
 
   const handleDelete = async (id: string) => {
     if (!confirm("确定要删除这条评论吗？")) return;
-    const res = await fetch(`/api/comments/${id}`, { method: "DELETE" });
-    if (!res.ok) {
-      setMessage(await readApiError(res, "删除失败"));
-      return;
+    try {
+      const res = await fetch(`/api/comments/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        setMessage(await readApiError(res, "删除失败"));
+        return;
+      }
+      await fetchComments();
+    } catch {
+      setMessage("网络错误，删除失败");
     }
-    await fetchComments();
   };
 
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
         <h2 className="text-xl font-semibold text-purple-950 dark:text-purple-50">
-          评论审核
+          💬 评论审核
           <span className="ml-2 text-sm font-normal text-purple-300 dark:text-purple-500">
             ({comments.length})
           </span>
         </h2>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <div className="flex gap-1 rounded-xl border border-purple-100 p-0.5 dark:border-purple-900">
+            {scopeFilters.map((item) => (
+              <button
+                key={item.value}
+                type="button"
+                onClick={() => setScope(item.value)}
+                className={`rounded-lg px-3 py-1.5 text-sm transition-colors ${
+                  scope === item.value
+                    ? "bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-200"
+                    : "text-purple-400 hover:bg-pink-50 dark:text-purple-500 dark:hover:bg-purple-900/20"
+                }`}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
           {filters.map((item) => (
             <button
               key={item.value}
@@ -183,12 +221,21 @@ export default function CommentsAdminPage() {
               </p>
 
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <Link
-                  href={`/articles/${comment.post.slug}`}
-                  className="text-xs text-purple-400 hover:text-pink-500 dark:text-purple-500 dark:hover:text-pink-400"
-                >
-                  《{comment.post.title}》
-                </Link>
+                {comment.scope === "guestbook" || !comment.post ? (
+                  <Link
+                    href="/messages"
+                    className="text-xs text-purple-400 hover:text-pink-500 dark:text-purple-500 dark:hover:text-pink-400"
+                  >
+                    《留言板》
+                  </Link>
+                ) : (
+                  <Link
+                    href={`/articles/${comment.post.slug}`}
+                    className="text-xs text-purple-400 hover:text-pink-500 dark:text-purple-500 dark:hover:text-pink-400"
+                  >
+                    《{comment.post.title}》
+                  </Link>
+                )}
                 <div className="flex gap-2">
                   {!comment.approved && (
                     <Button

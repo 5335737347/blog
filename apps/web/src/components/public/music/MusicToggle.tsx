@@ -1,24 +1,37 @@
 "use client";
 
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 
 interface MusicContextValue {
   visible: boolean;
+  /** 用户是否至少打开过一次播放器。用于决定是否动态加载 MusicPlayer。 */
+  activated: boolean;
   setVisible: (v: boolean) => void;
 }
 
 const MusicContext = createContext<MusicContextValue>({
   visible: false,
+  activated: false,
   setVisible: () => {},
 });
 
 export function MusicProvider({ children }: { children: ReactNode }) {
-  const [visible, setVisible] = useState(false);
-  return (
-    <MusicContext.Provider value={{ visible, setVisible }}>
-      {children}
-    </MusicContext.Provider>
+  const [visible, setVisibleState] = useState(false);
+  const [activated, setActivated] = useState(false);
+
+  // 在事件处理器里置位，而不是用 effect 同步：首次打开后保持激活，
+  // 这样关闭面板时 MusicPlayer 不会被卸载，音乐可以继续播放。
+  const setVisible = useCallback((v: boolean) => {
+    setVisibleState(v);
+    if (v) setActivated(true);
+  }, []);
+
+  const value = useMemo(
+    () => ({ visible, activated, setVisible }),
+    [visible, activated, setVisible]
   );
+
+  return <MusicContext.Provider value={value}>{children}</MusicContext.Provider>;
 }
 
 export function useMusicPlayerVisible() {
@@ -34,10 +47,10 @@ export default function MusicToggle() {
       aria-label={visible ? "关闭音乐播放器" : "打开音乐播放器"}
       aria-expanded={visible}
       aria-controls="music-player-panel"
-      className={`rounded-full p-2 transition-all hover:scale-110 active:scale-90 ${
+      className={`icon-button ${
         visible
-          ? "text-pink-500 bg-pink-50 dark:text-pink-300 dark:bg-purple-800/50"
-          : "text-pink-400 hover:bg-pink-50 dark:text-purple-300 dark:hover:bg-purple-800/50"
+          ? "bg-primary-soft text-primary-deep"
+          : ""
       }`}
     >
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">

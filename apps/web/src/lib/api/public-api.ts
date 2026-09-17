@@ -1,6 +1,15 @@
 import "server-only";
 import { cache } from "react";
-import type { ApiResponse, PaginatedResult, PostDetail, PostSummary } from "@kpblog/contracts";
+import type {
+  ApiResponse,
+  ArchiveData,
+  ArticleAdjacent,
+  HomePageData,
+  PaginatedResult,
+  PostDetail,
+  PostSummary,
+  ProfileDto,
+} from "@kpblog/contracts";
 
 const DEFAULT_BLOG_TITLE = "鲲鹏の博客";
 const DEFAULT_BLOG_DESCRIPTION = "一个关于技术和生活的个人博客";
@@ -12,7 +21,6 @@ export interface PublicSettingsDto {
 
 export interface RegistrationCapabilities {
   email: boolean;
-  phone: boolean;
 }
 
 interface TaxonomyDto {
@@ -28,15 +36,16 @@ export interface ContentLayoutDataDto {
   settings: PublicSettingsDto;
 }
 
-interface ArchiveData {
+/** 标签/分类归档接口的返回形状（与 contracts 的 ArchiveData 无关，勿混淆）。 */
+interface TaxonomyArchiveListing {
   articles: PaginatedResult<PostSummary>;
 }
 
-interface TagArchiveData extends ArchiveData {
+interface TagArchiveData extends TaxonomyArchiveListing {
   tag: TaxonomyDto | null;
 }
 
-interface CategoryArchiveData extends ArchiveData {
+interface CategoryArchiveData extends TaxonomyArchiveListing {
   category: TaxonomyDto | null;
 }
 
@@ -59,19 +68,36 @@ function apiBaseUrl() {
   return (process.env.API_INTERNAL_URL || "http://127.0.0.1:3002").replace(/\/$/, "");
 }
 
-async function getApiData<T>(path: string): Promise<T> {
+/**
+ * 公开内容的默认重验证窗口。博客内容不是实时数据，之前每个请求都用
+ * no-store 重新取一遍，导致每次浏览要打 4-5 次 API，且页面无法静态化。
+ */
+const REVALIDATE_SECONDS = 60;
+
+async function getApiData<T>(path: string, revalidate = REVALIDATE_SECONDS): Promise<T> {
   const response = await fetch(`${apiBaseUrl()}${path}`, {
-    cache: "no-store",
+    next: { revalidate },
     headers: { Accept: "application/json" },
   });
-  const payload = await response.json() as ApiResponse<T>;
-  if (!response.ok || !payload.success) {
-    throw new Error(payload.success ? `API request failed: ${response.status}` : payload.error.message);
+
+  // 先解析再判断状态码，会让网关返回非 JSON（例如 502 的 HTML 页面）时
+  // 抛出 SyntaxError，掩盖真正的失败原因。
+  const payload = (await response.json().catch(() => null)) as ApiResponse<T> | null;
+
+  if (!response.ok || payload === null || payload.success !== true) {
+    const message =
+      payload !== null && payload.success === false
+        ? payload.error.message
+        : `API request failed: ${response.status}`;
+    throw new Error(message);
   }
+
   return payload.data;
 }
 
-export async function getPublicSettings(): Promise<PublicSettingsDto> {
+// 这三个 fetcher 在同一请求内会被多次调用（根 layout、(public) layout、页面本体），
+// 用 cache() 去重可以消除重复的 API 往返。
+export const getPublicSettings = cache(async (): Promise<PublicSettingsDto> => {
   try {
     return await getApiData<PublicSettingsDto>("/api/public/settings");
   } catch {
@@ -80,7 +106,7 @@ export async function getPublicSettings(): Promise<PublicSettingsDto> {
       blogDescription: DEFAULT_BLOG_DESCRIPTION,
     };
   }
-}
+});
 
 export function getArticleIndexPageData(page: number, pageSize: number) {
   return getApiData<PaginatedResult<PostSummary>>(`/api/public/article-index?page=${page}&limit=${pageSize}`);
@@ -98,9 +124,94 @@ export function getCategoryArchivePageData(categorySlug: string, page: number, p
   return getApiData<CategoryArchiveData>(`/api/public/categories/${encodeURIComponent(categorySlug)}?page=${page}&limit=${pageSize}`);
 }
 
-export function getContentLayoutData() {
-  return getApiData<ContentLayoutDataDto>("/api/public/layout");
+/**
+ * 侧边栏数据被 6 个公开路由使用。它必须可降级：页面现在可以在构建期预渲染，
+ * 而构建期（以及 CI）通常没有运行 API。若这里抛错，整站构建会直接失败；
+ * 即使构建成功，API 短暂抖动也会让所有带侧边栏的页面变成 500。
+ * 返回空侧边栏后，ISR 会在下一个 revalidate 周期自动补上真实数据。
+ */
+/**
+ * 同一路径在每个进程内只提示一次。
+ *
+ * 构建期会并行预渲染多个页面，API 不可用时每个页面都会命同一条降级分支；
+ * 之前每次都打印完整错误对象（含堆栈），构建日志里会出现多条重复的堆栈，
+ * 掩盖真正有用的信息。降级本身是设计行为，一句话说明就够了。
+ */
+const warnedDegradedPaths = new Set<string>();
+
+function warnDegradedOnce(path: string, error: unknown) {
+  if (warnedDegradedPaths.has(path)) return;
+  warnedDegradedPaths.add(path);
+  const reason = error instanceof Error ? error.message : String(error);
+  console.warn(`[public-api] ${path} 不可用（${reason}），已降级为默认内容。`);
 }
+
+export const getContentLayoutData = cache(async (): Promise<ContentLayoutDataDto> => {
+  try {
+    return await getApiData<ContentLayoutDataDto>("/api/public/layout");
+  } catch (error) {
+    warnDegradedOnce("/api/public/layout", error);
+    return {
+      tags: [],
+      recentPosts: [],
+      settings: {
+        blogTitle: DEFAULT_BLOG_TITLE,
+        blogDescription: DEFAULT_BLOG_DESCRIPTION,
+      },
+    };
+  }
+});
+
+/**
+ * 个人资料（/about、/now 与页脚共用）。
+ *
+ * 原先这些页面直接读 apps/web/src/config/profile.ts —— 一个代码文件，
+ * 改一句简介就要重新构建并重启。现在与博客标题一致，由后台编辑。
+ *
+ * 未填写任何内容时返回空资料，页面据此渲染空状态。
+ */
+const EMPTY_PROFILE: ProfileDto = {
+  name: "",
+  headline: "",
+  bio: "",
+  location: "",
+  avatar: "",
+  email: "",
+  now: "",
+  socialLinks: [],
+};
+
+export const getProfile = cache(async (): Promise<ProfileDto> => {
+  try {
+    return await getApiData<ProfileDto>("/api/public/profile");
+  } catch (error) {
+    warnDegradedOnce("/api/public/profile", error);
+    return { ...EMPTY_PROFILE };
+  }
+});
+
+/** 归档页（/archive）：按年份分组的全部已发布文章。 */
+export const getArchiveData = cache(async (): Promise<ArchiveData> => {
+  try {
+    return await getApiData<ArchiveData>("/api/public/archive");
+  } catch (error) {
+    warnDegradedOnce("/api/public/archive", error);
+    return { total: 0, years: [] };
+  }
+});
+
+export async function getHomePageData(): Promise<HomePageData> {  try {
+    return await getApiData<HomePageData>("/api/public/home");
+  } catch {
+    return { recentPosts: [], categories: [], tags: [] };
+  }
+}
+
+export const getArticleAdjacentData = cache((slug: string) =>
+  getApiData<ArticleAdjacent | null>(
+    `/api/public/articles/${encodeURIComponent(slug)}/adjacent`
+  )
+);
 
 export function getRssFeedData() {
   return getApiData<{ posts: RssPostDto[]; settings: PublicSettingsDto }>("/api/public/rss-data");
@@ -114,6 +225,6 @@ export async function getRegistrationCapabilities(): Promise<RegistrationCapabil
   try {
     return await getApiData<RegistrationCapabilities>("/api/auth/registration-options");
   } catch {
-    return { email: false, phone: false };
+    return { email: false };
   }
 }

@@ -8,21 +8,22 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   size?: ButtonSize;
 }
 
+// 实底按钮统一走 on-solid + *-solid 令牌组合，保证两种模式下都满足 AA。
 const variantClasses: Record<ButtonVariant, string> = {
   primary:
-    "bg-gradient-to-r from-pink-400 to-purple-400 text-white hover:from-pink-500 hover:to-purple-500 shadow-md shadow-pink-200 dark:shadow-purple-900/30",
+    "bg-primary-solid text-on-solid hover:bg-primary-deep",
   secondary:
-    "bg-white text-purple-600 border-2 border-purple-200 hover:bg-purple-50 dark:bg-purple-950/30 dark:text-purple-300 dark:border-purple-800 dark:hover:bg-purple-900/30",
+    "border border-line bg-surface text-ink hover:border-line-strong hover:bg-surface-hover",
   danger:
-    "bg-gradient-to-r from-red-400 to-pink-400 text-white hover:from-red-500 hover:to-pink-500",
+    "bg-danger text-white hover:bg-danger/90",
   ghost:
-    "bg-transparent text-purple-500 hover:bg-purple-50 dark:text-purple-400 dark:hover:bg-purple-900/20",
+    "bg-transparent text-ink-2 hover:bg-surface-hover hover:text-primary-deep",
 };
 
 const sizeClasses: Record<ButtonSize, string> = {
-  sm: "px-3 py-1.5 text-sm",
-  md: "px-5 py-2 text-sm",
-  lg: "px-6 py-3 text-base",
+  sm: "h-8 px-3 text-meta",
+  md: "h-10 px-4 text-ui",
+  lg: "h-12 px-6 text-base",
 };
 
 export default function Button({
@@ -34,7 +35,7 @@ export default function Button({
 }: ButtonProps) {
   return (
     <button
-      className={`inline-flex items-center justify-center rounded-2xl font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-pink-400 focus:ring-offset-2 dark:focus:ring-offset-purple-950 disabled:opacity-50 disabled:pointer-events-none active:scale-95 ${variantClasses[variant]} ${sizeClasses[size]} ${className}`}
+      className={`inline-flex items-center justify-center gap-1.5 rounded-sm font-semibold transition-colors duration-150 focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 ${variantClasses[variant]} ${sizeClasses[size]} ${className}`}
       {...props}
     >
       {children}

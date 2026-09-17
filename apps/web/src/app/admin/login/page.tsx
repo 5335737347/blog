@@ -51,7 +51,7 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center">
-      <div className="w-full max-w-sm rounded-2xl border-2 border-pink-200 bg-white p-8 shadow-lg shadow-pink-100/50 dark:border-purple-800/50 dark:bg-purple-950/50 dark:shadow-purple-900/20">
+      <div className="w-full max-w-sm rounded-lg border border-purple-200 bg-white p-8 shadow-sm dark:border-purple-800/50 dark:bg-purple-950/50">
         <h1 className="mb-6 text-center text-2xl font-bold text-purple-950 dark:text-purple-50">
           🔐 管理员登录
         </h1>

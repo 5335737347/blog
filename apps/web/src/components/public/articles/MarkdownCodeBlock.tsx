@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type HTMLAttributes, type ReactNode } from "react";
+import { useEffect, useRef, useState, type HTMLAttributes, type ReactNode } from "react";
 
 interface MarkdownCodeBlockProps extends HTMLAttributes<HTMLPreElement> {
   children: ReactNode;
@@ -33,14 +33,41 @@ export default function MarkdownCodeBlock({
 }: MarkdownCodeBlockProps) {
   const preRef = useRef<HTMLPreElement>(null);
   const [copied, setCopied] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const resetTimer = useRef<number | null>(null);
+
+  // 卸载时清理定时器，避免对已卸载组件调用 setState。
+  useEffect(() => {
+    return () => {
+      if (resetTimer.current !== null) window.clearTimeout(resetTimer.current);
+    };
+  }, []);
+
+  const scheduleReset = () => {
+    if (resetTimer.current !== null) window.clearTimeout(resetTimer.current);
+    resetTimer.current = window.setTimeout(() => {
+      setCopied(false);
+      setFailed(false);
+      resetTimer.current = null;
+    }, 1600);
+  };
 
   const handleCopy = async () => {
     const code = preRef.current?.querySelector("code")?.textContent || "";
     if (!code) return;
 
-    await navigator.clipboard.writeText(code);
+    try {
+      await navigator.clipboard.writeText(code);
+    } catch {
+      // 权限被拒或非安全上下文：给出可见反馈而不是未处理的 Promise 拒绝。
+      setFailed(true);
+      setCopied(false);
+      scheduleReset();
+      return;
+    }
     setCopied(true);
-    window.setTimeout(() => setCopied(false), 1600);
+    setFailed(false);
+    scheduleReset();
   };
 
   return (
@@ -54,7 +81,7 @@ export default function MarkdownCodeBlock({
           type="button"
           className="markdown-copy-button"
           onClick={handleCopy}
-          aria-label={copied ? "代码已复制" : "复制代码"}
+          aria-label={failed ? "复制失败" : copied ? "代码已复制" : "复制代码"}
         >
           <svg
             aria-hidden="true"
@@ -76,12 +103,15 @@ export default function MarkdownCodeBlock({
               </>
             )}
           </svg>
-          <span>{copied ? "已复制" : "复制"}</span>
+          <span aria-live="polite">{failed ? "复制失败" : copied ? "已复制" : "复制"}</span>
         </button>
       </div>
       <pre
         ref={preRef}
         className={["markdown-code-block", className].filter(Boolean).join(" ")}
+        // 长代码需要横向滚动，滚动区必须能被键盘聚焦（axe: scrollable-region-focusable）
+        tabIndex={0}
+        aria-label={`${displayLanguage(language)} 代码块，可横向滚动`}
         {...props}
       >
         {children}

@@ -2,14 +2,15 @@ import { notFound } from "next/navigation";
 import Image from "next/image";
 import type { Metadata } from "next";
 import MarkdownContent from "@/components/public/articles/MarkdownContent";
+import ArticleCard from "@/components/public/articles/ArticleCard";
 import TagBadge from "@/components/public/articles/TagBadge";
 import CommentSection from "@/components/public/comments/CommentSection";
-import ContentLayout from "@/components/public/layout/ContentLayout";
-import TableOfContents from "@/components/public/articles/TableOfContents";
-import ReadingProgressBar from "@/components/public/articles/ReadingProgressBar";
-import { formatDate, readingTime } from "@/lib/utils";
-import { getArticlePageData } from "@/lib/api/public-api";
+import ArticleReader from "@/components/public/layout/ArticleReader";
+import { ChevronLeftIcon, ChevronRightIcon } from "@/components/public/layout/SiteIcons";
+import { formatDate, readingTime, wordCount } from "@/lib/utils";
+import { getArticleAdjacentData, getArticlePageData } from "@/lib/api/public-api";
 import { getOpenGraphImageUrl, getSiteUrl } from "@/lib/env";
+import { shouldSkipImageOptimization } from "@/lib/images";
 import Link from "next/link";
 
 interface ArticlePageProps {
@@ -51,13 +52,14 @@ export async function generateMetadata({ params }: ArticlePageProps): Promise<Me
   };
 }
 
-function shouldSkipImageOptimization(src: string): boolean {
-  return /^https?:\/\//i.test(src) || src.toLowerCase().endsWith(".svg");
-}
-
 export default async function ArticlePage({ params }: ArticlePageProps) {
   const { slug } = await params;
-  const post = await getArticlePageData(slug);
+
+  // 正文与相邻文章互不依赖，并行发起；串行会多付一次完整往返。
+  const [post, adjacent] = await Promise.all([
+    getArticlePageData(slug),
+    getArticleAdjacentData(slug),
+  ]);
 
   if (!post) notFound();
 
@@ -75,73 +77,156 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
     keywords: post.tags.map((tag) => tag.name).join(", ") || undefined,
   };
 
+  const breadcrumbJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "首页", item: siteUrl || undefined },
+      ...(post.category
+        ? [{
+            "@type": "ListItem",
+            position: 2,
+            name: post.category.name,
+            item: siteUrl ? `${siteUrl}/categories/${post.category.slug}` : undefined,
+          }]
+        : []),
+      { "@type": "ListItem", position: post.category ? 3 : 2, name: post.title },
+    ],
+  };
+
   return (
-      <ContentLayout>
+    <ArticleReader content={post.content} articleUrl={articleUrl} title={post.title}>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }}
       />
-      <ReadingProgressBar />
-      <article className="surface-panel overflow-hidden p-5 sm:p-8 lg:p-10">
-        <header className="mb-10">
-          <nav aria-label="面包屑" className="mb-6 flex flex-wrap items-center gap-2 text-xs text-[--muted]">
-            <Link href="/" className="hover:text-pink-500">首页</Link>
-            <span aria-hidden="true">/</span>
-            {post.category && <><Link href={`/categories/${post.category.slug}`} className="hover:text-pink-500">{post.category.name}</Link><span aria-hidden="true">/</span></>}
-            <span aria-current="page" className="line-clamp-1">{post.title}</span>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd).replace(/</g, "\\u003c") }}
+      />
+
+      <article>
+        <header className="max-w-read">
+          <nav aria-label="面包屑" className="flex flex-wrap items-center gap-1.5 text-meta text-ink-3">
+            <Link href="/" className="transition-colors hover:text-primary-deep">首页</Link>
+            {post.category && (
+              <>
+                <span aria-hidden="true">/</span>
+                <Link
+                  href={`/categories/${post.category.slug}`}
+                  className="transition-colors hover:text-primary-deep"
+                >
+                  {post.category.name}
+                </Link>
+              </>
+            )}
           </nav>
-          {post.coverImage && (
-            <div className="relative mb-6 h-64 overflow-hidden rounded-2xl sm:h-80 lg:h-96">
-              <Image
-                src={post.coverImage}
-                alt={post.title}
-                fill
-                sizes="(max-width: 1024px) 100vw, 960px"
-                className="object-cover"
-                unoptimized={shouldSkipImageOptimization(post.coverImage)}
-              />
-            </div>
-          )}
-          {post.category && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-pink-100 to-purple-100 px-3 py-1 text-sm font-medium text-purple-600 dark:from-pink-900/30 dark:to-purple-900/30 dark:text-purple-300">
-              📁 {post.category.name}
-            </span>
-          )}
-          <h1 className="mt-4 mb-4 text-balance text-3xl font-black tracking-[-0.03em] text-purple-950 dark:text-purple-50 sm:text-5xl sm:leading-[1.15]">
+
+          <h1 className="mt-4 text-3xl font-bold leading-[1.25] tracking-[-0.01em] text-ink sm:text-4xl">
             {post.title}
           </h1>
+
           {post.excerpt && (
-            <p className="mb-4 text-lg text-purple-500 dark:text-purple-400">
-              {post.excerpt}
-            </p>
+            <p className="mt-3 text-lg leading-relaxed text-ink-2">{post.excerpt}</p>
           )}
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex flex-wrap gap-1.5">
+
+          <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 text-meta text-ink-3">
+            {post.publishedAt && (
+              <time dateTime={post.publishedAt}>{formatDate(post.publishedAt)}</time>
+            )}
+            <span>{readingTime(post.content)} 分钟阅读</span>
+            <span>{wordCount(post.content)} 字</span>
+          </div>
+
+          {post.tags.length > 0 && (
+            <div className="mt-4 flex flex-wrap gap-1.5">
               {post.tags.map((tag) => (
                 <TagBadge key={tag.slug} name={tag.name} slug={tag.slug} />
               ))}
             </div>
-            {post.publishedAt && (
-              <time
-                dateTime={post.publishedAt}
-                className="text-sm text-purple-300 dark:text-purple-500"
-              >
-                📅 {formatDate(post.publishedAt)} · 📖 {readingTime(post.content)} 分钟
-              </time>
-            )}
-          </div>
+          )}
         </header>
 
-        <TableOfContents content={post.content} />
+        {post.coverImage && (
+          <div data-print="cover" className="relative mt-8 aspect-[16/9] max-w-read overflow-hidden rounded-md border border-line bg-bg-subtle">
+            <Image
+              src={post.coverImage}
+              alt=""
+              fill
+              // 封面在首屏且通常是文章页的 LCP 元素，不能懒加载。
+              priority
+              sizes="(max-width: 1024px) 100vw, 720px"
+              className="object-cover"
+              unoptimized={shouldSkipImageOptimization(post.coverImage)}
+            />
+          </div>
+        )}
 
-        <div className="border-t-2 border-pink-100 pt-8 dark:border-purple-800/30">
+        <div className="mt-10 max-w-read border-t border-line pt-8">
           <MarkdownContent content={post.content} />
         </div>
       </article>
 
-      <hr className="my-12 border-pink-100 dark:border-purple-800/30" />
+      {(adjacent?.previous || adjacent?.next) && (
+        <nav aria-label="文章导航" className="mt-12 grid max-w-read gap-4 sm:grid-cols-2">
+          {adjacent.previous ? (
+            <Link
+              href={`/articles/${adjacent.previous.slug}`}
+              className="group flex flex-col gap-1 rounded-md border border-line bg-surface p-4 transition-colors hover:border-line-strong"
+            >
+              <span className="inline-flex items-center gap-1 text-micro text-ink-3">
+                <ChevronLeftIcon className="h-3.5 w-3.5" />上一篇
+              </span>
+              <span className="line-clamp-2 text-ui font-medium text-ink transition-colors group-hover:text-primary-deep">
+                {adjacent.previous.title}
+              </span>
+            </Link>
+          ) : (
+            <span className="hidden sm:block" aria-hidden="true" />
+          )}
+          {adjacent.next ? (
+            <Link
+              href={`/articles/${adjacent.next.slug}`}
+              className="group flex flex-col items-end gap-1 rounded-md border border-line bg-surface p-4 text-right transition-colors hover:border-line-strong"
+            >
+              <span className="inline-flex items-center gap-1 text-micro text-ink-3">
+                下一篇<ChevronRightIcon className="h-3.5 w-3.5" />
+              </span>
+              <span className="line-clamp-2 text-ui font-medium text-ink transition-colors group-hover:text-primary-deep">
+                {adjacent.next.title}
+              </span>
+            </Link>
+          ) : (
+            <span className="hidden sm:block" aria-hidden="true" />
+          )}
+        </nav>
+      )}
 
-      <CommentSection postId={post.id} />
-      </ContentLayout>
+      {adjacent && adjacent.related.length > 0 && (
+        <section aria-labelledby="related-posts" data-print="hide" className="mt-14">
+          <h2 id="related-posts" className="mb-5 text-xl font-semibold text-ink">
+            相关文章
+          </h2>
+          <div className="grid gap-5 sm:grid-cols-2">
+            {adjacent.related.map((relatedPost) => (
+              <ArticleCard
+                key={relatedPost.id}
+                slug={relatedPost.slug}
+                title={relatedPost.title}
+                excerpt={relatedPost.excerpt}
+                coverImage={relatedPost.coverImage ?? null}
+                publishedAt={relatedPost.publishedAt}
+                tags={relatedPost.tags}
+                category={relatedPost.category}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      <div data-print="hide" className="mt-14 max-w-read border-t border-line pt-10">
+        <CommentSection postId={post.id} />
+      </div>
+    </ArticleReader>
   );
 }

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import ArticleList from "@/components/public/articles/ArticleList";
 import Pagination from "@/components/public/articles/Pagination";
-import ContentLayout from "@/components/public/layout/ContentLayout";
+import PageShell, { PageHeader } from "@/components/public/layout/PageShell";
 import { getCategoryArchivePageData } from "@/lib/api/public-api";
 import { getSiteUrl } from "@/lib/env";
 
@@ -42,15 +42,15 @@ export default async function CategoryPage({ params, searchParams }: CategoryPag
   if (!category) notFound();
 
   return (
-    <ContentLayout>
-      <h1 className="mb-2 text-3xl font-bold text-purple-950 dark:text-purple-50">
-        📁 {category.name}
-      </h1>
-      <p className="mb-8 text-sm text-purple-400 dark:text-purple-500">
-        共 {articles.total} 篇文章
-      </p>
+    <PageShell>
+      <PageHeader
+        kicker="Category"
+        title={category.name}
+        description={`${category.name} 分类下的全部文章。`}
+        meta={`共 ${articles.total} 篇`}
+      />
       <ArticleList articles={articles.items} />
       <Pagination currentPage={page} totalPages={articles.totalPages} />
-    </ContentLayout>
+    </PageShell>
   );
 }

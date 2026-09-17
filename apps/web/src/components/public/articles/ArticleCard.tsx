@@ -1,8 +1,9 @@
 import Link from "next/link";
 import Image from "next/image";
-import Card from "@/components/ui/Card";
 import TagBadge from "./TagBadge";
 import { formatDate } from "@/lib/utils";
+import { shouldSkipImageOptimization } from "@/lib/images";
+import { KunFishIcon } from "@/components/public/layout/SiteIcons";
 
 interface ArticleCardProps {
   slug: string;
@@ -12,12 +13,14 @@ interface ArticleCardProps {
   publishedAt: string | null;
   tags: { name: string; slug: string }[];
   category: { name: string; slug: string } | null;
+  /** 列表与首页共用；传入时在元信息行展示阅读时长 */
+  readingMinutes?: number;
 }
 
-function shouldSkipImageOptimization(src: string): boolean {
-  return /^https?:\/\//i.test(src) || src.toLowerCase().endsWith(".svg");
-}
-
+/**
+ * 文章卡片：固定 16/9 封面 + 分类 + 标题 + 摘要 + 元信息。
+ * 无封面时回落为柔和渐变色块，保证栅格不塌、不用装饰性插画撑版面。
+ */
 export default function ArticleCard({
   slug,
   title,
@@ -26,56 +29,70 @@ export default function ArticleCard({
   publishedAt,
   tags,
   category,
+  readingMinutes,
 }: ArticleCardProps) {
+  const visibleTags = tags.slice(0, 2);
+  const hiddenTagCount = tags.length - visibleTags.length;
+
   return (
-    <Card as="article" className="group overflow-hidden !p-0">
-      {coverImage && (
-        <div className="relative aspect-[16/7] overflow-hidden bg-pink-50 dark:bg-purple-900/20">
+    <article className="group flex flex-col overflow-hidden rounded-md border border-line bg-surface transition-colors duration-150 hover:border-line-strong">
+      <Link
+        href={`/articles/${slug}`}
+        tabIndex={-1}
+        aria-hidden="true"
+        className="relative block aspect-[16/9] overflow-hidden bg-bg-subtle"
+      >
+        {coverImage ? (
           <Image
             src={coverImage}
-            alt={title}
+            alt=""
             fill
-            sizes="(max-width: 1024px) 100vw, 640px"
-            className="object-cover transition-transform duration-700 group-hover:scale-[1.03]"
+            sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 380px"
+            className="object-cover transition-transform duration-500 group-hover:scale-[1.02]"
             unoptimized={shouldSkipImageOptimization(coverImage)}
           />
-        </div>
-      )}
-      <div className="flex flex-col gap-4 p-5 sm:p-7">
+        ) : (
+          <span className="flex h-full w-full items-center justify-center bg-[linear-gradient(135deg,var(--primary-soft),var(--accent-soft))]">
+            <KunFishIcon className="h-9 w-9 text-primary/60" />
+          </span>
+        )}
+      </Link>
+
+      <div className="flex flex-1 flex-col gap-2.5 p-5">
         {category && (
           <Link
             href={`/categories/${category.slug}`}
-            className="inline-flex w-fit items-center gap-1 rounded-full bg-gradient-to-r from-pink-100 to-purple-100 px-3 py-1 text-xs font-medium text-purple-600 hover:from-pink-200 hover:to-purple-200 dark:from-pink-900/30 dark:to-purple-900/30 dark:text-purple-300 transition-all"
+            className="w-fit rounded-full bg-accent-soft px-2.5 py-0.5 text-micro font-medium text-accent-deep transition-colors hover:bg-accent/15"
           >
-            📁 {category.name}
+            {category.name}
           </Link>
         )}
-        <Link href={`/articles/${slug}`} className="group">
-          <h2 className="text-balance text-xl font-extrabold tracking-tight text-purple-950 transition-colors group-hover:text-pink-600 dark:text-purple-50 dark:group-hover:text-pink-300 sm:text-2xl">
+
+        <h3 className="text-balance text-base font-semibold leading-snug text-ink">
+          <Link href={`/articles/${slug}`} className="transition-colors hover:text-primary-deep">
             {title}
-          </h2>
-        </Link>
+          </Link>
+        </h3>
+
         {excerpt && (
-          <p className="line-clamp-3 text-sm leading-7 text-[--muted]">
-            {excerpt}
-          </p>
+          <p className="line-clamp-2 text-meta leading-relaxed text-ink-3">{excerpt}</p>
         )}
-        <div className="flex flex-wrap items-center justify-between gap-4 border-t border-pink-100/80 pt-4 dark:border-purple-800/30">
-          <div className="flex flex-wrap gap-1.5">
-            {tags.map((tag) => (
-              <TagBadge key={tag.slug} name={tag.name} slug={tag.slug} />
-            ))}
-          </div>
+
+        <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-2 pt-3 text-micro text-ink-3">
           {publishedAt && (
-            <time
-              dateTime={publishedAt}
-              className="shrink-0 text-xs text-purple-300 dark:text-purple-500"
-            >
-              📅 {formatDate(publishedAt)}
-            </time>
+            <time dateTime={publishedAt}>{formatDate(publishedAt)}</time>
+          )}
+          {readingMinutes ? <span>{readingMinutes} 分钟</span> : null}
+          {(visibleTags.length > 0 || hiddenTagCount > 0) && (
+            <span className="ml-auto flex items-center gap-1.5">
+              {visibleTags.map((tag) => (
+                <TagBadge key={tag.slug} name={tag.name} slug={tag.slug} />
+              ))}
+              {hiddenTagCount > 0 && <span className="text-ink-3">+{hiddenTagCount}</span>}
+            </span>
           )}
         </div>
       </div>
-    </Card>
+    </article>
   );
 }

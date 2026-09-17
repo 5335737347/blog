@@ -19,9 +19,19 @@ function subscribeVolume(listener: () => void) {
   return () => window.removeEventListener(VOLUME_EVENT, listener);
 }
 
+/**
+ * 这个函数会作为 useSyncExternalStore 的 getSnapshot 在渲染期间被调用。
+ * 一旦 localStorage 抛异常（Safari 隐私模式、存储被禁用或超额），异常会冒泡到
+ * 整个渲染过程，而 MusicPlayer 位于 Header 内，等于整个公开布局崩溃。
+ * 因此这里必须吞掉异常并退回默认音量。
+ */
 function volumeSnapshot() {
-  const stored = Number.parseFloat(localStorage.getItem(VOLUME_KEY) || "0.5");
-  return Number.isFinite(stored) ? Math.min(1, Math.max(0, stored)) : 0.5;
+  try {
+    const stored = Number.parseFloat(localStorage.getItem(VOLUME_KEY) || "0.5");
+    return Number.isFinite(stored) ? Math.min(1, Math.max(0, stored)) : 0.5;
+  } catch {
+    return 0.5;
+  }
 }
 
 function serverVolumeSnapshot() {
@@ -125,7 +135,11 @@ export default function MusicPlayer() {
   }, [volume]);
 
   const setVolume = (value: number) => {
-    localStorage.setItem(VOLUME_KEY, String(value));
+    try {
+      localStorage.setItem(VOLUME_KEY, String(value));
+    } catch {
+      // 存储不可用时音量仍然在本次会话内生效，只是不会被记住。
+    }
     window.dispatchEvent(new Event(VOLUME_EVENT));
   };
 
@@ -160,7 +174,7 @@ export default function MusicPlayer() {
     setCurrentTime(value);
   };
 
-  // Close on click outside
+  // Close on click outside, and on Escape for keyboard users.
   useEffect(() => {
     if (!visible) return;
     const handler = (e: MouseEvent) => {
@@ -168,12 +182,25 @@ export default function MusicPlayer() {
         setVisible(false);
       }
     };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setVisible(false);
+    };
     const id = setTimeout(() => document.addEventListener("mousedown", handler), 0);
+    document.addEventListener("keydown", onKeyDown);
     return () => {
       clearTimeout(id);
       document.removeEventListener("mousedown", handler);
+      document.removeEventListener("keydown", onKeyDown);
     };
   }, [visible, setVisible]);
+
+  // 打开时把焦点移入对话框，关闭时还给触发按钮，避免键盘用户丢失位置。
+  useEffect(() => {
+    if (!visible) return;
+    const previous = document.activeElement as HTMLElement | null;
+    panelRef.current?.focus();
+    return () => previous?.focus?.();
+  }, [visible]);
 
   if (!visible) return null;
 
@@ -188,30 +215,29 @@ export default function MusicPlayer() {
       ref={panelRef}
       role="dialog"
       aria-label="音乐播放器"
-      className="absolute right-0 top-full z-50 mt-3 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-[1.75rem] border border-white/90 bg-white/95 shadow-[0_24px_70px_-30px_rgba(43,95,142,0.62)] backdrop-blur-2xl dark:border-purple-700/70 dark:bg-[#1b2031]/95"
+      data-print="hide"
+      tabIndex={-1}
+      className="absolute right-0 top-full z-50 mt-3 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-md border border-line bg-surface shadow-float outline-none"
     >
       {loading ? (
-        <p className="px-6 py-8 text-sm text-[--muted]">正在加载音乐…</p>
+        <p className="px-5 py-8 text-meta text-ink-3">正在加载音乐…</p>
       ) : tracks.length === 0 ? (
         <div className="px-6 py-8 text-center">
-          <p className="text-sm font-semibold text-purple-900 dark:text-purple-100">播放列表还是空的</p>
-          <p className="mt-1 text-xs text-[--muted]">在后台添加音乐后就会出现在这里。</p>
+          <p className="text-ui font-semibold text-ink">播放列表还是空的</p>
+          <p className="mt-1 text-micro text-ink-3">在后台添加音乐后就会出现在这里。</p>
         </div>
       ) : (
         <div>
-          <div className="relative overflow-hidden bg-[linear-gradient(135deg,#fff7f9_0%,#f4faff_58%,#eef8ff_100%)] px-5 pb-5 pt-4 dark:bg-[linear-gradient(135deg,#2b2030_0%,#1d2939_60%,#172b40_100%)]">
-            <div className="absolute -right-8 -top-12 h-32 w-32 rounded-full bg-sky-200/45 blur-2xl dark:bg-sky-500/10" />
-            <div className="absolute -bottom-14 -left-10 h-28 w-28 rounded-full bg-pink-200/40 blur-2xl dark:bg-pink-500/10" />
-
+          <div className="border-b border-line bg-bg-subtle px-5 pb-5 pt-4">
             <div className="relative flex items-center justify-between">
-              <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-sky-600 dark:text-sky-300">
+              <p className="text-micro font-semibold uppercase tracking-[0.16em] text-ink-3">
                 Now playing
               </p>
               <button
                 type="button"
                 onClick={() => setVisible(false)}
                 aria-label="关闭音乐播放器"
-                className="grid h-7 w-7 place-items-center rounded-full text-purple-400 transition hover:bg-white/80 hover:text-pink-600 dark:text-purple-400 dark:hover:bg-purple-900/60 dark:hover:text-pink-300"
+                className="icon-button h-7 w-7"
               >
                 <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path strokeLinecap="round" d="M6 6l12 12M18 6L6 18" />
@@ -222,18 +248,18 @@ export default function MusicPlayer() {
             <div className="relative mt-2 flex items-center gap-4">
               <div
                 aria-hidden="true"
-                className={`relative grid h-16 w-16 shrink-0 place-items-center rounded-full bg-[radial-gradient(circle_at_center,#fff_0_8%,#ef5f7a_9%_13%,#28344b_14%_28%,#111827_29%_42%,#334155_43%_44%,#111827_45%_100%)] shadow-lg shadow-sky-200/60 dark:shadow-none ${playing ? "animate-[spin_8s_linear_infinite]" : ""}`}
+                className={`relative grid h-16 w-16 shrink-0 place-items-center rounded-full bg-[radial-gradient(circle_at_center,#fff_0_8%,#ef5f7a_9%_13%,#28344b_14%_28%,#111827_29%_42%,#334155_43%_44%,#111827_45%_100%)] ${playing ? "animate-[spin_8s_linear_infinite]" : ""}`}
               >
                 <span className="h-2 w-2 rounded-full bg-white" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-base font-black tracking-[-0.02em] text-purple-950 dark:text-purple-50">
+                <p className="truncate text-ui font-semibold text-ink">
                   {currentTrack?.title}
                 </p>
-                <p className="mt-1 truncate text-sm text-purple-500 dark:text-purple-300">
+                <p className="mt-1 truncate text-meta text-ink-3">
                   {currentTrack?.artist || "未知艺术家"}
                 </p>
-                <p className="mt-2 text-[10px] font-semibold text-sky-500 dark:text-sky-400">
+                <p className="mt-2 text-micro font-medium tabular-nums text-ink-3">
                   {currentIdx + 1} / {tracks.length}
                 </p>
               </div>
@@ -249,12 +275,12 @@ export default function MusicPlayer() {
               step="0.1"
               value={duration > 0 ? Math.min(currentTime, duration) : 0}
               onChange={(event) => seek(Number.parseFloat(event.target.value))}
-              className="h-1.5 w-full cursor-pointer appearance-none rounded-full accent-pink-500"
+              className="h-1.5 w-full cursor-pointer appearance-none rounded-full accent-[var(--primary)]"
               style={{
-                background: `linear-gradient(to right, #ec5f7a ${progress}%, #dbeafe ${progress}%)`,
+                background: `linear-gradient(to right, var(--primary) ${progress}%, var(--border) ${progress}%)`,
               }}
             />
-            <div className="mt-1.5 flex justify-between text-[10px] font-medium tabular-nums text-[--muted]">
+            <div className="mt-1.5 flex justify-between text-micro font-medium tabular-nums text-ink-3">
               <span>{formatTime(currentTime)}</span>
               <span>{formatTime(duration)}</span>
             </div>
@@ -264,7 +290,7 @@ export default function MusicPlayer() {
                 type="button"
                 onClick={prev}
                 aria-label="上一首"
-                className="grid h-10 w-10 place-items-center rounded-full text-purple-500 transition hover:bg-sky-50 hover:text-sky-700 active:scale-90 dark:text-purple-300 dark:hover:bg-purple-900/40 dark:hover:text-sky-300"
+                className="icon-button"
               >
                 <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M6 5h2v14H6zm3.5 7 9 6V6z" />
@@ -275,7 +301,7 @@ export default function MusicPlayer() {
                 type="button"
                 onClick={togglePlayback}
                 aria-label={playing ? "暂停" : "播放"}
-                className="grid h-14 w-14 place-items-center rounded-full bg-gradient-to-br from-pink-500 to-sky-500 text-white shadow-lg shadow-pink-200/70 transition hover:scale-105 hover:from-pink-600 hover:to-sky-600 active:scale-95 dark:shadow-none"
+                className="grid h-12 w-12 place-items-center rounded-full bg-primary-solid text-on-solid transition-colors hover:bg-primary-deep"
               >
                 {playing ? (
                   <svg aria-hidden="true" className="h-6 w-6" viewBox="0 0 24 24" fill="currentColor">
@@ -292,7 +318,7 @@ export default function MusicPlayer() {
                 type="button"
                 onClick={next}
                 aria-label="下一首"
-                className="grid h-10 w-10 place-items-center rounded-full text-purple-500 transition hover:bg-sky-50 hover:text-sky-700 active:scale-90 dark:text-purple-300 dark:hover:bg-purple-900/40 dark:hover:text-sky-300"
+                className="icon-button"
               >
                 <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M5.5 18l9-6-9-6zm10.5-13h2v14h-2z" />
@@ -300,8 +326,8 @@ export default function MusicPlayer() {
               </button>
             </div>
 
-            <div className="mt-4 flex items-center gap-3 rounded-2xl bg-sky-50/80 px-3 py-2.5 dark:bg-purple-900/30">
-              <svg aria-hidden="true" className="h-4 w-4 shrink-0 text-sky-500 dark:text-sky-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <div className="mt-4 flex items-center gap-3 rounded-sm bg-bg-subtle px-3 py-2.5">
+              <svg aria-hidden="true" className="h-4 w-4 shrink-0 text-ink-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M11 5 6.5 9H3v6h3.5l4.5 4V5Zm4.5 4a4 4 0 0 1 0 6m2-8a7 7 0 0 1 0 10" />
               </svg>
               <input
@@ -312,12 +338,12 @@ export default function MusicPlayer() {
                 step="0.05"
                 value={volume}
                 onChange={(event) => setVolume(Number.parseFloat(event.target.value))}
-                className="h-1.5 min-w-0 flex-1 cursor-pointer appearance-none rounded-full accent-sky-500"
+                className="h-1.5 min-w-0 flex-1 cursor-pointer appearance-none rounded-full accent-[var(--accent)]"
                 style={{
-                  background: `linear-gradient(to right, #38a9df ${volumeProgress}%, #dbeafe ${volumeProgress}%)`,
+                  background: `linear-gradient(to right, var(--accent) ${volumeProgress}%, var(--border) ${volumeProgress}%)`,
                 }}
               />
-              <span className="w-8 text-right text-[10px] font-semibold tabular-nums text-sky-700 dark:text-sky-300">
+              <span className="w-8 text-right text-micro font-medium tabular-nums text-ink-3">
                 {Math.round(volumeProgress)}%
               </span>
             </div>

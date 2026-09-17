@@ -2,8 +2,10 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
+  useMemo,
   useState,
   useSyncExternalStore,
   type ReactNode,
@@ -21,10 +23,15 @@ const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 
 function getStoredTheme(): Theme {
   if (typeof window === "undefined") return "system";
-  const stored = localStorage.getItem("theme");
-  return stored === "light" || stored === "dark" || stored === "system"
-    ? stored
-    : "system";
+  try {
+    const stored = localStorage.getItem("theme");
+    return stored === "light" || stored === "dark" || stored === "system"
+      ? stored
+      : "system";
+  } catch {
+    // 存储不可用（隐私模式 / 被禁用）时退回跟随系统，不影响页面渲染。
+    return "system";
+  }
 }
 
 function getSystemTheme(): "light" | "dark" {
@@ -68,20 +75,26 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     document.documentElement.classList.toggle("dark", resolved === "dark");
   }, [mounted, resolved]);
 
-  const setTheme = (t: Theme) => {
+  const setTheme = useCallback((t: Theme) => {
     setThemeState(t);
-    if (t === "system") {
-      localStorage.removeItem("theme");
-    } else {
-      localStorage.setItem("theme", t);
+    try {
+      if (t === "system") {
+        localStorage.removeItem("theme");
+      } else {
+        localStorage.setItem("theme", t);
+      }
+    } catch {
+      // 无法持久化时主题仍然在本次会话内生效。
     }
-  };
+  }, []);
 
-  return (
-    <ThemeContext.Provider value={{ theme, setTheme, resolved }}>
-      {children}
-    </ThemeContext.Provider>
+  // 记忆化 context value，避免每次渲染都让所有消费组件失效。
+  const value = useMemo(
+    () => ({ theme, setTheme, resolved }),
+    [theme, setTheme, resolved]
   );
+
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
 
 export function useTheme() {

@@ -2,6 +2,7 @@
 
 import { usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { ChevronLeftIcon, ChevronRightIcon } from "@/components/public/layout/SiteIcons";
 
 interface PaginationProps {
   currentPage: number;
@@ -42,32 +43,39 @@ export default function Pagination({
   }
 
   return (
-    <nav className="mt-10 flex items-center justify-center gap-1" aria-label="分页">
-      {currentPage > 1 && <Link href={hrefFor(currentPage - 1)} className="pagination-link">← 上一页</Link>}
+    <nav className="mt-10 flex items-center justify-center gap-1.5" aria-label="分页">
+      {currentPage > 1 && (
+        <Link href={hrefFor(currentPage - 1)} className="pagination-link gap-1">
+          <ChevronLeftIcon className="h-3.5 w-3.5" />
+          上一页
+        </Link>
+      )}
       {pages.map((page, idx) =>
         page === "..." ? (
-          <span
-            key={`dots-${idx}`}
-            className="px-2 text-pink-300 dark:text-purple-600"
-          >
-            ...
+          <span key={`dots-${idx}`} aria-hidden="true" className="px-1.5 text-ink-3">
+            …
           </span>
         ) : (
           <Link
             key={page}
             href={hrefFor(page)}
             aria-current={page === currentPage ? "page" : undefined}
-            className={`rounded-xl px-3 py-2 text-sm font-medium transition-all hover:scale-105 ${
+            className={`grid h-9 min-w-9 place-items-center rounded-sm px-2.5 text-meta font-medium transition-colors ${
               page === currentPage
-                ? "bg-gradient-to-r from-pink-400 to-purple-400 text-white shadow-md shadow-pink-200 dark:shadow-purple-900/30"
-                : "text-purple-500 hover:bg-pink-50 dark:text-purple-400 dark:hover:bg-purple-900/30"
+                ? "bg-primary-solid text-on-solid"
+                : "text-ink-2 hover:bg-surface-hover"
             }`}
           >
             {page}
           </Link>
         )
       )}
-      {currentPage < totalPages && <Link href={hrefFor(currentPage + 1)} className="pagination-link">下一页 →</Link>}
+      {currentPage < totalPages && (
+        <Link href={hrefFor(currentPage + 1)} className="pagination-link gap-1">
+          下一页
+          <ChevronRightIcon className="h-3.5 w-3.5" />
+        </Link>
+      )}
     </nav>
   );
 }

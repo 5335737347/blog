@@ -1,23 +1,37 @@
 import Link from "next/link";
+import { HomeIcon, SearchIcon } from "@/components/public/layout/SiteIcons";
 
+/**
+ * 404：允许使用沉浸式背景（与首页 hero 同属例外），但保持单屏紧凑。
+ */
 export default function NotFound() {
   return (
-    <div className="flex flex-col items-center justify-center py-32">
-      <div className="mb-6 text-8xl animate-float">🌸</div>
-      <h1 className="mb-2 text-7xl font-bold">
-        <span className="bg-gradient-to-r from-pink-400 to-purple-400 bg-clip-text text-transparent">
-          404
-        </span>
-      </h1>
-      <p className="mb-8 text-lg text-purple-400 dark:text-purple-500">
-        诶？这个页面好像走丢了...
-      </p>
-      <Link
-        href="/"
-        className="rounded-2xl bg-gradient-to-r from-pink-400 to-purple-400 px-6 py-3 text-sm font-medium text-white shadow-md shadow-pink-200 hover:from-pink-500 hover:to-purple-500 dark:shadow-purple-900/30 transition-all hover:scale-105 active:scale-95"
-      >
-        🌸 返回首页
-      </Link>
+    <div className="relative isolate flex min-h-[calc(100svh-4rem)] items-center justify-center overflow-hidden bg-slate-900 [background-image:radial-gradient(120%_80%_at_20%_0%,rgba(239,95,122,.35),transparent_60%),radial-gradient(120%_80%_at_85%_20%,rgba(77,169,232,.32),transparent_55%)]">
+      <div className="relative z-10 px-5 py-20 text-center">
+        <p className="text-6xl font-bold leading-none text-white/95 sm:text-7xl">404</p>
+        <h1 className="mt-5 text-xl font-semibold text-white sm:text-2xl">
+          这个页面好像走丢了
+        </h1>
+        <p className="mx-auto mt-3 max-w-md text-ui leading-relaxed text-white/75">
+          链接可能已经失效，或者这篇文章还没有发布。可以回到首页，或者直接搜索你想看的内容。
+        </p>
+        <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+          <Link
+            href="/"
+            className="btn border border-white/30 bg-white/10 text-white backdrop-blur-sm transition-colors hover:bg-white/20"
+          >
+            <HomeIcon className="h-4 w-4" />
+            返回首页
+          </Link>
+          <Link
+            href="/articles"
+            className="btn border border-white/30 bg-white/10 text-white backdrop-blur-sm transition-colors hover:bg-white/20"
+          >
+            <SearchIcon className="h-4 w-4" />
+            浏览全部文章
+          </Link>
+        </div>
+      </div>
     </div>
   );
 }

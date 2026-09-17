@@ -2,17 +2,12 @@ import { formatDate } from "@/lib/utils";
 import type { CommentWithReplies } from "@kpblog/contracts";
 
 function CommentAvatar({ author }: { author: string }) {
-  const colors = [
-    "from-pink-400 to-rose-400",
-    "from-purple-400 to-violet-400",
-    "from-sky-400 to-cyan-400",
-    "from-emerald-400 to-teal-400",
-    "from-amber-400 to-orange-400",
-  ];
-  const idx = author.charCodeAt(0) % colors.length;
+  // 头像配色只在品牌粉蓝两色内交替：既能区分发言人，又不引入第三套色系。
+  const tones = ["bg-primary-solid", "bg-accent-solid"];
+  const idx = author.charCodeAt(0) % tones.length;
   return (
     <div
-      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${colors[idx]} text-sm font-bold text-white shadow-sm`}
+      className={`grid h-9 w-9 shrink-0 place-items-center rounded-full ${tones[idx]} text-meta font-bold text-on-solid`}
       aria-label={author}
     >
       {author.charAt(0).toUpperCase()}
@@ -38,21 +33,21 @@ function CommentItem({
   depth?: number;
 }) {
   return (
-    <div className={depth > 0 ? "ml-6 border-l-2 border-pink-200 pl-4 dark:border-purple-800" : ""}>
+    <div className={depth > 0 ? "ml-5 border-l border-line pl-4" : ""}>
       <div className="mb-4">
         <div className="mb-2 flex items-start gap-3">
           <CommentAvatar author={comment.author} />
           <div className="flex-1">
-            <div className="mb-1 flex items-center gap-2 text-sm">
-              <span className="font-medium text-purple-900 dark:text-purple-100">
+            <div className="mb-1 flex items-center gap-2 text-meta">
+              <span className="font-medium text-ink">
                 {comment.author}
               </span>
-              <span className="text-pink-300 dark:text-purple-600">·</span>
-              <time className="text-pink-300 dark:text-purple-600">
+              <span aria-hidden="true" className="text-ink-4">·</span>
+              <time className="text-ink-3">
                 {formatDate(comment.createdAt)}
               </time>
             </div>
-            <p className="text-sm text-purple-700 dark:text-purple-300 whitespace-pre-wrap">
+            <p className="whitespace-pre-wrap text-ui leading-relaxed text-ink-2">
               {comment.content}
             </p>
             {depth === 0 && (
@@ -60,9 +55,9 @@ function CommentItem({
                 onClick={() =>
                   onReply(replyingTo === comment.id ? "" : comment.id)
                 }
-                className="mt-1 text-xs text-pink-400 hover:text-purple-500 dark:text-purple-400 dark:hover:text-pink-400 transition-colors"
+                className="mt-1 text-micro font-medium text-ink-3 transition-colors hover:text-primary-deep"
               >
-                {replyingTo === comment.id ? "取消回复" : "💬 回复"}
+                {replyingTo === comment.id ? "取消回复" : "回复"}
               </button>
             )}
           </div>
