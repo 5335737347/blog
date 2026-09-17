@@ -8,6 +8,66 @@ cp .env.example .env.local
 
 不要提交 `.env`、`.env.local` 或任何真实凭据。
 
+运行时已存在的进程环境变量优先级最高；项目随后按 `.env.local`、`.env` 的顺序补充尚未
+设置的值。生产环境不要同时在多个位置维护同一密钥，避免轮换时只更新其中一份。
+
+## 新增变量时的约定
+
+`npm run check:docs` 会用正则扫描源码，要求每个用到的变量都出现在 `.env.example` 里。
+该检查依赖变量名在源码中是**字面量**：
+
+```js
+process.env.BACKUP_KEEP          // ✅ 会被扫到
+process.env["BACKUP_KEEP"]       // ✅ 同上，字面量方括号也支持
+process.env[name]                // ❌ 扫不到
+```
+
+第三写法是「把 `.env` 文件读进 `process.env`」的解析器必须用的，属于合理例外；
+但**不要**为了少写几个分支把硬编码的变量名藏进这种调用（例如
+`parseKeep("BACKUP_KEEP")` 内部再 `process.env[name]`）——变量会从检查里消失。
+这类动态读取会在检查结尾汇总列出，方便人工确认。
+
+## 唯一的加载入口
+
+**`scripts/load-env.mjs` 是项目里唯一读取 `.env` 文件的地方。** 其它模块一律调用它：
+
+```js
+import { loadProjectEnv, databaseUrl, mediaRootPath } from "./load-env.mjs";
+loadProjectEnv();
+```
+
+API（`apps/api/src/bootstrap-env.ts`）、Next（`apps/web/next.config.ts`）、Prisma CLI
+（`prisma.config.ts`）、seed 与全部仓库脚本都走这一份实现。
+`npm run check:docs` 会拦截任何绕过它直接 `import "dotenv"` 的代码。
+
+### 为什么必须只有一份
+
+这段逻辑曾经散在 8 个文件里，而且是**两套互不兼容的实现**——dotenv 和一份手写正则
+解析器。它们的差异全是静默的：
+
+| 写法 | dotenv | 手写解析器 |
+|---|---|---|
+| `KEY=值 # 注释` | 剥掉注释 | 把「# 注释」当成值的一部分 |
+| `export KEY=值` | 支持 | 整行匹配失败，直接忽略 |
+| `KEY="a\nb"` | 展开转义 | 原样保留 |
+| 文件查找 | 按传入路径 | `existsSync(".env.local")` 相对 **cwd** |
+
+结果是「同一个 KEY，跑 seed 时和跑 API 时可能读到不同的值」。
+
+更严重的是 `DATABASE_URL` **归一化也有三套不同实现**：
+
+| 位置 | `file:./dev.db` 被解析成 |
+|---|---|
+| 旧 `bootstrap-env.ts` | `<root>/dev.db` |
+| 旧 `prisma.config.ts` | `<root>/prisma/dev.db` |
+| 旧 `next.config.ts` | `<root>/dev.db`（且 web 侧根本不用数据库） |
+
+也就是说，按 `.env.example` 的默认写法配置时，**`prisma migrate` 改的是一个库、
+API 读的是另一个库**。现在 `databaseFilePath()` / `databaseUrl()` 统一返回绝对路径，
+不存在「相对谁解析」的歧义。
+
+`mediaRootPath()` 同理，统一了备份脚本与 API 对媒体目录的定位。
+
 ## 运行与站点
 
 | 变量 | 使用方 | 必需性 | 说明 |
@@ -32,11 +92,26 @@ cp .env.example .env.local
 
 | 变量 | 必需性 | 说明 |
 |---|---|---|
-| `JWT_SECRET` | 生产必需 | 至少 32 字符的随机值，API 独占 |
+| `JWT_SECRET` | 生产必需 | 用 `openssl rand -hex 32` 生成，API 独占 |
 | `ADMIN_USERNAME` | 可选 | seed 管理员用户名 |
 | `ADMIN_DISPLAY_NAME` | 可选 | seed 管理员显示名称 |
 | `ADMIN_PASSWORD` | 生产初始化必需 | 留空时仅在开发终端生成临时密码 |
 | `ALLOW_PRODUCTION_SEED` | 危险开关 | 仅在明确执行生产 seed 时临时设为 `true` |
+
+```bash
+openssl rand -hex 32
+```
+
+`getJwtSecret()` 会拒绝三类无效值，API 因此在配置错误时**直接启动失败**，而不是
+悄悄地用一个弱密钥签发会话：
+
+1. 未设置或少于 32 字符；
+2. 含占位符特征（`change-me`、`replace`、`placeholder`、`your-secret`、`example` 等）；
+3. 字符种类少于 10（例如 `"a".repeat(32)` 长度够但毫无随机性）。
+
+第 2 条是回归修复：原先只精确比对 `replace-with-a-random-secret` 一个字符串，
+而仓库里实际使用的占位符是 `change-me-to-a-random-string-in-production`——42 字符、
+不在名单里，于是被放行。**不要用「改一个词的占位符」来通过检查，用上面那条命令生成。**
 
 生成 JWT 密钥：
 
@@ -44,17 +119,31 @@ cp .env.example .env.local
 openssl rand -hex 32
 ```
 
-## 邮件与短信
+## 邮件注册
 
-邮箱注册使用 `SMTP_HOST`、`SMTP_PORT`、`SMTP_SECURE`、`SMTP_STARTTLS`、`SMTP_USER`、`SMTP_PASSWORD` 和 `SMTP_FROM`。
+注册只支持邮箱验证码通道。邮箱注册使用 `SMTP_HOST`、`SMTP_PORT`、`SMTP_SECURE`、`SMTP_STARTTLS`、`SMTP_USER`、`SMTP_PASSWORD` 和 `SMTP_FROM`。
 
-手机注册使用 `SMS_API_URL`、`SMS_API_TOKEN` 和 `SMS_SENDER`。短信网关必须是 HTTPS，并接受项目约定的 JSON 请求。生产环境不会开放未配置完成的注册方式。
+当前 API 实现 SMTP 投递。Resend 与 Turnstile 的准备状态、接入边界与上线要求见
+[注册验证、消息投递与防刷](registration-delivery.md)。不要把 Resend HTTP API Key
+填入 `SMTP_PASSWORD`；新增提供商变量时必须同步更新 `.env.example` 和本文档。
+
+生产环境可以把未启用的变量全部留空；`/api/auth/registration-options` 只应声明真实
+可用的注册方式。不要为了让前端显示选项而填写占位凭据。
+
+配置完成后用 `npm run smtp:check` 验证，它会按「配置 → 连接 → 能力 → 传输安全 → 认证 →
+发件人」逐级探测并翻译失败原因（例如区分「Key 无效」和「发件域名未验证」），
+`-- --send you@example.com` 会真发一封测试邮件。
+
+⚠️ **`/api/auth/registration-options` 不能用来验证 SMTP**：只要
+`ALLOW_DEBUG_VERIFICATION_CODE=true`，无论 SMTP 是否配好它都会报告邮箱通道可用。
+本地默认就是开启状态，所以本地的 `true` 不构成任何证据。
 
 ## 可信代理
 
 `TRUST_PROXY` 默认为 `false`。只有当 API 确定通过会覆盖客户端 IP 请求头的可信基础设施接收请求时才能启用，并使用 `TRUST_PROXY_HEADER` 选择请求头。
 
-错误启用可信代理会让攻击者伪造 IP，绕过按 IP 限流。
+关闭代理信任时，API 使用 Fastify socket 的直接对端地址区分限流桶，不读取客户端提供的
+转发头。错误启用可信代理会让攻击者伪造 IP，绕过按 IP 限流。
 
 ## CLI 发布
 

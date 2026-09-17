@@ -1,6 +1,6 @@
-# 鲲鹏の博客 v2.1.0
+# 鲲鹏の博客 v0.1.0
 
-一个面向长期维护的个人博客 Monorepo。前台使用明亮白色、天蓝和桃花红视觉体系，主页以完整二次元壁纸、动态搜索和五分钟轮换为核心。
+一个面向长期维护的个人博客 Monorepo。前台采用中性色骨架 + 粉蓝双色点缀的视觉体系（详见[前端设计方案](docs/design-plan.md)）：首页以整屏二次元壁纸、五分钟轮换、动态搜索和最新文章/最近在做/分类标签内容区为核心；文章页是独立的阅读器布局，提供侧栏目录、阅读进度、代码块增强、图片放大、上一篇/下一篇、相关文章与结构化数据；移动端使用底部标签栏导航。
 
 线上地址：https://kpblog.cc
 
@@ -31,7 +31,7 @@ blog/
 | Web | Next.js 16 App Router、React 19、Tailwind CSS 4 |
 | API | Fastify 5、TypeScript |
 | 数据 | SQLite、Prisma 7、better-sqlite3 适配器 |
-| 认证 | JWT HTTP-only Cookie、bcryptjs、邮箱/手机验证码 |
+| 认证 | JWT HTTP-only Cookie、bcryptjs、邮箱验证码 |
 | 契约 | npm workspace `@kpblog/contracts` |
 | 内容 | react-markdown、GFM、KaTeX、代码高亮 |
 | 部署 | PM2 双进程、Nginx、Let's Encrypt |
@@ -43,6 +43,9 @@ blog/
 - [开发规范](docs/development.md)
 - [环境变量](docs/environment.md)
 - [部署手册](docs/deployment.md)
+- [注册验证、消息投递与防刷](docs/registration-delivery.md)
+- [内容发布工作流](docs/content-workflow.md)
+- [后续维护计划](docs/next-plan.md)
 - [Web 框架说明](apps/web/README.md)
 - [API 框架说明](apps/api/README.md)
 - [共享契约说明](packages/contracts/README.md)
@@ -67,7 +70,7 @@ npm run dev
 
 `npm run dev` 会同时启动两个应用。也可以分别运行 `npm run dev:web` 和 `npm run dev:api`。
 
-开发环境没有配置 SMTP 或短信网关时，验证码接口会返回调试验证码；生产环境只开放已配置的注册方式。种子数据在未设置 `ADMIN_PASSWORD` 时会输出一次临时密码，生产环境必须显式设置强密码。
+开发环境没有配置 SMTP 时，验证码接口会返回调试验证码；生产环境只在 SMTP 已配置时开放邮箱注册。种子数据只创建管理员、基础分类和站点设置，不生成虚构文章或评论；未设置 `ADMIN_PASSWORD` 时会输出一次临时密码，生产环境必须显式设置强密码。
 
 ## 环境变量
 
@@ -85,7 +88,7 @@ SITE_URL="https://你的域名"
 NEXT_PUBLIC_SITE_URL="https://你的域名"
 ```
 
-邮件、短信、可信代理、CLI 发布等可选配置见[环境变量文档](docs/environment.md)。`MEDIA_ROOT` 留空时使用 `apps/web/public`。
+邮件、可信代理、CLI 发布等可选配置见[环境变量文档](docs/environment.md)。`MEDIA_ROOT` 留空时使用 `apps/web/public`。
 
 ## 常用命令
 
@@ -96,7 +99,10 @@ NEXT_PUBLIC_SITE_URL="https://你的域名"
 | `npm run build` | 依次构建 API 与 Web |
 | `npm run start:web` / `npm run start:api` | 单独启动生产应用 |
 | `npm run update` | 安全拉取、检查、备份、迁移、构建并重载生产服务 |
-| `npm run check` | lint、类型检查和全部测试 |
+| `npm run check` | lint、类型检查、全部测试、文档与接口契约校验、浏览器冒烟检查 |
+| `npm run smoke` | 浏览器冒烟检查（自建临时数据库与独立端口实例，跑完自动清理） |
+| `npm run smoke:prod` | 对生产构建（`next build` + `next start`）执行同一套冒烟检查 |
+| `npm run check:docs` | 检查文档链接、索引、命令和环境变量模板 |
 | `npm run lint` | 检查所有 workspace 与脚本 |
 | `npm run typecheck` | 检查根项目及所有 workspace |
 | `npm test` | 服务测试与 Fastify API 测试 |

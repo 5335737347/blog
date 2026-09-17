@@ -85,12 +85,55 @@ apps/api/src/
 
 ## 修改流程
 
-1. 阅读 `.codex/project-memory.md` 和任务相关框架文档。
+1. 阅读 `docs/architecture.md` 和任务相关框架文档。
 2. 确认改动属于 Web、API、Contracts、Prisma 或仓库自动化中的哪一层。
 3. 接口变化先明确请求/响应契约，再修改 API 与 Web 调用方。
-4. 架构、安全、部署或产品决定完成后更新项目记忆；正式说明写入 `docs/`。
+4. 架构、安全、部署或产品决定完成后写入 `docs/` 下对应的正式文档。
 5. 运行 `npm run check`，涉及运行时、路由或构建配置时再运行 `npm run build`。
 6. 涉及界面时用真实浏览器检查桌面和移动端，并确认控制台没有 hydration 错误。
+
+## 持续集成
+
+仓库中的 `.github/workflows/ci.yml` 定义了在推送到 `main` 和所有 Pull Request 时使用
+Node.js 24 执行的验证流程：
+
+1. `npm ci --include=dev`
+2. `npm run db:generate`
+3. `npm run check`
+4. `npm run build`
+5. `npm run check:audit`
+
+`npm run check` 展开为下面几道门禁，任何一条失败都会让 CI 变红：
+
+| 命令 | 拦截什么 |
+|---|---|
+| `npm run lint` | ESLint |
+| `npm run typecheck` | 根项目 + 各 workspace 的 `src`、`tests`、`scripts`（测试与脚本曾长期不在类型检查范围内） |
+| `npm test` | `apps/api/tests` 下的全部用例 |
+| `npm run check:docs` | 失效的文档链接与行内文件路径、未登记的文档、未写进 `.env.example` 的环境变量 |
+| `npm run check:openapi` | 路由与 `docs/openapi.yaml` 的路径和方法漂移（读 Fastify 实际路由表，不是正则扫源码） |
+
+`npm run check:audit` 单独跑在 CI 里，因为它需要访问 npm registry：它审计**真实的生产依赖树**，
+并对运行时不可达的 Prisma 工具链公告使用带可达性自检的白名单。
+本地无网络时可跳过它，其余门禁都能离线运行。
+
+手动排障用：`npm run smtp:check`（SMTP 配置逐级诊断）、`npm run db:backup` / `db:restore`。
+
+CI 只使用明确标记的测试环境值，不读取或保存生产密钥。项目支持的 Node.js
+版本以根 `package.json` 的 `engines.node` 为准；本地和生产环境应选择其中仍受维护的
+LTS 版本。
+
+工作流文件存在不代表远端保护已经生效。只有工作流已经提交并推送，而且首次远端运行
+成功后，文档和发布说明才可以将 CI 描述为已启用。
+
+## 文档质量
+
+- 根 README 保持简洁，只提供关键命令、当前拓扑和详细文档入口。
+- `docs/` 保存长期有效的跨模块说明；临时状态进入 `next-plan.md`，决策背景进入项目记忆。
+- 应用 README 只描述对应 workspace 的职责、禁止依赖、修改顺序和验证命令。
+- 当前行为、外部资源准备状态、目标方案和完成验收不得混写。
+- 不复制服务商密钥、完整验证码、证件材料、生产环境文件或包含这些内容的截图。
+- 修改文档后至少运行 `npm run check:docs` 和 `git diff --check`。
 
 ## 提交卫生
 
@@ -109,4 +152,6 @@ apps/api/src/
 | 环境变量 | `.env.example`、`docs/environment.md` |
 | 部署进程或端口 | `ecosystem.config.cjs`、`docs/deployment.md`、根 README |
 | 数据模型 | Prisma migration、相关 API 契约和测试 |
-| 重大架构/安全决策 | `docs/architecture.md`、`.codex/project-memory.md` |
+| 重大架构/安全决策 | `docs/architecture.md` |
+| 注册投递、防刷或服务商 | `docs/registration-delivery.md`、环境变量、测试 |
+| 文档新增、移动或删除 | `docs/README.md`、根 README（关键入口时）、内部链接检查 |
