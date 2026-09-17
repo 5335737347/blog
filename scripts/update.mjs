@@ -256,6 +256,24 @@ async function main() {
   section("Generate Prisma client");
   run("npx", ["prisma", "generate"]);
 
+  // 清理 Next 的生成物再校验。
+  //
+  // 原因：apps/web/tsconfig.json 把 `.next/types/**/*.ts` 纳入编译范围，
+  // 而这份类型是上一次构建按当时的文件树生成的。路由被删除后（例如本次上线的
+  // gallery 与 admin/images），旧类型仍会去 import 已不存在的 page.ts，于是
+  // typecheck 报 TS2307——而它跑在 build 之前，自己无法自愈。
+  // 服务器上首次遇到，本地因为频繁重建而没有暴露。
+  //
+  // 只删生成物，不影响源码；构建会重新生成。
+  if (!args.has("--skip-check")) {
+    for (const stale of ["apps/web/.next/types", "apps/web/.next/dev/types"]) {
+      if (existsSync(stale)) {
+        rmSync(stale, { recursive: true, force: true });
+        console.log(`Removed stale Next.js types: ${stale}`);
+      }
+    }
+  }
+
   if (args.has("--skip-check")) {
     section("Validate workspace");
     console.log("Skipping lint, typecheck, and tests.");
@@ -275,6 +293,14 @@ async function main() {
     console.log("Skipping API and Web production builds.");
   } else {
     section("Build app");
+    // tsc 不会删除已移除源文件对应的旧输出。本次上线删掉了若干模块
+    // （countries / phone / country-service 等），残留的 dist 文件会让
+    // 「构建产物与源码不一致」，也会被后续的产物检查误判为存在。
+    const apiDist = path.resolve("apps/api/dist");
+    if (existsSync(apiDist)) {
+      rmSync(apiDist, { recursive: true, force: true });
+      console.log("Removed previous API build output: apps/api/dist");
+    }
     run("npm", ["run", "build"]);
   }
 

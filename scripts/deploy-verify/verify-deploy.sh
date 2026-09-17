@@ -126,6 +126,43 @@ fi
 #
 # 加硬超时：冒烟自己会起两个实例，若环境异常（端口被占、浏览器有问题）会等很久；
 # 部署流程里不允许出现「卡住不返回」。
+# 模拟「上一版构建留下的生成物 + 本次删除了路由」这一真实上线场景。
+# 服务器上首次执行 npm run update 就卡在这里：.next/types 仍去 import 已删除的
+# page.ts，typecheck 报 TS2307，而 typecheck 跑在 build 之前、无法自愈。
+# 复现「上一版构建留下的生成物 + 本次删除了路由」这一真实上线场景。
+# 服务器上首次执行 npm run update 就卡在这里：.next/types 仍去 import 已删除的
+# page.ts，typecheck 报 TS2307，而 typecheck 跑在 build 之前、无法自愈。
+#
+# 前提：必须有生成物才能复现。干净检出里没有 .next，所以先构建一次；
+# 服务器上本来就是「有旧生成物」的状态，无需这一步。
+echo "=== 陈旧生成物自愈检查 ==="
+if [ ! -d apps/web/.next ]; then
+  echo "干净检出无生成物，先构建一次以复现服务器状态"
+  npm run build > /dev/null 2>&1 || fail BUILD_FAILED 12
+fi
+
+STALE_DIR="apps/web/.next/types/app/(public)/stale-verify"
+mkdir -p "$STALE_DIR"
+cat > "$STALE_DIR/page.ts" <<'STALE'
+import * as entry from '../../../../../src/app/(public)/stale-verify/page.js'
+type TEntry = typeof import('../../../../../src/app/(public)/stale-verify/page.js')
+STALE
+
+if npm run typecheck --workspace @kpblog/web > /dev/null 2>&1; then
+  echo "[失败] 陈旧生成物未导致 typecheck 失败——该检查已失效，需重新确认机制"
+  fail STALE_TYPES_CHECK_INVALID 23
+fi
+echo "陈旧生成物会让 typecheck 失败（与此前服务器上的报错一致）"
+
+# 应用 npm run update 中的修复：删除生成类型
+rm -rf apps/web/.next/types
+if npm run typecheck --workspace @kpblog/web > /dev/null 2>&1; then
+  echo "删除生成类型后 typecheck 恢复通过（修复有效）"
+else
+  fail STALE_TYPES_NOT_HEALED 24
+fi
+rm -rf "$STALE_DIR"
+
 echo "=== 浏览器冒烟（对生产构建）==="
 if ! timeout 420 npm run smoke:prod; then
   fail SMOKE_FAILED 22
