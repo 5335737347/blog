@@ -59,30 +59,27 @@ async function login(password: string) {
   return { status: response.statusCode, body: response.json() };
 }
 
-test("failed logins do not lock the account out for the right password", async () => {
-  for (let attempt = 0; attempt < 9; attempt += 1) {
-    const failed = await login("definitely-wrong-password");
-    assert.equal(failed.status, 401, `第 ${attempt + 1} 次错误密码应为 401`);
+test("the admin lockout is a cooldown, not a permanent state", async () => {
+  const { prisma } = await import("../src/lib/prisma");
+  await prisma.rateLimitBucket.deleteMany({ where: { key: { contains: "login:account" } } });
+
+  // 管理员恰好有 3 次机会（见 routes/auth.ts 常量区的说明）：
+  // 第 1~3 次返回 401，第 4 次起进入冷却。
+  // 这里同时验证「锁是时间窗内的冷却」：桶生效 → 拒绝；桶清空 → 立即可登录。
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    assert.equal((await login("definitely-wrong-password")).status, 401, `第 ${attempt} 次应为 401`);
   }
 
-  // 第 10 次错误后桶达到上限（与 LOGIN_ACCOUNT_MAX_FAILURES 一致）。
-  await login("definitely-wrong-password");
-
-  const { prisma } = await import("../src/lib/prisma");
   const buckets = await prisma.rateLimitBucket.findMany({ where: { key: { contains: "login:account" } } });
-  const bucket = buckets.find((row) => row.count >= 10);
-  assert.ok(bucket, "连续失败后应留下账号维度的失败计数");
+  assert.ok(buckets.some((row) => row.count >= 3), "连续失败后应留下账号维度的失败计数");
 
-  // 明确记录修复前的错误行为：桶满时正确密码也被拒。
-  // 现在的契约是「桶满 → 冷却期内直接 429」，所以这里断言 429 是**限流**而不是密码错。
   const locked = await login("correct-horse-battery");
-  assert.equal(locked.status, 429, "桶满时必须限流");
+  assert.equal(locked.status, 429, "冷却期内正确密码也必须被拒");
   assert.equal(locked.body.error.code, "TOO_MANY_REQUESTS");
 
-  // 清掉该桶即恢复（说明锁是时间窗内的限流，不是永久状态）。
   await prisma.rateLimitBucket.deleteMany({ where: { key: { contains: "login:account" } } });
   const recovered = await login("correct-horse-battery");
-  assert.equal(recovered.status, 200, "清除失败计数后正确密码必须能登录");
+  assert.equal(recovered.status, 200, "冷却结束后正确密码必须能登录");
   assert.equal(recovered.body.data.user.username, "lockout-admin");
   assert.equal(recovered.body.data.user.role, "ADMIN");
   assert.ok(tokenVersion >= 0);
@@ -93,9 +90,8 @@ test("a successful login clears accumulated failures", async () => {
   const { prisma } = await import("../src/lib/prisma");
   await prisma.rateLimitBucket.deleteMany({ where: { key: { contains: "login:account" } } });
 
-  // 先错 3 次，再用正确密码登录：失败计数应被清零，
-  // 否则正常用户会为历史输错持续买单，最终被自己的错误累计锁死。
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  // 管理员阈值 3 次：错 2 次仍应能正常登录（第 3 次才触发冷却）。
+  for (let attempt = 0; attempt < 2; attempt += 1) {
     await login("another-wrong-password");
   }
   const success = await login("correct-horse-battery");
@@ -236,4 +232,111 @@ test("a null JSON body is rejected as 400 rather than crashing", async () => {
   });
   assert.equal(response.statusCode, 400);
   assert.equal(response.json().error.code, "BAD_REQUEST");
+});
+
+/**
+ * 管理员账号的登录锁定：连续 3 次密码错误即进入冷却。
+ *
+ * 与手机锁屏密码同构——冷却期内**即使密码正确也拒绝**，且拒绝发生在 bcrypt 之前。
+ * 这里逐条钉住四个要点：阈值、冷却期内拒绝正确密码、换 IP 无效、普通账号不受影响。
+ */
+test("an admin account locks after three wrong passwords, even for the right one", async () => {
+  const { prisma } = await import("../src/lib/prisma");
+  await prisma.rateLimitBucket.deleteMany({ where: { key: { contains: "login:account" } } });
+
+  // 恰好 3 次机会：第 1~3 次都是 401，不多不少。
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    const failed = await login("wrong-password-attempt");
+    assert.equal(failed.status, 401, `第 ${attempt} 次错误密码应为 401（共允许 3 次）`);
+  }
+
+  // 第 4 次：锁定生效（且在 bcrypt 之前），并带剩余秒数供前端显示倒计时。
+  const locked = await login("correct-horse-battery");
+  assert.equal(locked.status, 429, "第 3 次失败后应进入冷却");
+  assert.equal(locked.body.error.code, "TOO_MANY_REQUESTS");
+  assert.ok(
+    typeof locked.body.error.retryAfterSeconds === "number" && locked.body.error.retryAfterSeconds > 0,
+    `响应应带 retryAfterSeconds，实际 ${JSON.stringify(locked.body.error)}`
+  );
+  assert.ok(
+    locked.body.error.retryAfterSeconds <= 15 * 60,
+    "剩余时间不应超过配置的冷却窗口"
+  );
+
+  // 冷却期内持续尝试也不能把窗口续命到超过配置上限。
+  const again = await login("correct-horse-battery");
+  assert.equal(again.status, 429);
+  assert.ok(again.body.error.retryAfterSeconds <= 15 * 60);
+
+  // 清掉桶即可恢复登录（冷却不是永久状态）。
+  await prisma.rateLimitBucket.deleteMany({ where: { key: { contains: "login:account" } } });
+  const recovered = await login("correct-horse-battery");
+  assert.equal(recovered.status, 200);
+});
+
+test("the admin lock is keyed by account, so rotating IPs does not clear it", async () => {
+  const { prisma } = await import("../src/lib/prisma");
+  await prisma.rateLimitBucket.deleteMany({ where: { key: { contains: "login:" } } });
+
+  const previousTrustProxy = process.env.TRUST_PROXY;
+  process.env.TRUST_PROXY = "true";
+  try {
+    // 用伪造的 x-forwarded-for 模拟「换 IP」的爆破者：每次请求都换一个来源，
+    // 连错 3 次把账号锁定。
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      await authApp.inject({
+        method: "POST",
+        url: "/api/auth/login",
+        headers: {
+          origin: ORIGIN,
+          "content-type": "application/json",
+          "x-forwarded-for": `203.0.113.${attempt}`,
+        },
+        payload: { identifier: "lockout-admin", password: "wrong-password-attempt" },
+      });
+    }
+    // 再换一个全新的 IP，仍然必须被账号锁定拦住。
+    const fromNewIp = await authApp.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      headers: {
+        origin: ORIGIN,
+        "content-type": "application/json",
+        "x-forwarded-for": "198.51.100.77",
+      },
+      payload: { identifier: "lockout-admin", password: "correct-horse-battery" },
+    });
+    assert.equal(fromNewIp.statusCode, 429, "换 IP 不应绕过管理员账号锁定");
+  } finally {
+    if (previousTrustProxy === undefined) delete process.env.TRUST_PROXY;
+    else process.env.TRUST_PROXY = previousTrustProxy;
+    await prisma.rateLimitBucket.deleteMany({ where: { key: { contains: "login:" } } });
+  }
+});
+
+test("regular accounts keep the looser failure limit", async () => {
+  const bcrypt = (await import("bcryptjs")).default;
+  const { prisma } = await import("../src/lib/prisma");
+
+  await prisma.user.create({
+    data: {
+      username: "plain-user",
+      password: await bcrypt.hash("plain-user-password", 10),
+      role: "USER",
+    },
+  });
+
+  const attempt = (password: string) =>
+    authApp.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      headers: { origin: ORIGIN, "content-type": "application/json" },
+      payload: { identifier: "plain-user", password },
+    });
+
+  // 3 次失败后普通账号**不应**被锁（只有管理员是 3 次；普通账号 10 次）。
+  for (let i = 0; i < 3; i += 1) {
+    assert.equal((await attempt("nope")).statusCode, 401);
+  }
+  assert.equal((await attempt("plain-user-password")).statusCode, 200, "普通账号 3 次失败后仍可登录");
 });

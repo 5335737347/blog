@@ -70,7 +70,19 @@ export function requestBody<T>(request: FastifyRequest): T {
 
 export function registerErrorHandler(reply: FastifyReply, error: unknown) {
   if (isServiceError(error)) {
-    return reply.status(error.status).send(apiFailure(error.message, error.code));
+    // 限流响应额外带上剩余秒数：管理员登录页据此给出「请 N 分钟后再试」，
+    // 而不是让用户对着同一句「请求过于频繁」反复试。
+    const payload = error.retryAfterSeconds
+      ? {
+          success: false as const,
+          error: {
+            code: error.code,
+            message: error.message,
+            retryAfterSeconds: error.retryAfterSeconds,
+          },
+        }
+      : apiFailure(error.message, error.code);
+    return reply.status(error.status).send(payload);
   }
 
   // Fastify 自身的错误（请求体 JSON 解析失败、超限等）带有 4xx 的 statusCode。

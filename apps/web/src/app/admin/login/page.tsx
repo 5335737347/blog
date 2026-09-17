@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
@@ -18,11 +18,29 @@ export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [lockedFor, setLockedFor] = useState(0);
   const [loading, setLoading] = useState(false);
+
+  /**
+   * 登录被锁定时的倒计时。
+   *
+   * 服务端在 429 响应里带 `error.retryAfterSeconds`（管理员账号连续 3 次密码错误
+   * 就进入冷却，冷却期内即使密码正确也拒绝）。这里把它显示成剩余时间，
+   * 避免用户对着同一句「请求过于频繁」反复尝试。
+   */
+  const locked = lockedFor > 0;
+  useEffect(() => {
+    if (!locked) return;
+    const timer = window.setInterval(() => {
+      setLockedFor((seconds) => (seconds <= 1 ? 0 : seconds - 1));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [locked]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError("");
+    setLockedFor(0);
     setLoading(true);
 
     try {
@@ -40,7 +58,12 @@ export default function LoginPage() {
         }
         router.push("/admin");
       } else {
-        setError(await readApiError(res, "登录失败"));
+        const payload = await res.json().catch(() => null);
+        const retryAfter = Number(
+          (payload as { error?: { retryAfterSeconds?: number } } | null)?.error?.retryAfterSeconds
+        );
+        setError(await readApiError(res.clone(), "登录失败"));
+        if (Number.isFinite(retryAfter) && retryAfter > 0) setLockedFor(Math.ceil(retryAfter));
       }
     } catch {
       setError("网络错误");
@@ -57,8 +80,18 @@ export default function LoginPage() {
         </h1>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           {error && (
-            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-900/30 dark:text-red-400">
+            <p
+              role="alert"
+              className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-900/30 dark:text-red-400"
+            >
               {error}
+              {lockedFor > 0 && (
+                <span className="mt-1 block font-medium">
+                  请在 {Math.ceil(lockedFor / 60)} 分钟后重试
+                  （剩余 {Math.floor(lockedFor / 60)}:
+                  {String(lockedFor % 60).padStart(2, "0")}）
+                </span>
+              )}
             </p>
           )}
           <Input

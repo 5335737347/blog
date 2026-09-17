@@ -4,6 +4,7 @@ import {
   SESSION_COOKIE_NAME,
   SESSION_MAX_AGE_SECONDS,
 } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import {
   changeOwnPassword,
   getCurrentSession,
@@ -39,18 +40,70 @@ const LOGIN_ACCOUNT_WINDOW_MS = 15 * 60 * 1000;
 const LOGIN_ACCOUNT_MAX_FAILURES = 10;
 
 /**
+ * 管理员账号的登录锁定（比普通账号严格得多）。
+ *
+ * 与手机锁屏密码同构：**连续输错 3 次就进入冷却**——第 1~3 次正常返回 401，
+ * 从第 4 次起冷却，冷却期内即使密码正确也拒绝，且拒绝发生在 bcrypt 之前
+ *（不消耗 CPU，爆破脚本刷不出任何算力优势）。
+ *
+ * 为什么管理员要单独一套：
+ * - 管理后台是整个站点唯一的写入口，普通账号被爆破的代价只是多一条垃圾评论；
+ * - 本站在线只有一个管理员账号，3 次试探的成本对真人可以忽略，对爆破脚本是致命的；
+ * - 阈值与普通账号的「15 分钟 10 次」共用同一张限流表，因此换 IP 无效：
+ *   锁定键只跟账号绑定，攻击者轮换 IP 也解不开。
+ *
+ * 代价（明确记录，不藏）：知道管理员用户名的人可以故意输错 3 次，
+ * 把管理员锁在门外最多 15 分钟。对个人博客这是可接受的取舍——攻击者拿不到账号，
+ * 而站长等待窗口结束即可登入；反过来「永不锁定」则意味着密码可被无限次穷举。
+ * 冷却时长用 ADMIN_LOGIN_LOCKOUT_MINUTES 可调（见 .env.example）。
+ */
+const DEFAULT_ADMIN_LOCKOUT_MINUTES = 15;
+/** 允许的连续密码错误次数；第 N 次仍返回 401，从第 N+1 次起拒绝。 */
+const ADMIN_LOGIN_MAX_ATTEMPTS = 3;
+
+function adminLockoutWindowMs(): number {
+  const raw = Number.parseInt(process.env.ADMIN_LOGIN_LOCKOUT_MINUTES ?? "", 10);
+  if (!Number.isFinite(raw) || raw <= 0) return DEFAULT_ADMIN_LOCKOUT_MINUTES * 60 * 1000;
+  // 上限 24 小时：配置写错（例如误填 100000）时不至于把管理员永久锁死。
+  return Math.min(raw, 24 * 60) * 60 * 1000;
+}
+
+/**
  * 登录的账号维度限流键。
  *
  * 用 SHA-256 而不是明文：限流表里不应留下用户名或邮箱。
  * 标识符可能是用户名、邮箱或手机号，统一 trim + 小写后哈希。
  */
+function loginIdentifier(body: unknown): string | null {
+  const raw = body as { identifier?: unknown; username?: unknown; email?: unknown } | null;
+  const value = raw?.identifier ?? raw?.username ?? raw?.email;
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  return normalized || null;
+}
+
 function loginAccountKey(body: unknown): string | null {
-  const identifier = (body as { identifier?: unknown } | null)?.identifier;
-  if (typeof identifier !== "string") return null;
-  const normalized = identifier.trim().toLowerCase();
+  const normalized = loginIdentifier(body);
   if (!normalized) return null;
   const hash = crypto.createHash("sha256").update(`login:${normalized}`).digest("hex");
   return `auth:login:account:${hash}`;
+}
+
+/**
+ * 这次登录尝试的目标账号是不是管理员。
+ *
+ * 命中即用严格阈值。查询本身是参数化的、只读的，且登录流程随后必然要查这个用户
+ *（成功时用于校验密码），因此不引入额外往返的语义变化。
+ */
+async function targetsAdminAccount(body: unknown): Promise<boolean> {
+  const identifier = loginIdentifier(body);
+  if (!identifier) return false;
+  const rows = await prisma.$queryRaw<{ role: string }[]>`
+    SELECT "role" FROM "User"
+    WHERE "username" = ${identifier} OR "email" = ${identifier}
+    LIMIT 2
+  `;
+  return rows.length === 1 && rows[0].role === "ADMIN";
 }
 
 const authRoutes: FastifyPluginAsync = async (app) => {
@@ -85,17 +138,26 @@ const authRoutes: FastifyPluginAsync = async (app) => {
     assertRequestOrigin(request);
     await assertRateLimit(`auth:login:${requestIp(guardRequest(request))}`, 20, 15 * 60 * 1000);
 
-    // 按账号维度补充一道限流：仅有 IP 维度时，攻击者换 IP 就能绕过。
+    // 账号维度限流：仅有 IP 维度时，攻击者换 IP 就能绕过。
     //
-    // 只统计失败次数，且在验密之前只做「只读」判断：
-    // 这里曾经在验密前就把桶当成硬门槛，于是攻击者每 15 分钟故意输错 10 次
-    // 就能定向锁死账号——连正确密码也返回 429，与注释里
-    // 「不会被攻击者用故意输错的方式定向锁死账号」的承诺相反。
-    // 现在：桶已满 → 直接拒绝（不验密）；桶未满 → 照常验密，成功即清桶。
+    // 管理员账号用严格阈值（连续 3 次失败进冷却，冷却期内连正确密码也拒绝，
+    // 且拒绝发生在 bcrypt 之前）。普通账号沿用「15 分钟 10 次」。
+    // 只统计失败次数，成功即清零。
     const body = requestBody<unknown>(request);
     const accountKey = loginAccountKey(body);
+    const adminTarget = accountKey ? await targetsAdminAccount(body) : false;
+    // 允许的失败次数 = 尝试次数；判定阈值比它多 1，这样第 N 次失败仍返回 401。
+    const allowedFailures = adminTarget ? ADMIN_LOGIN_MAX_ATTEMPTS : LOGIN_ACCOUNT_MAX_FAILURES;
+    const failureWindowMs = adminTarget ? adminLockoutWindowMs() : LOGIN_ACCOUNT_WINDOW_MS;
+
     if (accountKey) {
-      await assertRateLimitNotExceeded(accountKey, LOGIN_ACCOUNT_MAX_FAILURES);
+      // 「允许 N 次」的判定：已经失败满 N 次就不再验密，直接冷却。
+      // 这样第 4 次尝试不会走到 bcrypt，也不会被记进计数——
+      // 计数与拒绝必须成对，否则要么少给一次机会（第 N 次就被拒），
+      // 要么多给一次（第 N+1 次才发现已满）。
+      await assertRateLimitNotExceeded(accountKey, allowedFailures, {
+        message: adminTarget ? "该管理员账号已被临时锁定，请稍后再试" : undefined,
+      });
     }
 
     let result: Awaited<ReturnType<typeof loginUser>>;
@@ -103,7 +165,11 @@ const authRoutes: FastifyPluginAsync = async (app) => {
       result = await loginUser(body);
     } catch (error) {
       if (accountKey) {
-        await recordRateLimitFailure(accountKey, LOGIN_ACCOUNT_WINDOW_MS);
+        // 照常累加：判定阈值是「允许次数 + 1」，达到它才会拒绝。
+        // 注意不要在这里限制「最多记录 N 次」——那样计数会永远停在 N，
+        // 判定条件 `count >= N+1` 永不成立，锁定就形同虚设（第一版正是这么错的）。
+        // 窗口不会被续命：recordRateLimitFailure 只在建桶时设置 resetAt。
+        await recordRateLimitFailure(accountKey, failureWindowMs);
       }
       throw error;
     }

@@ -12,7 +12,9 @@ export class ServiceError extends Error {
   constructor(
     message: string,
     public readonly status: number,
-    public readonly code: ApiErrorCode
+    public readonly code: ApiErrorCode,
+    /** 仅限流类错误使用：距离解锁还有多少秒，供客户端显示倒计时。 */
+    public readonly retryAfterSeconds?: number
   ) {
     super(message);
     this.name = "ServiceError";
@@ -39,6 +41,6 @@ export function notFound(message: string) {
   return new ServiceError(message, 404, "NOT_FOUND");
 }
 
-export function tooManyRequests(message = "请求过于频繁，请稍后再试") {
-  return new ServiceError(message, 429, "TOO_MANY_REQUESTS");
+export function tooManyRequests(message = "请求过于频繁，请稍后再试", retryAfterSeconds?: number) {
+  return new ServiceError(message, 429, "TOO_MANY_REQUESTS", retryAfterSeconds);
 }

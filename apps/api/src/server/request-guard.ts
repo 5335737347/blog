@@ -251,18 +251,41 @@ export async function assertRateLimit(key: string, limit: number, windowMs: numb
  * 那种「先加再判」的方式，正常用户多次成功登录也会被计入，
  * 攻击者只要故意输错就能把某个账号锁死（定向 DoS）。
  */
-export async function assertRateLimitNotExceeded(key: string, limit: number) {
+export async function assertRateLimitNotExceeded(
+  key: string,
+  limit: number,
+  options: { message?: string } = {}
+) {
   const bucket = await prisma.rateLimitBucket.findUnique({ where: { key } });
   if (!bucket) return;
-  if (bucket.resetAt.getTime() <= Date.now()) return;
-  if (bucket.count >= limit) throw tooManyRequests();
+  const remainingMs = bucket.resetAt.getTime() - Date.now();
+  if (remainingMs <= 0) return;
+  if (bucket.count >= limit) {
+    throw tooManyRequests(options.message, Math.ceil(remainingMs / 1000));
+  }
 }
 
-/** 记一次失败。窗口内首次失败时建桶，已过期则重新开始计数。 */
-export async function recordRateLimitFailure(key: string, windowMs: number) {
+/**
+ * 记一次失败。窗口内首次失败时建桶，已过期则重新开始计数。
+ *
+ * `options.maxFailures` 限制这个窗口内最多记录多少次失败（默认不限）。
+ * 用途是「允许 N 次尝试」的语义：调用方传入 N，第 N 次失败照常返回 401，
+ * 从第 N+1 次起才拒绝。若改成「计数达到 N 就拒绝」，实际只有 N-1 次机会——
+ * 第一版就是这么写错的，实测第三次尝试就返回 429（本意是三次错误之后才锁）。
+ */
+export async function recordRateLimitFailure(
+  key: string,
+  windowMs: number,
+  options: { maxFailures?: number } = {}
+) {
   const now = Date.now();
   const resetAt = new Date(now + windowMs);
   const existing = await prisma.rateLimitBucket.findUnique({ where: { key } });
+
+  if (existing && options.maxFailures && existing.count >= options.maxFailures) {
+    // 已经记满：不再累加，也不延长窗口，避免攻击者用持续请求把锁续到无限久。
+    return;
+  }
 
   if (!existing || existing.resetAt.getTime() <= now) {
     await prisma.rateLimitBucket.upsert({
@@ -294,4 +317,18 @@ export async function rateLimitFailureCount(key: string): Promise<number> {
 /** 成功后清除计数，避免用户为之前的输错持续买单。 */
 export async function clearRateLimit(key: string) {
   await prisma.rateLimitBucket.deleteMany({ where: { key } });
+}
+
+/**
+ * 当前限流桶还剩多久解锁（秒）；没有生效中的桶则返回 0。
+ *
+ * 登录被锁时把它放进响应的 `error.retryAfterSeconds`，
+ * 前端（管理员登录页）据此显示「请 N 分钟后再试」，而不是一句无信息量的失败。
+ * 只读，不改变任何状态。
+ */
+export async function rateLimitRetryAfterSeconds(key: string): Promise<number> {
+  const bucket = await prisma.rateLimitBucket.findUnique({ where: { key } });
+  if (!bucket) return 0;
+  const remainingMs = bucket.resetAt.getTime() - Date.now();
+  return remainingMs > 0 ? Math.ceil(remainingMs / 1000) : 0;
 }
