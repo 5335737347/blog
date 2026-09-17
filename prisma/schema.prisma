@@ -95,6 +95,9 @@ model Comment {
 
   @@index([postId, approved])
   @@index([userId])
+  // 回复是按 `parentId IN (...)` 取的（见 comment-dto.ts 的树构建），
+  // 没有这个索引时每次打开文章页/留言板都会全表扫描 Comment。
+  @@index([parentId])
 }
 
 model Music {

@@ -1,7 +1,7 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { ApiFailure, ApiSuccess } from "@kpblog/contracts";
 import { SESSION_COOKIE_NAME } from "@/lib/auth";
-import { isServiceError } from "@/server/errors";
+import { isServiceError, badRequest } from "@/server/errors";
 import { assertSameOrigin, type GuardRequest } from "@/server/request-guard";
 
 export function apiSuccess<T>(data: T): ApiSuccess<T> {
@@ -43,6 +43,29 @@ export function sessionToken(request: FastifyRequest): string | undefined {
 export function positiveInt(value: unknown, fallback: number): number {
   const parsed = Number.parseInt(typeof value === "string" ? value : "", 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+/**
+ * 取请求体，并把「没有 body」归一成 400。
+ *
+ * 之前各路由直接 `request.body as Record<string, unknown>`：客户端不带 body
+ * （或显式发 `null`）时得到的是 `undefined`，服务层读属性即抛 TypeError，
+ * 最终以 500「服务器内部错误」返回——把客户端错误报成服务端错误。
+ * 服务层的输入守卫不一致（`settings`/`profile` 有，`article`/`comment` 没有），
+ * 所以这里在 HTTP 边界统一兜住，让 16 个写端点行为一致。
+ *
+ * `T` 是服务层的「未校验输入」类型：它要求所有字段都是 `unknown`，
+ * 由服务层负责逐字段校验，这里不假装做过结构校验。
+ */
+export function requestBody<T>(request: FastifyRequest): T {
+  const body = request.body;
+  if (body === undefined || body === null) {
+    throw badRequest("请求体不能为空");
+  }
+  if (typeof body !== "object" || Array.isArray(body)) {
+    throw badRequest("请求体必须是 JSON 对象");
+  }
+  return body as T;
 }
 
 export function registerErrorHandler(reply: FastifyReply, error: unknown) {

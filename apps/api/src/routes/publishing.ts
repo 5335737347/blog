@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import { requireAdminSession, verifyPublishApiKey } from "@/server/auth/auth-service";
+import type { PublishInput } from "@/server/publishing/publishing-service";
 import { importFiles, publishMarkdown } from "@/server/publishing/publishing-service";
 import { assertRateLimit, requestIp } from "@/server/request-guard";
 import {
@@ -7,6 +8,7 @@ import {
   assertRequestOrigin,
   guardRequest,
   multipartFiles,
+  requestBody,
   sessionToken,
 } from "@/http";
 
@@ -23,7 +25,7 @@ const publishingRoutes: FastifyPluginAsync = async (app) => {
     const apiKey = authorization.replace(/^Bearer\s+/i, "");
     await assertRateLimit(`publish:${requestIp(guardRequest(request))}`, 30, 15 * 60 * 1000);
     await verifyPublishApiKey(apiKey);
-    return reply.status(201).send(apiSuccess(await publishMarkdown(request.body as Record<string, unknown>)));
+    return reply.status(201).send(apiSuccess(await publishMarkdown(requestBody<PublishInput>(request))));
   });
 
   app.post("/import", async (request, reply) => {

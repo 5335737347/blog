@@ -158,6 +158,18 @@ export function assertSameOrigin(request: GuardRequest) {
   }
 }
 
+/**
+ * 客户端 IP。
+ *
+ * 默认（未开启代理信任）只用 TCP 对端地址——请求头是攻击者可控的。
+ *
+ * 开启 `TRUST_PROXY` 后只接受**代理会覆盖的单值头**（`x-real-ip` /
+ * `cf-connecting-ip`）。这里刻意不支持 `x-forwarded-for`：
+ * 它是逗号列表，而 Nginx 常用的 `$proxy_add_x_forwarded_for` 是**追加**语义，
+ * 客户端自带的 `X-Forwarded-For: 1.2.3.4` 会留在最左端。此前取最左项，
+ * 于是攻击者可以每次请求自选 IP、无限重建限流桶（实测 6/6 次绕过 5 次/小时的发码限额）。
+ * 取最右项也依赖「恰好一跳代理」这一未经校验的假设，同样不做。
+ */
 export function requestIp(request: Pick<GuardRequest, "headers" | "directIp">): string {
   if (process.env.TRUST_PROXY !== "true") {
     return request.directIp.trim() || "unknown-direct-ip";
@@ -167,13 +179,28 @@ export function requestIp(request: Pick<GuardRequest, "headers" | "directIp">): 
   switch (header) {
     case "cf-connecting-ip":
       return request.headers.get("cf-connecting-ip")?.trim() || "unknown";
-    case "x-forwarded-for":
-      return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
     case "x-real-ip":
       return request.headers.get("x-real-ip")?.trim() || "unknown";
+    case "x-forwarded-for":
+      // 显式拒绝而不是静默忽略：让部署者立刻发现配置没有生效，
+      // 否则会以为「按 IP 限流开着」，实际所有人都落进同一个桶。
+      warnUnsupportedProxyHeader();
+      return "unsupported-proxy-header";
     default:
       return "invalid-proxy-header";
   }
+}
+
+let warnedUnsupportedProxyHeader = false;
+
+function warnUnsupportedProxyHeader() {
+  if (warnedUnsupportedProxyHeader) return;
+  warnedUnsupportedProxyHeader = true;
+  console.warn(
+    "[request-guard] TRUST_PROXY_HEADER=x-forwarded-for 不受支持：它是可追加的列表头，" +
+      '客户端可自选身份。请改为 x-real-ip（Nginx: proxy_set_header X-Real-IP $remote_addr）' +
+      "或 cf-connecting-ip，并将限流身份固定为代理覆盖的单值头。"
+  );
 }
 
 let lastSweepAt = 0;
@@ -250,6 +277,18 @@ export async function recordRateLimitFailure(key: string, windowMs: number) {
     where: { key },
     data: { count: { increment: 1 } },
   });
+}
+
+/**
+ * 只读查询失败计数（不改变任何状态）。
+ *
+ * 用于「失败次数达上限但已过冷却期」这类判断：调用方据此决定是否发送
+ * 「账号被临时锁定」的提示邮件，而提示本身不能影响计数。
+ */
+export async function rateLimitFailureCount(key: string): Promise<number> {
+  const bucket = await prisma.rateLimitBucket.findUnique({ where: { key } });
+  if (!bucket || bucket.resetAt.getTime() <= Date.now()) return 0;
+  return bucket.count;
 }
 
 /** 成功后清除计数，避免用户为之前的输错持续买单。 */

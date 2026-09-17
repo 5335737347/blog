@@ -480,6 +480,7 @@ test("does not trust client IP headers unless proxy trust is explicit", async ()
     headers: new Headers({
       "x-real-ip": "203.0.113.8",
       "x-forwarded-for": "198.51.100.4, 10.0.0.1",
+      "cf-connecting-ip": "203.0.113.9",
     }),
     directIp: "192.0.2.10",
   };
@@ -489,8 +490,18 @@ test("does not trust client IP headers unless proxy trust is explicit", async ()
     assert.equal(requestIp(request), "192.0.2.10");
 
     process.env.TRUST_PROXY = "true";
+    process.env.TRUST_PROXY_HEADER = "x-real-ip";
+    assert.equal(requestIp(request), "203.0.113.8");
+
+    process.env.TRUST_PROXY_HEADER = "cf-connecting-ip";
+    assert.equal(requestIp(request), "203.0.113.9");
+
+    // `x-forwarded-for` 是可追加的列表头：Nginx 的 $proxy_add_x_forwarded_for 会把
+    // 客户端自带的值留在最左端，取最左项等于让客户端自选限流身份
+    //（评估实测 6/6 次绕过按 IP 的 5 次/小时限额）。现在显式归为
+    // unsupported-proxy-header 并记录警告，不再静默退化。
     process.env.TRUST_PROXY_HEADER = "x-forwarded-for";
-    assert.equal(requestIp(request), "198.51.100.4");
+    assert.equal(requestIp(request), "unsupported-proxy-header");
 
     process.env.TRUST_PROXY_HEADER = "unexpected-header";
     assert.equal(requestIp(request), "invalid-proxy-header");

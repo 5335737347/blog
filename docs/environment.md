@@ -128,6 +128,25 @@ openssl rand -hex 32
 而仓库里实际使用的占位符是 `change-me-to-a-random-string-in-production`——42 字符、
 不在名单里，于是被放行。**不要用「改一个词的占位符」来通过检查，用上面那条命令生成。**
 
+### 启动期校验（2026-09-17 补强）
+
+API 在 `listen()` 之前会主动跑一次配置校验，**不合法就退出**，不再等第一个请求才报错：
+
+| 情况 | 行为 |
+|---|---|
+| `JWT_SECRET` 缺失 / 过短 / 是占位符 / 熵不足 | 立即退出，stderr 写明原因与修复命令 |
+| `SITE_URL` 非空但无法解析成 URL | 立即退出 |
+| 生产环境未配置 `SITE_URL` | 启动成功并打印警告（同源校验退化为仅比对 Host，sitemap 缺绝对地址） |
+| 生产环境 `TRUST_PROXY` 不是 `true` | 启动成功并打印警告（所有访客共用一个限流桶） |
+
+这条补强的背景是一个真实故障模式：`JWT_SECRET` 无效时进程照常启动、`/health` 返回 200，
+但每个需要签发或校验令牌的请求都 500（`/api/auth/me` 返回 500 而不是 401）——
+部署脚本与监控都会以为服务是健康的。
+
+优雅关闭同样在启动期注册：`SIGTERM` / `SIGINT` 会先停止接收新连接、等在途请求结束，
+再关闭数据库连接；`unhandledRejection` / `uncaughtException` 会记录结构化日志后退出，
+而不是带着未知状态继续服务。
+
 生成 JWT 密钥：
 
 ```bash
@@ -159,6 +178,15 @@ openssl rand -hex 32
 
 关闭代理信任时，API 使用 Fastify socket 的直接对端地址区分限流桶，不读取客户端提供的
 转发头。错误启用可信代理会让攻击者伪造 IP，绕过按 IP 限流。
+
+`TRUST_PROXY_HEADER` 只接受代理会**覆盖**的单值头：`x-real-ip`（默认，Nginx 用
+`proxy_set_header X-Real-IP $remote_addr`）或 `cf-connecting-ip`。
+**刻意不支持 `x-forwarded-for`**：它是可追加的列表头，Nginx 常用的
+`$proxy_add_x_forwarded_for` 会把客户端自带的值留在最左端，等于让客户端自选限流身份；
+配置成该值时 API 会记录一条警告并把身份归为 `unsupported-proxy-header`，不会静默退化。
+
+未开启 `TRUST_PROXY` 时所有访客共用同一个限流桶（API 只看到代理地址），
+单个来源即可触发全站登录/注册限流；生产环境启动时会针对这一点打印警告。
 
 ## CLI 发布
 

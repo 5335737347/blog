@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import { getOptionalAuthSession, requireAdminSession } from "@/server/auth/auth-service";
+import type { CommentCreateInput } from "@/server/comments/comment-service";
 import {
   createComment,
   createGuestbookEntry,
@@ -11,7 +12,7 @@ import {
   moderateComment,
 } from "@/server/comments/comment-service";
 import { assertRateLimit, requestIp } from "@/server/request-guard";
-import { apiSuccess, assertRequestOrigin, guardRequest, positiveInt, sessionToken } from "@/http";
+import { apiSuccess, assertRequestOrigin, guardRequest, positiveInt, requestBody, sessionToken } from "@/http";
 
 type CommentQuery = {
   postId?: string;
@@ -45,8 +46,9 @@ const commentRoutes: FastifyPluginAsync = async (app) => {
   app.post("/comments", async (request, reply) => {
     assertRequestOrigin(request);
     await assertRateLimit(`comments:create:${requestIp(guardRequest(request))}`, 10, 10 * 60 * 1000);
+    const input = requestBody<CommentCreateInput>(request);
     const user = await getOptionalAuthSession(sessionToken(request));
-    return reply.status(201).send(apiSuccess(await createComment(request.body as Record<string, unknown>, user)));
+    return reply.status(201).send(apiSuccess(await createComment(input, user)));
   });
 
   // 留言板与文章评论共用一张表、一套审核，但配额独立计数：
@@ -54,14 +56,15 @@ const commentRoutes: FastifyPluginAsync = async (app) => {
   app.post("/guestbook", async (request, reply) => {
     assertRequestOrigin(request);
     await assertRateLimit(`guestbook:create:${requestIp(guardRequest(request))}`, 10, 10 * 60 * 1000);
+    const input = requestBody<CommentCreateInput>(request);
     const user = await getOptionalAuthSession(sessionToken(request));
-    return reply.status(201).send(apiSuccess(await createGuestbookEntry(request.body as Record<string, unknown>, user)));
+    return reply.status(201).send(apiSuccess(await createGuestbookEntry(input, user)));
   });
 
   app.put<{ Params: CommentParams }>("/comments/:id", async (request) => {
     assertRequestOrigin(request);
     await requireAdminSession(sessionToken(request));
-    return apiSuccess(await moderateComment(request.params.id, request.body as { approved?: unknown }));
+    return apiSuccess(await moderateComment(request.params.id, requestBody<{ approved?: unknown }>(request)));
   });
 
   app.delete<{ Params: CommentParams }>("/comments/:id", async (request) => {

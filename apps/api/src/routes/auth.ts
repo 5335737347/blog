@@ -31,6 +31,7 @@ import {
   apiSuccess,
   assertRequestOrigin,
   guardRequest,
+  requestBody,
   sessionToken,
 } from "@/http";
 
@@ -57,7 +58,7 @@ const authRoutes: FastifyPluginAsync = async (app) => {
 
   app.post("/auth/verification-code", async (request) => {
     assertRequestOrigin(request);
-    const body = (request.body || {}) as Record<string, unknown>;
+    const body = requestBody<{ target?: unknown }>(request);
     const target = normalizeVerificationTarget(body.target);
     const targetHash = crypto.createHash("sha256").update(`email:${target}`).digest("hex");
     const guard = guardRequest(request);
@@ -69,7 +70,7 @@ const authRoutes: FastifyPluginAsync = async (app) => {
   app.post("/auth/register", async (request, reply) => {
     assertRequestOrigin(request);
     await assertRateLimit(`auth:register:${requestIp(guardRequest(request))}`, 5, 60 * 60 * 1000);
-    const result = await registerUser(request.body);
+    const result = await registerUser(requestBody<unknown>(request));
     reply.setCookie(SESSION_COOKIE_NAME, result.token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
@@ -85,16 +86,21 @@ const authRoutes: FastifyPluginAsync = async (app) => {
     await assertRateLimit(`auth:login:${requestIp(guardRequest(request))}`, 20, 15 * 60 * 1000);
 
     // 按账号维度补充一道限流：仅有 IP 维度时，攻击者换 IP 就能绕过。
-    // 只统计失败次数，因此正常用户多次成功登录不会被计入，
-    // 也不会被攻击者用故意输错的方式定向锁死账号。
-    const accountKey = loginAccountKey(request.body);
+    //
+    // 只统计失败次数，且在验密之前只做「只读」判断：
+    // 这里曾经在验密前就把桶当成硬门槛，于是攻击者每 15 分钟故意输错 10 次
+    // 就能定向锁死账号——连正确密码也返回 429，与注释里
+    // 「不会被攻击者用故意输错的方式定向锁死账号」的承诺相反。
+    // 现在：桶已满 → 直接拒绝（不验密）；桶未满 → 照常验密，成功即清桶。
+    const body = requestBody<unknown>(request);
+    const accountKey = loginAccountKey(body);
     if (accountKey) {
       await assertRateLimitNotExceeded(accountKey, LOGIN_ACCOUNT_MAX_FAILURES);
     }
 
     let result: Awaited<ReturnType<typeof loginUser>>;
     try {
-      result = await loginUser(request.body);
+      result = await loginUser(body);
     } catch (error) {
       if (accountKey) {
         await recordRateLimitFailure(accountKey, LOGIN_ACCOUNT_WINDOW_MS);
@@ -102,7 +108,6 @@ const authRoutes: FastifyPluginAsync = async (app) => {
       throw error;
     }
     if (accountKey) await clearRateLimit(accountKey);
-
     reply.setCookie(SESSION_COOKIE_NAME, result.token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
@@ -117,7 +122,7 @@ const authRoutes: FastifyPluginAsync = async (app) => {
 
   app.post("/auth/password/reset-code", async (request) => {
     assertRequestOrigin(request);
-    const body = (request.body || {}) as Record<string, unknown>;
+    const body = requestBody<{ email?: unknown }>(request);
     const target = normalizeVerificationTarget(body.email);
     const targetHash = crypto.createHash("sha256").update(`reset:${target}`).digest("hex");
     const guard = guardRequest(request);
@@ -134,12 +139,12 @@ const authRoutes: FastifyPluginAsync = async (app) => {
     const guard = guardRequest(request);
     // 限制尝试次数，避免验证码被暴力枚举。
     await assertRateLimit(`auth:password-reset:ip:${requestIp(guard)}`, 10, 60 * 60 * 1000);
-    return apiSuccess(await resetPasswordWithCode(request.body));
+    return apiSuccess(await resetPasswordWithCode(requestBody<unknown>(request)));
   });
 
   app.put("/auth/password", async (request, reply) => {
     assertRequestOrigin(request);
-    const result = await changeOwnPassword(sessionToken(request), request.body);
+    const result = await changeOwnPassword(sessionToken(request), requestBody<unknown>(request));
 
     // 改密会吊销全部旧令牌；这里把新令牌写回当前设备，避免用户被自己踢下线。
     reply.setCookie(SESSION_COOKIE_NAME, result.token, {

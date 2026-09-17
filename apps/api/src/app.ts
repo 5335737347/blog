@@ -8,6 +8,7 @@ import multipart from "@fastify/multipart";
 import { apiSuccess, registerErrorHandler } from "@/http";
 import { isAllowedOrigin } from "@/server/request-guard";
 import { checkHealth } from "@/server/health/health-service";
+import { registerCompression } from "@/server/compression";
 import authRoutes from "@/routes/auth";
 import articleRoutes from "@/routes/articles";
 import commentRoutes from "@/routes/comments";
@@ -43,6 +44,10 @@ export function buildApp() {
     trustProxy: process.env.TRUST_PROXY === "true",
     genReqId: (request) => resolveRequestId(request.headers),
   });
+
+  // 响应压缩。必须挂在根实例上：Fastify 的 onSend 在注册时刻捕获钩子链，
+  // 通过 register 引入的插件钩子不会应用到之后注册的路由（见 compression.ts 注释）。
+  registerCompression(app);
 
   // 把请求 ID 回给客户端：用户截图报错时能直接给出可在日志里检索的编号。
   app.addHook("onSend", async (request, reply) => {

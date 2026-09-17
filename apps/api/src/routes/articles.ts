@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
+import type { ArticleMutationInput } from "@/server/articles/article-service";
 import {
   createArticle,
   deleteArticle,
@@ -9,7 +10,7 @@ import {
 } from "@/server/articles/article-service";
 import { getOptionalAuthSession, requireAdminSession } from "@/server/auth/auth-service";
 import { listCategories, listTags } from "@/server/taxonomy/taxonomy-service";
-import { apiSuccess, assertRequestOrigin, positiveInt, sessionToken } from "@/http";
+import { apiSuccess, assertRequestOrigin, positiveInt, requestBody, sessionToken } from "@/http";
 
 type ArticleParams = { id: string };
 type SlugParams = { slug: string };
@@ -40,7 +41,7 @@ const articleRoutes: FastifyPluginAsync = async (app) => {
   app.post("/articles", async (request, reply) => {
     assertRequestOrigin(request);
     await requireAdminSession(sessionToken(request));
-    return reply.status(201).send(apiSuccess(await createArticle(request.body as Record<string, unknown>)));
+    return reply.status(201).send(apiSuccess(await createArticle(requestBody<ArticleMutationInput>(request))));
   });
 
   app.get<{ Params: ArticleParams }>("/articles/:id", async (request) => {
@@ -51,7 +52,7 @@ const articleRoutes: FastifyPluginAsync = async (app) => {
   app.put<{ Params: ArticleParams }>("/articles/:id", async (request) => {
     assertRequestOrigin(request);
     await requireAdminSession(sessionToken(request));
-    return apiSuccess(await updateArticle(request.params.id, request.body as Record<string, unknown>));
+    return apiSuccess(await updateArticle(request.params.id, requestBody<ArticleMutationInput>(request)));
   });
 
   app.delete<{ Params: ArticleParams }>("/articles/:id", async (request) => {

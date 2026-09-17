@@ -1,12 +1,13 @@
 import type { FastifyPluginAsync } from "fastify";
 import { requireAdminSession } from "@/server/auth/auth-service";
+import type { MusicUrlInput } from "@/server/media/media-service";
 import {
   createMusicFromFile,
   createMusicFromUrl,
   deleteMusicTrack,
   listMusicTracks,
 } from "@/server/media/media-service";
-import { apiSuccess, assertRequestOrigin, multipartFiles, sessionToken } from "@/http";
+import { apiSuccess, assertRequestOrigin, multipartFiles, requestBody, sessionToken } from "@/http";
 
 type IdParams = { id: string };
 
@@ -25,7 +26,7 @@ const mediaRoutes: FastifyPluginAsync = async (app) => {
           const { files, fields } = await multipartFiles(request);
           return createMusicFromFile({ file: files[0] || null, title: fields.title, artist: fields.artist });
         })()
-      : await createMusicFromUrl((request.body || {}) as Record<string, unknown>);
+      : await createMusicFromUrl(requestBody<MusicUrlInput>(request));
     return reply.status(201).send(apiSuccess(track));
   });
 

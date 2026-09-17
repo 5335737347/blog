@@ -39,15 +39,29 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 }
 
 /**
- * 真的去碰一下数据库。
+ * 真的去碰一下数据库，并且确认它**已经迁移过**。
  *
- * 之前 /health 返回的是写死的 { status: "ok" }——数据库挂了它照样报健康，
- * 监控形同虚设。这里执行一条最轻的查询：能返回就说明连接、文件权限、
- * schema 迁移都还在。
+ * 之前这里只跑 `SELECT 1`。SQLite 的行为让这个探针失效：当数据库文件不存在
+ * 但目录存在时，better-sqlite3 会静默创建一个 0 字节的空库，`SELECT 1` 照样成功。
+ * 于是 `/health` 返回 200 {"status":"ok"}，而所有真实端点 500——监控、负载均衡
+ * 和更新脚本的健康检查全部失去意义。
+ *
+ * 现在改查迁移表：它由 Prisma 迁移创建，只有真正迁移过的库才有；
+ * 空库、被截断的库、缺失文件的库都会在这里失败。
  */
 async function probeDatabase(): Promise<boolean> {
   try {
-    await withTimeout(prisma.$queryRaw`SELECT 1`, DATABASE_PROBE_TIMEOUT_MS);
+    const rows = await withTimeout(
+      prisma.$queryRaw<{ count: bigint }[]>`
+        SELECT COUNT(*) AS count FROM "_prisma_migrations"
+      `,
+      DATABASE_PROBE_TIMEOUT_MS
+    );
+    const applied = Number(rows[0]?.count ?? 0);
+    if (!Number.isFinite(applied) || applied < 1) {
+      console.error("[health] 数据库没有已应用的迁移（库为空或未部署迁移）");
+      return false;
+    }
     return true;
   } catch (error) {
     // 细节只进日志，不进响应：健康检查是公开的，不该泄漏数据库路径或错误栈。
