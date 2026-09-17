@@ -11,7 +11,7 @@
  * 前置条件：已执行过 `npm run build`。
  */
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,10 +19,17 @@ import { fileURLToPath } from "node:url";
 const repositoryRoot = path.resolve(fileURLToPath(new URL("../", import.meta.url)));
 const webRoot = path.join(repositoryRoot, "apps/web");
 
-if (!existsSync(path.join(webRoot, ".next/BUILD_ID"))) {
-  console.error("未找到 Web 生产构建产物，请先运行：npm run build");
-  process.exit(1);
-}
+/**
+ * Web 的生产构建由**本脚本自己完成**（见 buildWebForSmoke）。
+ *
+ * 为什么不能复用仓库里已有的 `.next`：Next 会把 `next.config.ts` 里 rewrite 的
+ * 目标地址编译进构建产物。服务器上的 `.next` 是在仓库里用仓库 `.env` 构建的，
+ * 因此即使运行时进程环境给了临时 API 地址，Web 仍然会去连 `.env` 里的生产 API——
+ * 表现为「API 起在 3312、Web 却连 3002」。只写 `.env.local` 也不够：
+ * 它影响的是运行时环境，而 rewrite 目标在构建期就已经固定。
+ * 所以这里用冒烟自己的地址重新构建一次（约 10–40 秒），构建产物才是自洽的。
+ * 结束时会删除本次构建产生的 `.next`，避免把冒烟配置留给下一次真实构建。
+ */
 
 // API 也必须是构建产物：`npx tsx` 属于开发依赖，在生产安装（npm ci --omit=dev）
 // 或 CI 里会去联网解析版本而失败——CI 的冒烟步骤就是这么挂掉的。
@@ -33,6 +40,7 @@ if (!existsSync(apiEntry)) {
 }
 
 const tempDir = mkdtempSync(path.join(tmpdir(), "kpblog-prod-"));
+const webDistDir = path.join("tmp", `smoke-prod-${process.pid}`);
 const webPort = Number(process.env.SMOKE_WEB_PORT || 3311);
 const apiPort = Number(process.env.SMOKE_API_PORT || 3312);
 
@@ -54,6 +62,8 @@ const env = {
   SITE_URL: `http://127.0.0.1:${webPort}`,
   NEXT_PUBLIC_SITE_URL: `http://127.0.0.1:${webPort}`,
   SMOKE_SEED_DATABASE_URL: `file:${path.join(tempDir, "prod-smoke.db")}`,
+  // Web 与 `next start` 都用这个构建目录，仓库的 `.next` 完全不参与。
+  NEXT_DIST_DIR: webDistDir,
 };
 
 /**
@@ -88,18 +98,46 @@ function removeWebEnvOverride() {
   try { rmSync(webEnvFile, { force: true }); } catch { /* ignore */ }
 }
 
+/**
+ * 冒烟自己的构建目录（相对 apps/web）。
+ *
+ * 用独立 distDir 而不是复用仓库的 `.next`：冒烟必须用**自己的** API 地址构建
+ * （rewrite 目标会被编译进产物），而仓库那份 `.next` 是用生产配置构建的。
+ * 两者不能共用，也不能互相覆盖——实测过一次教训：先改名藏起来、构建、再还回去
+ * 的做法很容易在异常路径上把开发者/服务器的生产产物弄丢。
+ * 与 scripts/smoke.mjs 一样，构建到 `apps/web/tmp/<name>`，结束时整个删除。
+ * 注意必须是相对 apps/web 的路径：Next 会把绝对路径当成相对路径解析。
+ */
+
+function buildWebForSmoke() {
+  console.log("      构建 Web（使用冒烟实例的 API 地址）…");
+  const result = spawnSync(bin("next"), ["build", "--webpack"], { cwd: webRoot, env, encoding: "utf8" });
+  if (result.status !== 0) {
+    console.error("[失败] Web 生产构建\n" + (result.stdout || "") + (result.stderr || ""));
+    shutdown(1);
+  }
+}
+
+function removeSmokeBuild() {
+  try {
+    rmSync(path.join(webRoot, webDistDir), { recursive: true, force: true });
+  } catch { /* ignore */ }
+}
+
 const children = [];
 function shutdown(code) {
   for (const child of children) {
     try { child.kill("SIGTERM"); } catch { /* ignore */ }
   }
   removeWebEnvOverride();
+  removeSmokeBuild();
   try { rmSync(tempDir, { recursive: true, force: true }); } catch { /* ignore */ }
   process.exit(code);
 }
 process.on("exit", () => {
   // 兜底清理：正常路径已清过，这里覆盖异常退出（SIGKILL 除外，已由 .gitignore 兜底）
   removeWebEnvOverride();
+  removeSmokeBuild();
   try { rmSync(tempDir, { recursive: true, force: true }); } catch { /* ignore */ }
 });
 process.on("SIGINT", () => shutdown(130));
@@ -146,8 +184,9 @@ run(bin("prisma"), ["migrate", "deploy"], "prisma migrate deploy");
 console.log("[2/4] 写入冒烟数据");
 run(process.execPath, [path.join(repositoryRoot, "apps/api/scripts/smoke-seed.mjs")], "冒烟数据播种");
 
-console.log("[3/4] 启动 API 与 Web（生产模式）");
+console.log("[3/4] 构建 Web 并启动 API 与 Web（生产模式）");
 writeWebEnvOverride();
+buildWebForSmoke();
 const api = spawn(process.execPath, ["apps/api/dist/index.js"], { cwd: repositoryRoot, env, stdio: ["ignore", "pipe", "pipe"] });
 const web = spawn(bin("next"), ["start", "--port", String(webPort), "--hostname", "127.0.0.1"], {
   cwd: webRoot,
