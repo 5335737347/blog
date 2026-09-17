@@ -557,6 +557,39 @@ they need a Chromium binary (found via `CHROME_BIN` or the Playwright cache).
   remaining levels down by one, matching what `MarkdownContent` renders. If you
   change heading handling again, change both places: the renderer's
   `remarkDemoteHeadings` and this extractor.
+## Completed 2026-09-17 admin login lockout
+
+- The owner asked for the phone-passcode pattern on `/admin`: a few wrong passwords
+  and the account sleeps. Implemented as a **tiered** rule on `/api/auth/login`:
+  an ADMIN account gets **exactly 3 password attempts** (attempts 1-3 return 401)
+  and the 4th is refused before bcrypt and locks the account for 15 minutes;
+  regular accounts keep the looser 10-failures-per-15-minutes rule.
+- The lock key is account-scoped (`auth:login:account:<sha256>`), not IP-scoped, so
+  rotating IPs does not clear it — there is a test for exactly that. The window is
+  not renewable: `recordRateLimitFailure` only sets `resetAt` when the bucket is
+  created, so a flood cannot push the unlock time out indefinitely.
+- 429 responses now carry `error.retryAfterSeconds` (documented in the OpenAPI error
+  schema), and the admin login page shows "请在 N 分钟后重试" plus a live countdown.
+  `ADMIN_LOGIN_LOCKOUT_MINUTES` (default 15, capped at 1440) tunes the window.
+- Trade-off accepted and documented: someone who knows the admin username can lock
+  the owner out for the length of the window. For a single-admin personal blog that
+  is better than letting the password be brute-forced, and the owner recovers by
+  waiting (the session cookie keeps them signed in meanwhile).
+- Two self-inflicted bugs found and fixed during verification, both worth remembering
+  before touching this code again:
+  1. Treating the check threshold as the allowed attempt count cost one attempt
+     (the 3rd try was already refused).
+  2. Capping how many failures get recorded made the count stop at N, so the
+     `count >= threshold` test never fired and the lock silently never engaged.
+  The invariant: **the pre-check threshold and the failure recorder must use the same
+  number**, and the check must run before verification.
+- Live-verified on production after deploy: three 401s then 429 with
+  `retryAfterSeconds: 900`; the SQLite buckets show
+  `auth:login:account:… count=3`.
+- Deliberately NOT done: nginx `limit_req` / fail2ban on the server (a host-level
+  change; the app already rejects flood traffic cheaply). If the site ever faces a
+  real flood, that is the next layer, and `docs/deployment.md` should gain the snippet.
+
 - The deploy smoke's TOC assertion was also measuring the wrong thing: it parked the
   heading at the very top of the viewport, inside the highlight observer's
   `-96px 0px -70% 0px` dead band, so the highlight legitimately did not update. It
