@@ -224,8 +224,24 @@ cd /tmp/kpblog-clean && bash verify-deploy.sh
 which chromium chromium-browser google-chrome || ls ~/.cache/ms-playwright
 ```
 
-没有的话，`npx playwright install --with-deps chromium` 后把可执行文件路径写进
-`CHROME_BIN`（写进 PM2 的 env 或 shell 配置）。
+没有的话：
+
+```bash
+npx playwright install --with-deps chromium
+```
+
+装好后脚本会自动从 `$HOME/.cache/ms-playwright` 找到它，通常不需要额外配置。
+若装在别处，把可执行文件路径写进 `CHROME_BIN`；注意 **PM2 的 env 也要带上**
+（进程已有的环境变量会挡住 `.env`，见[环境变量](environment.md)）。
+
+确实无法安装浏览器时，可以跳过校验完成更新：
+
+```bash
+npm run update -- --skip-check
+```
+
+这会**同时跳过 lint、类型检查与全部测试**，只应在明确知晓风险时使用；
+正常环境应先解决浏览器依赖。
 
 ### 常见失败：Validate workspace 里的 typecheck 报 TS2307
 
