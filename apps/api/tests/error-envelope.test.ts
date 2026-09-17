@@ -53,7 +53,7 @@ const login = (password: string) =>
 test("every failure response is JSON with a parseable envelope", async () => {
   const wrong = await login("not-the-password");
   assert.equal(wrong.statusCode, 401);
-  assert.equal(wrong.headers["content-type"]?.includes("application/json"), true);
+  assert.match(String(wrong.headers["content-type"]), /application\/json/);
   const body = wrong.json();
   assert.equal(body.success, false);
   assert.equal(typeof body.error?.code, "string");
@@ -69,7 +69,7 @@ test("the lockout response carries retryAfterSeconds inside the envelope", async
 
   const locked = await login("correct-password-value");
   assert.equal(locked.statusCode, 429, "第 4 次尝试应被锁定");
-  assert.equal(locked.headers["content-type"]?.includes("application/json"), true);
+  assert.match(String(locked.headers["content-type"]), /application\/json/);
   const body = locked.json();
   assert.equal(body.success, false);
   assert.equal(body.error.code, "TOO_MANY_REQUESTS");
