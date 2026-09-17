@@ -175,6 +175,7 @@ const runtimeProvidedEnv = new Set([
   "SMOKE_TIMEOUT_MS",
   "SMOKE_SEEDED",
   "SMOKE_SEED_DATABASE_URL",
+  "SMOKE_VERBOSE",
 ]);
 
 const usedEnv = new Set();
