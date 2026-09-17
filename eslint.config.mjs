@@ -20,6 +20,10 @@ const eslintConfig = defineConfig([
     "**/dist/**",
     "**/build/**",
     "**/next-env.d.ts",
+    // 本地调研与冒烟产物：不进仓库，也不参与 lint
+    "/.research/**",
+    "/.npm-cache/**",
+    "/backups/**",
   ]),
 ]);
 
