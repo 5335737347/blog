@@ -301,7 +301,132 @@ for (let i = 0; i < 40; i++) {
   await new Promise((r) => setTimeout(r, 300));
 }
 check("点击音乐按钮后播放器面板出现", musicOpened === "clicked" && panelVisible, `click=${musicOpened} panel=${panelVisible}`);
+
+/* 3b. 主题切换：改版后所有颜色都走令牌，必须确认两种模式都能真正切过去。
+   用独立页面并在结束时清掉偏好，避免影响后续断言。 */
+const themeOpened = await evaluate(componentPage.sessionId, `(() => {
+  const btn = [...document.querySelectorAll('header button')].find(b => b.getAttribute('aria-label') === '主题切换');
+  if (!btn) return 'no-button';
+  btn.click();
+  return 'clicked';
+})()`);
+await new Promise((r) => setTimeout(r, 250));
+const darkPicked = await evaluate(componentPage.sessionId, `(() => {
+  const items = [...document.querySelectorAll('#theme-menu [role="menuitemradio"]')];
+  const dark = items.find(b => b.textContent.includes('黑暗'));
+  if (!dark) return 'no-item';
+  dark.click();
+  return 'clicked';
+})()`);
+await new Promise((r) => setTimeout(r, 300));
+const themeState = await evaluate(componentPage.sessionId, `({
+  dark: document.documentElement.classList.contains('dark'),
+  stored: localStorage.getItem('theme'),
+  bodyBg: getComputedStyle(document.body).backgroundColor,
+})`);
+check("主题可切换到暗色并写入偏好",
+  themeOpened === "clicked" && darkPicked === "clicked" && themeState.dark === true &&
+    themeState.stored === "dark" && themeState.bodyBg !== "rgb(255, 255, 255)",
+  JSON.stringify(themeState));
+// 还原，避免污染同一次运行里的其它页面
+await evaluate(componentPage.sessionId, `(() => { localStorage.removeItem('theme'); document.documentElement.classList.remove('dark'); return true; })()`).catch(() => {});
 await closePage(componentPage);
+
+/* 3c. 阅读器交互：目录滚动联动、移动端目录抽屉、代码复制、图片放大。
+   这些是本轮改版的核心交互，也都是「渲染正常但点了没反应」的典型位置。 */
+console.log("\n阅读器交互：");
+const readerPage = await openPage();
+const gotoArticle = async () => {
+  await send("Page.navigate", { url: BASE + "/articles/smoke-post" }, readerPage.sessionId);
+  for (let i = 0; i < 40; i++) {
+    const ok = await evaluate(readerPage.sessionId, `!!document.querySelector('nav[aria-label="文章目录"]')`).catch(() => false);
+    if (ok) return true;
+    await new Promise((r) => setTimeout(r, 300));
+  }
+  return false;
+};
+
+const tocReady = await gotoArticle();
+if (!tocReady) {
+  check("文章页目录可见（桌面）", false, "目录未渲染，后续交互检查跳过");
+} else {
+  // 目录滚动联动高亮
+  await evaluate(readerPage.sessionId, `(async () => {
+    const target = document.querySelectorAll('.reading h2')[1] || document.querySelector('.reading h2');
+    if (target) window.scrollTo(0, target.getBoundingClientRect().top + window.scrollY - 40);
+    await new Promise(r => setTimeout(r, 700));
+    return true;
+  })()`);
+  let activeToc = null;
+  for (let i = 0; i < 20; i++) {
+    activeToc = await evaluate(readerPage.sessionId, `(() => {
+      const cur = document.querySelector('nav[aria-label="文章目录"] a[aria-current="location"]');
+      return cur ? cur.textContent.trim().slice(0, 30) : null;
+    })()`).catch(() => null);
+    if (activeToc) break;
+    await new Promise((r) => setTimeout(r, 300));
+  }
+  check("目录随滚动高亮当前小节", !!activeToc, `当前项=${activeToc}`);
+
+  // 代码块复制。无头环境通常拒绝剪贴板写入（非用户手势 / 无权限），
+  // 因此成功与失败两种反馈都算通过——要断言的是「点击真的触发了处理并给出反馈」，
+  // 而不是剪贴板内容。真正的复制行为在本地手动验证过（能读到剪贴板文本）。
+  const copyState = await evaluate(readerPage.sessionId, `(() => {
+    const btn = document.querySelector('.markdown-copy-button');
+    if (!btn) return { clicked: false };
+    btn.click();
+    return { clicked: true };
+  })()`);
+  let copyLabel = null;
+  for (let i = 0; i < 20; i++) {
+    copyLabel = await evaluate(readerPage.sessionId, `document.querySelector('.markdown-copy-button')?.getAttribute('aria-label') || null`).catch(() => null);
+    if (copyLabel && copyLabel !== "复制代码") break;
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  check("代码块复制按钮产生可见反馈",
+    copyState.clicked && (copyLabel === "代码已复制" || copyLabel === "复制失败"),
+    `label=${copyLabel}`);
+
+  // 长代码可键盘聚焦（axe 曾报过滚动区不可聚焦）
+  const codeFocusable = await evaluate(readerPage.sessionId, `(() => {
+    const pre = document.querySelector('.markdown-code-frame pre');
+    return pre ? pre.getAttribute('tabindex') === '0' && !!pre.getAttribute('aria-label') : false;
+  })()`);
+  check("代码块滚动区可键盘聚焦", codeFocusable === true, `tabindex=${codeFocusable}`);
+}
+
+// 移动端目录抽屉（窄视口下桌面目录隐藏、浮动按钮出现）
+await send("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: true }, readerPage.sessionId);
+await gotoArticle();
+const drawerState = await evaluate(readerPage.sessionId, `(() => {
+  const btn = [...document.querySelectorAll('button')].find(b => b.getAttribute('aria-controls') === 'toc-drawer');
+  if (!btn) return { found: false };
+  btn.click();
+  return { found: true };
+})()`);
+let drawer = { open: false };
+for (let i = 0; i < 20; i++) {
+  drawer = await evaluate(readerPage.sessionId, `(() => {
+    const d = document.getElementById('toc-drawer');
+    return d ? { open: true, links: d.querySelectorAll('a').length } : { open: false };
+  })()`).catch(() => ({ open: false }));
+  if (drawer.open) break;
+  await new Promise((r) => setTimeout(r, 250));
+}
+check("移动端可打开目录抽屉", drawerState.found && drawer.open && drawer.links >= 2, JSON.stringify(drawer));
+
+// 抽屉里的链接应能关闭抽屉并跳转
+const drawerNav = await evaluate(readerPage.sessionId, `(() => {
+  const a = document.querySelector('#toc-drawer a');
+  if (!a) return { clicked: false };
+  a.click();
+  return { clicked: true, href: a.getAttribute('href') };
+})()`);
+await new Promise((r) => setTimeout(r, 500));
+const drawerClosed = await evaluate(readerPage.sessionId, `!document.getElementById('toc-drawer')`).catch(() => false);
+check("点击目录项后抽屉关闭", drawerNav.clicked && drawerClosed, JSON.stringify({ ...drawerNav, drawerClosed }));
+
+await closePage(readerPage);
 
 /* 4. 内容断言：确认渲染的是真实数据，而不是空状态 */
 if (SEEDED) {
