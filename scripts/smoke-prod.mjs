@@ -20,7 +20,15 @@ const repositoryRoot = path.resolve(fileURLToPath(new URL("../", import.meta.url
 const webRoot = path.join(repositoryRoot, "apps/web");
 
 if (!existsSync(path.join(webRoot, ".next/BUILD_ID"))) {
-  console.error("未找到生产构建产物，请先运行：npm run build");
+  console.error("未找到 Web 生产构建产物，请先运行：npm run build");
+  process.exit(1);
+}
+
+// API 也必须是构建产物：`npx tsx` 属于开发依赖，在生产安装（npm ci --omit=dev）
+// 或 CI 里会去联网解析版本而失败——CI 的冒烟步骤就是这么挂掉的。
+const apiEntry = path.join(repositoryRoot, "apps/api/dist/index.js");
+if (!existsSync(apiEntry)) {
+  console.error("未找到 API 生产构建产物，请先运行：npm run build");
   process.exit(1);
 }
 
@@ -64,15 +72,18 @@ function run(command, args, label) {
   }
 }
 
+// 优先用本地安装的二进制，避免 npx 在依赖不完整时尝试联网解析版本
+const bin = (name) => path.join(repositoryRoot, "node_modules/.bin", name);
+
 console.log("[1/4] 准备临时数据库");
-run("npx", ["prisma", "migrate", "deploy"], "prisma migrate deploy");
+run(bin("prisma"), ["migrate", "deploy"], "prisma migrate deploy");
 
 console.log("[2/4] 写入冒烟数据");
-run("npx", ["tsx", "scripts/smoke-seed.ts"], "冒烟数据播种");
+run(process.execPath, [path.join(repositoryRoot, "apps/api/scripts/smoke-seed.mjs")], "冒烟数据播种");
 
 console.log("[3/4] 启动 API 与 Web（生产模式）");
-const api = spawn("npx", ["tsx", "apps/api/src/index.ts"], { cwd: repositoryRoot, env, stdio: ["ignore", "pipe", "pipe"] });
-const web = spawn("npx", ["next", "start", "--port", String(webPort), "--hostname", "127.0.0.1"], {
+const api = spawn(process.execPath, ["apps/api/dist/index.js"], { cwd: repositoryRoot, env, stdio: ["ignore", "pipe", "pipe"] });
+const web = spawn(bin("next"), ["start", "--port", String(webPort), "--hostname", "127.0.0.1"], {
   cwd: webRoot,
   env,
   stdio: ["ignore", "pipe", "pipe"],

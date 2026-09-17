@@ -71,15 +71,18 @@ function run(command, args, label) {
   }
 }
 
+// 优先用本地安装的二进制，避免 npx 在依赖不完整时尝试联网解析版本
+const bin = (name) => path.join(repositoryRoot, "node_modules/.bin", name);
+
 console.log("[1/4] 准备临时数据库");
-run("npx", ["prisma", "migrate", "deploy"], "prisma migrate deploy");
+run(bin("prisma"), ["migrate", "deploy"], "prisma migrate deploy");
 
 console.log("[2/4] 写入冒烟数据");
-run("npx", ["tsx", "scripts/smoke-seed.ts"], "冒烟数据播种");
+run(process.execPath, [path.join(repositoryRoot, "apps/api/scripts/smoke-seed.mjs")], "冒烟数据播种");
 
 console.log("[3/4] 启动 API 与 Web");
-const api = spawn("npx", ["tsx", "apps/api/src/index.ts"], { cwd: repositoryRoot, env, stdio: ["ignore", "pipe", "pipe"] });
-const web = spawn("npx", ["next", "dev", "--port", String(webPort)], {
+const api = spawn(bin("tsx"), ["apps/api/src/index.ts"], { cwd: repositoryRoot, env, stdio: ["ignore", "pipe", "pipe"] });
+const web = spawn(bin("next"), ["dev", "--port", String(webPort)], {
   cwd: path.join(repositoryRoot, "apps/web"),
   env,
   stdio: ["ignore", "pipe", "pipe"],
