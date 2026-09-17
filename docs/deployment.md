@@ -141,6 +141,73 @@ npm run update -- --allow-dirty
 使用 `pm2 status`、`pm2 logs` 检查进程，修复后重新执行更新；只有明确知道检查
 条件不成立时才使用 `--skip-health-check`。
 
+## 本次改版（2026-09-17）上线清单
+
+前端改版与稳定性修复已合并进 `main`，GitHub CI 全绿（lint、类型、107 个测试、
+文档与契约校验、生产构建、对生产产物的浏览器冒烟、依赖审计）。
+服务器上按下面顺序执行即可。
+
+### 1. 上线前
+
+```bash
+cd <仓库目录>
+git log -1 --format=%H          # 记下当前提交，回滚要用
+git status --porcelain          # 应为空；有输出说明服务器有本地改动
+```
+
+确认 `.env` 中有 `SITE_URL` 与 `NEXT_PUBLIC_SITE_URL`（必须是最终对外域名，
+否则 Next 的图片白名单与 canonical 会不对）。本轮**没有新增必需变量**。
+
+### 2. 执行更新
+
+```bash
+npm run update
+```
+
+脚本会：备份 SQLite → `git pull --ff-only` → `npm ci` → Prisma Client 生成 →
+lint/类型/测试 → 应用 migration → 构建 API 与 Web → PM2 重载 → `pm2 save` →
+轮询 API `/health` 与 Web 首页。
+
+本轮含 5 个 migration（个人资料、token 版本、留言板可空外键、索引），
+都是新增或放宽约束，不改动既有列的数据。
+
+### 3. 上线后验收
+
+在本机（服务器）执行：
+
+```bash
+curl -s http://127.0.0.1:3002/health          # 期望 status ok、database ok
+pm2 status                                     # blog-web 与 blog-api 均 online
+```
+
+然后在浏览器里逐项确认（改版涉及的具体页面）：
+
+| 检查项 | 期望 |
+|---|---|
+| `/` | 整屏壁纸首屏，向下滚动能看到「最新文章」卡片 |
+| `/articles` | 三栏卡片栅格，卡片有封面或渐变色块回落 |
+| 任意文章页 | 左侧目录随滚动高亮；无目录时不显示空白栏 |
+| 文章页代码块 | 语言标签 + 复制按钮可用；长代码可横向滚动 |
+| 文章页图片 | 点击放大，Esc 或点遮罩关闭 |
+| `/archive` | 按年份分组，年份标题吸顶 |
+| 移动端宽度 | 底部标签栏出现，5 个入口可切换 |
+| 暗色模式 | 头部主题切换菜单选「黑暗」，刷新后保持 |
+| 打印预览（Ctrl+P） | 无页头页脚、无目录栏、无评论区，代码块换行 |
+
+### 4. 回滚
+
+代码回滚：
+
+```bash
+git log -1 --format=%H              # 拿到本次上线前的提交
+git reset --hard <上线前提交>
+npm ci && npm run build && pm2 startOrReload ecosystem.config.cjs && pm2 save
+```
+
+数据库回滚（仅在确认数据出问题时）：更新脚本已在 `backups/` 留下
+`dev.db.<时间戳>.bak`，按[备份范围与当前恢复限制](#备份范围与当前恢复限制)
+里的恢复步骤操作。注意：回滚数据库会丢失备份时间点之后的新内容（文章、评论）。
+
 ## 备份范围与当前恢复限制
 
 必须备份：
