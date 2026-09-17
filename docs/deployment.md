@@ -208,13 +208,24 @@ cp scripts/deploy-verify/verify-deploy.sh /tmp/kpblog-clean/
 cd /tmp/kpblog-clean && bash verify-deploy.sh
 ```
 
-它会依次执行 `npm ci`、`prisma generate`、`npm run build`，检查两个构建产物存在，
-然后**按 PM2 的方式**启动入口：`node apps/api/dist/index.js` 并轮询 `/health`，
-以及 `next start --hostname 127.0.0.1 --port 3101` 并请求首页。全部通过时输出
-`RESULT: ALL_DEPLOY_CHECKS_PASSED`。
+它复现的就是 `npm run update` 的完整序列：`npm ci`、`prisma generate`、
+`lint`、`typecheck`、全部测试、文档与契约校验、`npm run build`，检查两个构建产物，
+然后**按 PM2 的方式**启动入口（`node apps/api/dist/index.js` 轮询 `/health`，
+`next start --hostname 127.0.0.1 --port 3101` 请求首页），最后跑一遍
+`npm run smoke:prod`。全部通过时输出 `RESULT: ALL_DEPLOY_CHECKS_PASSED`。
 
-2026-09-17 在 commit `acaf81e` 上实测通过：`npm ci` 安装 777 个包，
-两个构建产物齐全，API `/health` 返回 ok，Web 首页返回 200。
+2026-09-17 在干净检出上实测通过：`npm ci` 安装 777 个包，全部检查项通过，
+两个入口可运行，冒烟（含 11 项交互断言）全部通过。
+
+注意 `npm run update` 本身会跑 `npm run check`，而 `check` 包含浏览器冒烟，
+所以它需要 Chromium。服务器上先确认这一点，否则更新会在最后一步失败：
+
+```bash
+which chromium chromium-browser google-chrome || ls ~/.cache/ms-playwright
+```
+
+没有的话，`npx playwright install --with-deps chromium` 后把可执行文件路径写进
+`CHROME_BIN`（写进 PM2 的 env 或 shell 配置）。
 
 ### 4. 回滚
 
