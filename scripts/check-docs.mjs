@@ -164,6 +164,7 @@ const runtimeProvidedEnv = new Set([
   "NEXT_PUBLIC_VERCEL_ENV", // 托管平台注入
   "VERCEL_ENV",
   "HOME", // 由操作系统提供；冒烟脚本用它定位 Playwright 的浏览器缓存
+  "PATH", // 由 shell 提供；冒烟脚本用它判断 chromium/google-chrome 是否可执行
   // 以下都是按次调用的脚本开关，不是部署配置。
   // 写进 .env.example 会让用户以为必须配置它们，所以登记为运行时提供：
   "BASE_URL", // smoke-web.mjs：指向已在运行的服务

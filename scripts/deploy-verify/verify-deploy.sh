@@ -32,6 +32,21 @@ export XDG_CACHE_HOME="$(cd .. && pwd)/.npm-cache/xdg"
 
 fail() { echo "RESULT: $1"; exit "$2"; }
 
+# 前置探测浏览器：冒烟需要 Chromium，缺它会在流程最后才失败，
+# 白跑一遍 npm ci 与构建。这里先给出结论与安装指引。
+if [ -n "${CHROME_BIN:-}" ] && [ -x "${CHROME_BIN}" ]; then
+  echo "浏览器：使用 CHROME_BIN=${CHROME_BIN}"
+elif command -v chromium > /dev/null 2>&1 || command -v google-chrome > /dev/null 2>&1; then
+  echo "浏览器：PATH 上已有 $(command -v chromium || command -v google-chrome)"
+elif ls "$HOME"/.cache/ms-playwright/chromium_headless_shell-*/chrome-headless-shell-linux64/chrome-headless-shell > /dev/null 2>&1; then
+  echo "浏览器：使用 Playwright 缓存中的 chrome-headless-shell"
+else
+  echo "[失败] 未找到 Chromium，浏览器冒烟无法执行。"
+  echo "  安装：npx playwright install --with-deps chromium"
+  echo "  或把可执行文件路径写进 CHROME_BIN。"
+  fail BROWSER_MISSING 25
+fi
+
 echo "=== node/npm ==="
 node -v; npm -v
 

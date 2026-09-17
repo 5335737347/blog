@@ -16,7 +16,7 @@
  * 不引入任何 npm 依赖。
  */
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { accessSync, constants, existsSync, mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -48,6 +48,30 @@ const PAGES = [
 
 
 /* ---------- 定位 Chromium ---------- */
+
+/**
+ * 裸命令名（chromium 之类）必须真的能在 PATH 上执行。
+ * 只判断「名字在候选表里」会让 spawn 抛未捕获的 ENOENT——
+ * 服务器上首次运行就是这样崩掉的。
+ *
+ * 用文件系统检查而不是 `command -v`：后者要经 shell，会带出
+ * 参数转义的隐患与 Node 的 DEP0190 警告。
+ */
+function resolvesOnPath(bin) {
+  const dirs = (process.env.PATH || "").split(path.delimiter).filter(Boolean);
+  for (const dir of dirs) {
+    const candidate = path.join(dir, bin);
+    try {
+      statSync(candidate);
+      accessSync(candidate, constants.X_OK);
+      return true;
+    } catch {
+      /* 继续找下一个目录 */
+    }
+  }
+  return false;
+}
+
 function findChrome() {
   const candidates = [];
   if (process.env.CHROME_BIN) candidates.push(process.env.CHROME_BIN);
@@ -65,15 +89,32 @@ function findChrome() {
       candidates.push(path.join(cache, dir, "chrome-linux/chrome"));
     }
   }
+  // 系统安装的浏览器：必须实际存在于 PATH，不能只因为名字在候选表里就采用
   for (const bin of ["chromium", "chromium-browser", "google-chrome", "google-chrome-stable"]) {
-    candidates.push(bin);
+    if (resolvesOnPath(bin)) candidates.push(bin);
   }
   return candidates.find((c) => c && (c.includes("/") ? existsSync(c) : true)) || null;
 }
 
 const chromeBin = findChrome();
 if (!chromeBin) {
-  console.error("未找到 Chromium。请设置 CHROME_BIN，或安装 Playwright 的 Chromium 缓存后重试。");
+  // 这条信息要能让服务器上的运维直接照做，而不是给出一个无法执行的结论。
+  console.error("未找到可用的 Chromium，浏览器冒烟无法执行。");
+  console.error("");
+  console.error("  安装方式（任选其一）：");
+  console.error("    npx playwright install --with-deps chromium");
+  console.error("    apt-get install -y chromium-browser   # 视发行版而定");
+  console.error("");
+  console.error("  装好后任选一种让它被找到：");
+  console.error("    1) 把可执行文件路径写进 CHROME_BIN，例如");
+  console.error("       export CHROME_BIN=\"$HOME/.cache/ms-playwright/chromium_headless_shell-*/");
+  console.error("         chrome-headless-shell-linux64/chrome-headless-shell\"");
+  console.error("       注意 PM2 的 env 也要带上，否则 npm run update 里仍然找不到。");
+  console.error("    2) 或确认 chromium / google-chrome 在 PATH 上（which chromium）。");
+  console.error("");
+  console.error("  若确实无法安装浏览器，可在更新时跳过校验：");
+  console.error("    npm run update -- --skip-check");
+  console.error("    （这会同时跳过 lint、类型检查与全部测试，请谨慎使用。）");
   process.exit(2);
 }
 // 启动失败时把二进制路径与 stderr 打出来，否则只能看到「CDP 未就绪」这样的空结论。
