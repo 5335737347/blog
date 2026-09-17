@@ -19,9 +19,11 @@ export DATABASE_URL="file:./prisma/ci.db"
 export JWT_SECRET="clean-verify-secret-at-least-32-chars"
 export SITE_URL="https://example.test"
 export NEXT_PUBLIC_SITE_URL="https://example.test"
-export API_INTERNAL_URL="http://127.0.0.1:3102"
 export API_PORT=3102
 export API_HOST=127.0.0.1
+# 不要在这里设 API_INTERNAL_URL：冒烟会自己指定它，而项目统一用
+# `override: false` 加载 .env，进程已有的变量会挡住 .env 里的值，
+# 于是一个「演示用」的值会污染下游（实测让冒烟的 Web 一直去连不存在的 3102）。
 
 # 本机沙箱里 ~/.npm 只读，用工作区内缓存（CI/服务器上无此限制）
 export npm_config_cache="$(cd .. && pwd)/.npm-cache"

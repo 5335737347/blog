@@ -30,6 +30,9 @@ const env = {
   JWT_SECRET: "smoke-test-secret-at-least-32-characters",
   API_PORT: String(apiPort),
   API_HOST: "127.0.0.1",
+  // 必须指向本脚本自己的 API 实例。项目的 env 加载用 `override: false`，
+  // 进程已有该变量时 .env 不会覆盖它，所以这里必须显式覆盖，
+  // 否则会继承到外部（例如部署验证脚本）设置的值。
   API_INTERNAL_URL: `http://127.0.0.1:${apiPort}`,
   SITE_URL: `http://127.0.0.1:${webPort}`,
   NEXT_PUBLIC_SITE_URL: `http://127.0.0.1:${webPort}`,
