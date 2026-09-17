@@ -12,6 +12,7 @@ import { getArticleAdjacentData, getArticlePageData } from "@/lib/api/public-api
 import { getOpenGraphImageUrl, getSiteUrl } from "@/lib/env";
 import { shouldSkipImageOptimization } from "@/lib/images";
 import Link from "next/link";
+import { pageAlternates } from "@/lib/metadata";
 
 interface ArticlePageProps {
   params: Promise<{ slug: string }>;
@@ -32,7 +33,7 @@ export async function generateMetadata({ params }: ArticlePageProps): Promise<Me
   return {
     title: post.title,
     description: post.excerpt || undefined,
-    alternates: { canonical },
+    alternates: pageAlternates(`/articles/${post.slug}`),
     openGraph: {
       type: "article",
       title: post.title,

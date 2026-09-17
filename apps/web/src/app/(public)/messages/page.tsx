@@ -1,14 +1,13 @@
 import type { Metadata } from "next";
 import PageShell, { PageHeader } from "@/components/public/layout/PageShell";
 import CommentSection from "@/components/public/comments/CommentSection";
-import { getSiteUrl } from "@/lib/env";
+import { pageAlternates } from "@/lib/metadata";
 
 export function generateMetadata(): Metadata {
-  const siteUrl = getSiteUrl();
   return {
     title: "留言",
     description: "博客留言板",
-    alternates: { canonical: siteUrl ? `${siteUrl}/messages` : undefined },
+    alternates: pageAlternates("/messages"),
   };
 }
 

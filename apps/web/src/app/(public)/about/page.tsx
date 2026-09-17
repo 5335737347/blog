@@ -3,15 +3,14 @@ import Image from "next/image";
 import PageShell, { PageHeader } from "@/components/public/layout/PageShell";
 import { MailIcon, ProfileIcon } from "@/components/public/layout/SiteIcons";
 import { getProfile } from "@/lib/api/public-api";
-import { getSiteUrl } from "@/lib/env";
 import { shouldSkipImageOptimization } from "@/lib/images";
+import { pageAlternates } from "@/lib/metadata";
 
 export function generateMetadata(): Metadata {
-  const siteUrl = getSiteUrl();
   return {
     title: "关于",
     description: "关于本站与作者",
-    alternates: { canonical: `${siteUrl}/about` },
+    alternates: pageAlternates("/about"),
   };
 }
 

@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { getProfile } from "@/lib/api/public-api";
 import { KunFishIcon } from "@/components/public/layout/SiteIcons";
-import pkg from "../../../../package.json";
 
 interface FooterProps {
   blogTitle: string;
@@ -93,7 +92,6 @@ export default async function Footer({ blogTitle, blogDescription }: FooterProps
                   </Link>
                 </li>
               ))}
-              <li className="text-meta text-ink-3">版本 v{pkg.version}</li>
             </ul>
           </div>
         </div>

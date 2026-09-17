@@ -2,15 +2,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import PageShell, { PageHeader } from "@/components/public/layout/PageShell";
 import { getArchiveData } from "@/lib/api/public-api";
-import { getSiteUrl } from "@/lib/env";
 import { formatDate } from "@/lib/utils";
+import { pageAlternates } from "@/lib/metadata";
 
 export function generateMetadata(): Metadata {
-  const siteUrl = getSiteUrl();
   return {
     title: "归档",
     description: "按时间浏览全部文章",
-    alternates: { canonical: `${siteUrl}/archive` },
+    alternates: pageAlternates("/archive"),
   };
 }
 

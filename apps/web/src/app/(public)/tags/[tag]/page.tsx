@@ -4,7 +4,7 @@ import ArticleList from "@/components/public/articles/ArticleList";
 import Pagination from "@/components/public/articles/Pagination";
 import PageShell, { PageHeader } from "@/components/public/layout/PageShell";
 import { getTagArchivePageData } from "@/lib/api/public-api";
-import { getSiteUrl } from "@/lib/env";
+import { pageAlternates } from "@/lib/metadata";
 
 const PAGE_SIZE = 10;
 
@@ -21,9 +21,7 @@ export async function generateMetadata({ params }: TagPageProps): Promise<Metada
   return {
     title: `#${tag.name}`,
     description: `浏览带有 ${tag.name} 标签的博客文章`,
-    alternates: {
-      canonical: getSiteUrl() ? `${getSiteUrl()}/tags/${tag.slug}` : undefined,
-    },
+    alternates: pageAlternates(`/tags/${tag.slug}`),
   };
 }
 

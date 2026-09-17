@@ -3,6 +3,7 @@ import HeroSection from "@/components/public/home/HeroSection";
 import HomeContent from "@/components/public/home/HomeContent";
 import { getHomePageData, getProfile, getPublicSettings } from "@/lib/api/public-api";
 import { getSiteUrl } from "@/lib/env";
+import { pageAlternates } from "@/lib/metadata";
 
 export const revalidate = 60;
 
@@ -17,7 +18,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const siteUrl = getSiteUrl();
   const url = siteUrl ? `${siteUrl}/` : undefined;
   return {
-    alternates: { canonical: url },
+    alternates: pageAlternates("/"),
     openGraph: { url },
   };
 }

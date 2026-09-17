@@ -1,14 +1,13 @@
 import type { Metadata } from "next";
 import PageShell, { PageHeader } from "@/components/public/layout/PageShell";
 import { getProfile } from "@/lib/api/public-api";
-import { getSiteUrl } from "@/lib/env";
+import { pageAlternates } from "@/lib/metadata";
 
 export function generateMetadata(): Metadata {
-  const siteUrl = getSiteUrl();
   return {
     title: "近况",
     description: "最近正在做的事情",
-    alternates: { canonical: `${siteUrl}/now` },
+    alternates: pageAlternates("/now"),
   };
 }
 

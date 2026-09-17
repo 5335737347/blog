@@ -4,6 +4,7 @@ import Pagination from "@/components/public/articles/Pagination";
 import PageShell, { PageHeader } from "@/components/public/layout/PageShell";
 import { getArticleIndexPageData } from "@/lib/api/public-api";
 import { getSiteUrl } from "@/lib/env";
+import { pageAlternates } from "@/lib/metadata";
 
 const PAGE_SIZE = 10;
 
@@ -13,7 +14,7 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: "文章",
     description: "浏览全部博客文章",
-    alternates: { canonical: url },
+    alternates: pageAlternates("/articles"),
     openGraph: {
       title: "文章",
       description: "浏览全部博客文章",

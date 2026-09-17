@@ -480,6 +480,24 @@ const drawerClosed = await evaluate(readerPage.sessionId, `!document.getElementB
 check("点击目录项后抽屉关闭", drawerNav.clicked && drawerClosed, JSON.stringify({ ...drawerNav, drawerClosed }));
 
 /**
+ * RSS 自动发现链接必须在（这是曾经真实失效过的项）。
+ *
+ * 根布局声明了 `<link rel="alternate" type="application/rss+xml">`，但 Next 的
+ * metadata 是浅合并：页面导出自己的 `alternates`（通常只为写 canonical）会整体
+ * 替换布局里的那一份，于是这个链接在**所有页面上都消失**（线上实测 5 个页面全为 0）。
+ * 订阅器与浏览器扩展就再也发现不了 feed。
+ */
+const rssAlternate = await evaluate(readerPage.sessionId, `(() => {
+  const link = document.querySelector('link[rel="alternate"][type="application/rss+xml"]');
+  return { found: !!link, href: link ? link.getAttribute('href') : null };
+})()`);
+check(
+  "页面声明了 RSS 自动发现链接",
+  rssAlternate.found === true && /\/rss\.xml$/.test(rssAlternate.href || ""),
+  JSON.stringify(rssAlternate)
+);
+
+/**
  * 移动端导航只有一套。
  *
  * 底部标签栏与头部汉堡菜单曾经指向同一批目标（首页/文章/归档/留言/关于

@@ -4,7 +4,7 @@ import ArticleList from "@/components/public/articles/ArticleList";
 import Pagination from "@/components/public/articles/Pagination";
 import PageShell, { PageHeader } from "@/components/public/layout/PageShell";
 import { getCategoryArchivePageData } from "@/lib/api/public-api";
-import { getSiteUrl } from "@/lib/env";
+import { pageAlternates } from "@/lib/metadata";
 
 const PAGE_SIZE = 10;
 
@@ -21,9 +21,7 @@ export async function generateMetadata({ params }: CategoryPageProps): Promise<M
   return {
     title: `${category.name} 分类`,
     description: `浏览 ${category.name} 分类下的博客文章`,
-    alternates: {
-      canonical: getSiteUrl() ? `${getSiteUrl()}/categories/${category.slug}` : undefined,
-    },
+    alternates: pageAlternates(`/categories/${category.slug}`),
   };
 }
 
