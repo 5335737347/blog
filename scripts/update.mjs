@@ -265,11 +265,17 @@ async function main() {
   // 服务器上首次遇到，本地因为频繁重建而没有暴露。
   //
   // 只删生成物，不影响源码；构建会重新生成。
+  //
+  // 这里同时清理 API 的旧输出：`tsc` 不会删除已移除源文件对应的产物，
+  // 而校验阶段（typecheck / tsx 脚本 / 冒烟）可能会把这个过期目录当成
+  // 「当前产物」使用。真实案例：服务器上残留的 `dist/lib/phone.js` 还在
+  // import 早已不存在的依赖，于是 `smoke:prod` 直接以模块找不到失败，
+  // 报错指向一个本次上线根本没改的模块。
   if (!args.has("--skip-check")) {
-    for (const stale of ["apps/web/.next/types", "apps/web/.next/dev/types"]) {
+    for (const stale of ["apps/web/.next/types", "apps/web/.next/dev/types", "apps/api/dist"]) {
       if (existsSync(stale)) {
         rmSync(stale, { recursive: true, force: true });
-        console.log(`Removed stale Next.js types: ${stale}`);
+        console.log(`Removed stale build output: ${stale}`);
       }
     }
   }
@@ -279,7 +285,13 @@ async function main() {
     console.log("Skipping lint, typecheck, and tests.");
   } else {
     section("Validate workspace");
-    run("npm", ["run", "check"]);
+    // 这里用 `check:ci` 而不是 `check`：`check` 的最后一步是 `npm run smoke`，
+    // 它用 `next dev` 起一个实例。在服务器上 dev 模式要现编译页面（实测单页
+    // ~7-8 秒），而冒烟里的交互断言（音乐面板、目录高亮、移动端目录抽屉）
+    // 依赖水合完成——于是同一份代码在开发机上全绿、在服务器上稳定失败，
+    // 而失败原因与待上线代码无关。上线路径应该校验**构建产物**：
+    // `check:ci` 只做静态与单元校验，浏览器冒烟放到构建之后的 `smoke:prod`。
+    run("npm", ["run", "check:ci"]);
   }
 
   section("Backup database");
@@ -293,15 +305,14 @@ async function main() {
     console.log("Skipping API and Web production builds.");
   } else {
     section("Build app");
-    // tsc 不会删除已移除源文件对应的旧输出。本次上线删掉了若干模块
-    // （countries / phone / country-service 等），残留的 dist 文件会让
-    // 「构建产物与源码不一致」，也会被后续的产物检查误判为存在。
-    const apiDist = path.resolve("apps/api/dist");
-    if (existsSync(apiDist)) {
-      rmSync(apiDist, { recursive: true, force: true });
-      console.log("Removed previous API build output: apps/api/dist");
-    }
+    // 过期的 API 产物已在「Validate workspace」之前清掉（见那里的注释），
+    // 这里不再重复删除。
     run("npm", ["run", "build"]);
+
+    // 对**构建产物**跑浏览器冒烟（CI 用的也是这一条）。dev 形态的冒烟留给
+    // 本地开发：服务器上它既慢又依赖水合时序。
+    section("Smoke check (production build)");
+    run("npm", ["run", "smoke:prod"]);
   }
 
   if (args.has("--skip-restart")) {

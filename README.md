@@ -100,6 +100,7 @@ NEXT_PUBLIC_SITE_URL="https://你的域名"
 | `npm run start:web` / `npm run start:api` | 单独启动生产应用 |
 | `npm run update` | 安全拉取、检查、备份、迁移、构建并重载生产服务 |
 | `npm run check` | lint、类型检查、全部测试、文档与接口契约校验、浏览器冒烟检查 |
+| `npm run check:ci` | 同上但不含浏览器冒烟（服务器更新与 CI 使用；冒烟改在构建后跑 `smoke:prod`） |
 | `npm run smoke` | 浏览器冒烟检查（自建临时数据库与独立端口实例，跑完自动清理） |
 | `npm run smoke:prod` | 对生产构建（`next build` + `next start`）执行同一套冒烟检查 |
 | `npm run check:docs` | 检查文档链接、索引、命令和环境变量模板 |

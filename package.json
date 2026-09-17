@@ -24,6 +24,7 @@
     "typecheck": "tsc --noEmit && npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspace @kpblog/api",
     "check": "npm run lint && npm run typecheck && npm test && npm run check:docs && npm run check:openapi && npm run smoke",
+    "check:ci": "npm run lint && npm run typecheck && npm test && npm run check:docs && npm run check:openapi",
     "check:docs": "node scripts/check-docs.mjs",
     "check:openapi": "tsx apps/api/scripts/check-openapi.ts",
     "check:audit": "node scripts/check-audit.mjs",

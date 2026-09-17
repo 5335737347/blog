@@ -111,8 +111,21 @@ npm run update
 ```
 
 更新脚本依次执行：仓库与并发更新检查、`git pull --ff-only`、`npm ci`、
-Prisma Client 生成、lint/typecheck/tests、SQLite 备份、migration、双应用构建、
-PM2 `startOrReload`、`pm2 save`，最后轮询 API 与 Web 的本机健康端点。
+Prisma Client 生成、`check:ci`（lint/typecheck/tests/文档/契约）、SQLite 备份、
+migration、双应用构建、对**构建产物**跑 `smoke:prod`、PM2 `startOrReload`、
+`pm2 save`，最后轮询 API 与 Web 的本机健康端点。
+
+> 从 2026-09-17 起，更新路径不再运行 dev 形态的 `npm run smoke`。
+> 它用 `next dev` 起实例，服务器上要现编译页面（实测单页 7–8 秒），
+> 而其中的交互断言（音乐面板、目录滚动高亮、移动端目录抽屉）依赖水合完成，
+> 于是同一份代码在开发机上全绿、在服务器上稳定失败，且与待上线代码无关。
+> 服务器上用 `check:ci` + 构建后的 `smoke:prod`：前者做静态与单元校验，
+> 后者校验真正要上线的产物（CI 用的也是这一条）。本地开发仍用 `npm run check`。
+
+校验开始前还会清理过期生成物：`apps/web/.next/types`、`apps/web/.next/dev/types`
+以及 `apps/api/dist`。`tsc` 不删除已移除源文件对应的产物，残留文件会让校验或冒烟
+误用旧构建——真实案例：服务器上残留的 `dist/lib/phone.js` 仍在 import 早已移除的
+`libphonenumber-js`，导致 `smoke:prod` 以模块找不到失败，而报错指向的模块本次并未改动。
 
 同一工作区同时只能运行一个更新。脚本使用 `.git/kpblog-update.lock` 记录进程；
 异常退出留下的锁会在确认原进程不存在后自动清理。任何步骤失败都会返回非零状态，
