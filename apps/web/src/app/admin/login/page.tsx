@@ -4,7 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
-import { readApiData, readApiError } from "@/lib/api-client";
+import { apiErrorMessage, readApiData } from "@/lib/api-client";
 
 interface LoginResponse {
   loggedIn: boolean;
@@ -58,15 +58,22 @@ export default function LoginPage() {
         }
         router.push("/admin");
       } else {
+        // body 只能读一次：先取下来，再同时拿出文案与剩余秒数。
+        // 之前这里先 res.json() 再 readApiError(res.clone())，clone 会抛
+        // TypeError（Body has already been consumed），于是 401/429 被显示成
+        // 「网络错误」——把「用户名或密码错误」和锁定倒计时全盖掉了。
         const payload = await res.json().catch(() => null);
         const retryAfter = Number(
           (payload as { error?: { retryAfterSeconds?: number } } | null)?.error?.retryAfterSeconds
         );
-        setError(await readApiError(res.clone(), "登录失败"));
+        setError(apiErrorMessage(payload, "登录失败"));
         if (Number.isFinite(retryAfter) && retryAfter > 0) setLockedFor(Math.ceil(retryAfter));
       }
-    } catch {
-      setError("网络错误");
+    } catch (error) {
+      // 区分「请求根本没发出去/被中断」和「响应到了但处理出错」：
+      // 一律显示「网络错误」会掩盖真实原因，排查时只能靠猜。
+      console.error("[admin/login] 登录请求失败:", error);
+      setError("网络错误，请检查网络连接后重试");
     } finally {
       setLoading(false);
     }

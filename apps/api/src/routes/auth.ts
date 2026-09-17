@@ -5,6 +5,7 @@ import {
   SESSION_MAX_AGE_SECONDS,
 } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { ServiceError } from "@/server/errors";
 import {
   changeOwnPassword,
   getCurrentSession,
@@ -25,7 +26,7 @@ import {
   assertRateLimit,
   assertRateLimitNotExceeded,
   clearRateLimit,
-  recordRateLimitFailure,
+  consumeFailureAllowance,
   requestIp,
 } from "@/server/request-guard";
 import {
@@ -150,11 +151,9 @@ const authRoutes: FastifyPluginAsync = async (app) => {
     const allowedFailures = adminTarget ? ADMIN_LOGIN_MAX_ATTEMPTS : LOGIN_ACCOUNT_MAX_FAILURES;
     const failureWindowMs = adminTarget ? adminLockoutWindowMs() : LOGIN_ACCOUNT_WINDOW_MS;
 
+    // 名额已用尽 → 直接冷却（不再验密）。判定与「消耗名额」共用同一个计数，
+    // 且消耗是原子的：并发请求不会各自读到旧值而全部放行。
     if (accountKey) {
-      // 「允许 N 次」的判定：已经失败满 N 次就不再验密，直接冷却。
-      // 这样第 4 次尝试不会走到 bcrypt，也不会被记进计数——
-      // 计数与拒绝必须成对，否则要么少给一次机会（第 N 次就被拒），
-      // 要么多给一次（第 N+1 次才发现已满）。
       await assertRateLimitNotExceeded(accountKey, allowedFailures, {
         message: adminTarget ? "该管理员账号已被临时锁定，请稍后再试" : undefined,
       });
@@ -165,11 +164,14 @@ const authRoutes: FastifyPluginAsync = async (app) => {
       result = await loginUser(body);
     } catch (error) {
       if (accountKey) {
-        // 照常累加：判定阈值是「允许次数 + 1」，达到它才会拒绝。
-        // 注意不要在这里限制「最多记录 N 次」——那样计数会永远停在 N，
-        // 判定条件 `count >= N+1` 永不成立，锁定就形同虚设（第一版正是这么错的）。
-        // 窗口不会被续命：recordRateLimitFailure 只在建桶时设置 resetAt。
-        await recordRateLimitFailure(accountKey, failureWindowMs);
+        // 只有密码错误（401）才消耗名额；其它错误（400/500）不占用尝试次数，
+        // 否则每次畸形请求都能把管理员推向锁定。
+        if (error instanceof ServiceError && error.status === 401) {
+          // 名额用尽（第 N+1 次及以后）时计数已经超限，下一次请求会在
+          // assertRateLimitNotExceeded 处被直接拒绝、不再验密。
+          // 当前这次尝试本来就该返回 401，所以这里不改变响应。
+          await consumeFailureAllowance(accountKey, failureWindowMs, allowedFailures);
+        }
       }
       throw error;
     }

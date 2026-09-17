@@ -67,6 +67,19 @@ export async function readApiData<T>(response: Response): Promise<T> {
 
 export async function readApiError(response: Response, fallback: string): Promise<string> {
   const payload = await response.json().catch(() => null);
+  return apiErrorMessage(payload, fallback);
+}
+
+/**
+ * 从**已经解析过**的失败响应体里取错误信息。
+ *
+ * 存在的理由：Response 的 body 只能消费一次。调用方若为了拿
+ * `error.retryAfterSeconds` 而先 `await res.json()`，再调 `readApiError(res)` 就会抛
+ * `TypeError: Body has already been consumed`——而那个异常会被登录页的 catch
+ * 误报成「网络错误」，把真实的 401/429 文案盖掉（管理员登录页真的这样错过一次）。
+ * 所以：**先读一次 body，再用这个函数解析**，不要 clone、不要读第二次。
+ */
+export function apiErrorMessage(payload: unknown, fallback: string): string {
   if (isApiFailure(payload)) {
     return payload.error.message;
   }

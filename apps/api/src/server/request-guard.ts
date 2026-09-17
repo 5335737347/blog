@@ -314,6 +314,42 @@ export async function rateLimitFailureCount(key: string): Promise<number> {
   return bucket.count;
 }
 
+/**
+ * 原子地申请一次失败名额，返回是否已超出允许次数。
+ *
+ * 「先读计数、再决定是否拒绝、失败了再 +1」这个三步在并发下会漏：
+ * 4 个请求同时到达时可能都读到 count=2，于是全部放行——
+ * 实测 4 个并发请求全部返回 401 而锁定没有触发（管理员锁定因此形同虚设）。
+ * 这里改成**先加再判**，放在一个事务里，保证每次尝试恰好消耗一个名额：
+ *   - 返回 `exceeded: true` 表示这是第 N+1 次（及以后）尝试；
+ *   - `count === 1` 表示本窗口刚开桶，此时才写入 `resetAt`，
+ *     所以持续请求不会把解锁时间往后推。
+ */
+export async function consumeFailureAllowance(
+  key: string,
+  windowMs: number,
+  allowed: number
+): Promise<{ exceeded: boolean; count: number }> {
+  const now = Date.now();
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.rateLimitBucket.findUnique({ where: { key } });
+    if (!existing || existing.resetAt.getTime() <= now) {
+      await tx.rateLimitBucket.upsert({
+        where: { key },
+        update: { count: 1, resetAt: new Date(now + windowMs) },
+        create: { key, count: 1, resetAt: new Date(now + windowMs) },
+      });
+      return { exceeded: 1 > allowed, count: 1 };
+    }
+    const updated = await tx.rateLimitBucket.update({
+      where: { key },
+      data: { count: { increment: 1 } },
+      select: { count: true },
+    });
+    return { exceeded: updated.count > allowed, count: updated.count };
+  });
+}
+
 /** 成功后清除计数，避免用户为之前的输错持续买单。 */
 export async function clearRateLimit(key: string) {
   await prisma.rateLimitBucket.deleteMany({ where: { key } });
