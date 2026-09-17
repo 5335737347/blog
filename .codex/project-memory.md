@@ -496,3 +496,41 @@ they need a Chromium binary (found via `CHROME_BIN` or the Playwright cache).
 - Still open by choice: soft 404 status codes, per-field request schemas,
   coverage thresholds, tests for the public SSR data surface, and the approved
   private Admin separation.
+
+## Completed 2026-09-17 production deployment (hardening release)
+
+- Deployed to the single production host behind Nginx: repository `/home/ubuntu/blog`,
+  PM2 `blog-api` + `blog-web`, now at commit `9a68e49` (three commits:
+  `a1d639a` backend hardening, `973a203` web fixes, `8a411b0` docs/gates, plus
+  `4a906ae`/`9a68e49` for the deploy path itself). `npm run update` finished with
+  "Update finished successfully"; `/health` reports `ok`, database schema is up to
+  date (14 migrations), and the public site returns 200 on `/`, `/articles`,
+  `/sitemap.xml`, `/rss.xml` and a branded 404 for unknown paths.
+- Verified live after the deploy: the API serves brotli (`content-encoding: br`,
+  `vary: Accept-Encoding`); the shipped CSS carries the new `--hero-scrim` and the
+  `header[data-over-hero]` rules; article pages render a single `h1`; the footer's
+  RSS link no longer prefetches; `backups/` holds pre-update SQLite snapshots.
+- **Two deploy-path defects were found only by deploying**, and both are fixed:
+  1. The update script's validation step used `npm run check`, whose last step is
+     the **dev**-shape smoke (`next dev`). On a server, dev compiles pages on
+     demand (~7-8 s each), so the smoke's hydration-dependent interaction
+     assertions failed on code that was fine. `check:ci` (static + unit checks)
+     now runs there, and the browser smoke runs after the build via `smoke:prod`
+     against the real artifacts — the same thing CI does.
+  2. Both smoke scripts assumed the process environment could redirect the API
+     URL. It cannot: Next compiles the rewrite target from `next.config.ts` into
+     the build output, so a `.next` built with the repository `.env` keeps
+     pointing at the production API no matter what the process env says. The
+     server failed with "API listening on 3312, Web connecting to 3002". Both
+     smoke scripts now write `apps/web/.env.local` for the duration of the run
+     (erroring out instead of clobbering an existing file) and `smoke:prod`
+     builds into its own `NEXT_DIST_DIR` (`apps/web/tmp/smoke-prod-<pid>`), so the
+     repository's production `.next` is never touched. Do not "fix" this by
+     reusing or stashing the repo's `.next`: an earlier attempt at
+     rename-stash-restore destroyed the local production build.
+- Cleanup done as part of the deploy: the server's Chromium (Playwright cache
+  `chromium_headless_shell-1243`) was installed with
+  `npx playwright install --with-deps chromium`, needs no `CHROME_BIN`; stale API
+  build output (`.next/types`, `.next/dev/types`, `apps/api/dist`) is now removed
+  before validation, which is what had been hiding a `dist/lib/phone.js` that
+  still imported a dependency removed months earlier.
