@@ -70,14 +70,17 @@ jobs:
           echo "使用浏览器：$CHROME_BIN"
           echo "CHROME_BIN=$CHROME_BIN" >> "$GITHUB_ENV"
 
+      - name: Build production applications
+        run: npm run build
+
       - name: Browser smoke check
         # 只做静态检查不够：本轮出现过 tsc 与生产构建都通过、
         # 只有真实渲染才暴露的缺陷（文章页运行时 500、音乐播放器面板消失）。
+        #
+        # 这里对**生产构建**（next build + next start）跑，而不是 next dev：
+        # 既更贴近真实部署形态，也少一个会引入差异的开发服务器。
         # 该步骤自建临时数据库与独立端口的实例，并用 API 启动日志核对目标库，跑完自动清理。
-        run: npm run smoke
-
-      - name: Build production applications
-        run: npm run build
+        run: npm run smoke:prod
 
       - name: Audit production dependencies
         # 在仓库内审计：--omit=dev 会覆盖各 workspace 的真实生产依赖。

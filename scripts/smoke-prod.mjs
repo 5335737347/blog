@@ -101,10 +101,24 @@ async function waitFor(url, label) {
 await waitFor(`http://127.0.0.1:${apiPort}/health`, "API");
 await waitFor(`http://127.0.0.1:${webPort}/`, "Web");
 
+if (process.env.SMOKE_VERBOSE === "1") {
+  for (const [child, lines] of logs) {
+    console.log(`--- ${child.spawnargs.join(" ")}`);
+    console.log(lines.join("").slice(-2000));
+  }
+}
+
 console.log("[4/4] 对生产构建执行浏览器冒烟检查\n");
 const smoke = spawnSync("node", ["scripts/smoke-web.mjs"], {
   cwd: repositoryRoot,
   env: { ...env, BASE_URL: `http://127.0.0.1:${webPort}`, SMOKE_SEEDED: "1" },
   stdio: "inherit",
 });
+if (smoke.status !== 0) {
+  console.error("\n冒烟失败，输出被测实例的启动日志：");
+  for (const [child, lines] of logs) {
+    console.error(`--- ${child.spawnargs.join(" ")}`);
+    console.error(lines.join("").slice(-2000) || "（无输出）");
+  }
+}
 shutdown(smoke.status === 0 ? 0 : 1);

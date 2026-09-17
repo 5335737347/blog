@@ -127,10 +127,26 @@ if (!apiLog.includes(expectedDb)) {
 }
 console.log(`数据库自检通过：${expectedDb}`);
 
+// 先把启动阶段的日志尾部打出来：CI 上失败时往往只能看到「页面没渲染」，
+// 而真正原因（端口占用、依赖缺失、编译报错）在子进程日志里。
+if (process.env.SMOKE_VERBOSE === "1") {
+  for (const [child, lines] of logs) {
+    console.log(`--- ${child.spawnargs.join(" ")}`);
+    console.log(lines.join("").slice(-2000));
+  }
+}
+
 console.log("[4/4] 执行浏览器冒烟检查\n");
 const smoke = spawnSync("node", ["scripts/smoke-web.mjs"], {
   cwd: repositoryRoot,
   env: { ...env, BASE_URL: `http://127.0.0.1:${webPort}`, SMOKE_SEEDED: "1" },
   stdio: "inherit",
 });
+if (smoke.status !== 0) {
+  console.error("\n冒烟失败，输出被测实例的启动日志：");
+  for (const [child, lines] of logs) {
+    console.error(`--- ${child.spawnargs.join(" ")}`);
+    console.error(lines.join("").slice(-2000) || "（无输出）");
+  }
+}
 shutdown(smoke.status === 0 ? 0 : 1);
