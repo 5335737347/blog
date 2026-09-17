@@ -103,6 +103,22 @@ echo "Web 入口可运行，首页返回 200"
 kill "$WEB_PID" 2>/dev/null
 wait "$WEB_PID" 2>/dev/null
 
+# 关键：等两个实例真正退出后再跑冒烟。
+#
+# 冒烟会自己起 API 与 Web，而它启动的 Web 与本脚本启动的 Web **共用同一个
+# `.next` 目录**（生产构建只有一份）。两者交叠过就会互相干扰：实测出现过
+# 冒烟的 API 中途被杀，随后所有 `/api/*` 失败、数据渲染断言直接失败。
+for _ in $(seq 1 20); do
+  busy=0
+  curl -sS -m 2 -o /dev/null "http://127.0.0.1:${API_PORT}/" 2>/dev/null && busy=1
+  curl -sS -m 2 -o /dev/null http://127.0.0.1:3101/ 2>/dev/null && busy=1
+  [ "$busy" = "0" ] && break
+  sleep 1
+done
+if [ "$busy" != "0" ]; then
+  echo "[警告] 仍有实例占用 ${API_PORT} 或 3101，冒烟的端口预检可能会拒绝启动。"
+fi
+
 # 冒烟检查是 `npm run update` 的最后一环，也是最依赖环境的一环（需要浏览器）。
 # 它在这里跑通，服务器上才不会再遇到新的意外。
 #
