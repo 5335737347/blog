@@ -67,17 +67,29 @@ function cleanHeadingText(raw: string): string {
     .trim();
 }
 
+/**
+ * 从 Markdown 原文提取目录条目。
+ *
+ * 两条规则都对应渲染端的真实行为（见 MarkdownContent 的 remarkDemoteHeadings）：
+ *
+ * 1. **一级标题不进目录**。文章页的 `<h1>` 是文章标题本身，正文里的 `#` 会被
+ *    渲染成 `h2`；把标题也列进目录只会得到一个点了没反应的条目——它就在正文
+ *    最上方，滚动联动永远轮不到它，点它也只是回到当前滚动位置。
+ * 2. 其余层级整体上移一位（`##` 显示为二级、`###` 显示为三级），与渲染结果一致。
+ *    此前用的是原始 `#` 数量，于是目录的缩进层级与实际标题层级对不上。
+ */
 export function extractHeadings(content: string): { level: number; text: string; id: string }[] {
   const headings: { level: number; text: string; id: string }[] = [];
   const slugger = new GithubSlugger();
   for (const line of content.split("\n")) {
     const m = line.match(/^(#{1,4})\s+(.+)$/);
-    if (m) {
-      const text = cleanHeadingText(m[2]);
-      if (!text) continue;
-      const id = slugger.slug(text);
-      headings.push({ level: m[1].length, text, id });
-    }
+    if (!m) continue;
+    const depth = m[1].length;
+    const text = cleanHeadingText(m[2]);
+    // 空标题不生成锚点；一级标题就是文章标题，跳过。
+    if (!text || depth === 1) continue;
+    const id = slugger.slug(text);
+    headings.push({ level: depth - 1, text, id });
   }
   return headings;
 }

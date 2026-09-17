@@ -392,22 +392,40 @@ if (!tocReady) {
   check("文章页目录可见（桌面）", false, "目录未渲染，后续交互检查跳过");
 } else {
   // 目录滚动联动高亮
-  await evaluate(readerPage.sessionId, `(async () => {
-    const target = document.querySelectorAll('.reading h2')[1] || document.querySelector('.reading h2');
-    if (target) window.scrollTo(0, target.getBoundingClientRect().top + window.scrollY - 40);
-    await new Promise(r => setTimeout(r, 700));
-    return true;
+  /**
+   * 滚动到第二节并等待目录高亮。
+   *
+   * 这里必须**条件轮询**而不是「滚动 + 固定等待」：高亮由 IntersectionObserver
+   * 驱动，回调时机取决于滚动与观察者的注册顺序，固定等待在负载高的机器上会
+   * 偶发失败（服务器第一次跑 smoke:prod 就是这样挂的，报「当前项=null」，
+   * 而交互断言与数据断言全部通过——典型的时序问题，不是功能缺陷）。
+   * 轮询窗口给到 ~10 秒，真出问题时仍然会失败，只是不再拿时序赌结果。
+   */
+  const scrolled = await evaluate(readerPage.sessionId, `(() => {
+    const sections = document.querySelectorAll('.reading h2');
+    const target = sections[1] || sections[0];
+    if (!target) return { found: false, sections: sections.length };
+    // 让标题落在视口顶部约 120px 处：目录高亮用的 IntersectionObserver
+    // 观察带是 -96px 0px -70% 0px，标题若停在 96px 以内会被判为「不在带内」，
+    // 高亮就不会更新——这是断言曾经的假失败来源（真实用户滚动时几乎不会正好停在那一小段）。
+    const top = target.getBoundingClientRect().top + window.scrollY - 120;
+    window.scrollTo(0, Math.max(0, top));
+    return { found: true, sections: sections.length, target: target.textContent.trim().slice(0, 20) };
   })()`);
   let activeToc = null;
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 40; i += 1) {
     activeToc = await evaluate(readerPage.sessionId, `(() => {
       const cur = document.querySelector('nav[aria-label="文章目录"] a[aria-current="location"]');
       return cur ? cur.textContent.trim().slice(0, 30) : null;
     })()`).catch(() => null);
     if (activeToc) break;
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise((r) => setTimeout(r, 250));
   }
-  check("目录随滚动高亮当前小节", !!activeToc, `当前项=${activeToc}`);
+  check(
+    "目录随滚动高亮当前小节",
+    !!activeToc,
+    `当前项=${activeToc} 滚动目标=${scrolled?.target ?? "无"} 小节数=${scrolled?.sections ?? 0}`
+  );
 
   // 代码块复制。无头环境通常拒绝剪贴板写入（非用户手势 / 无权限），
   // 因此成功与失败两种反馈都算通过——要断言的是「点击真的触发了处理并给出反馈」，
