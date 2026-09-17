@@ -1,4 +1,5 @@
 {
+  "//": "根工程只负责检查 scripts/。测试已归属各自 workspace（apps/api/tests），不再从这里跨包引用 apps/api 源码。",
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "noEmit": true,
@@ -6,5 +7,5 @@
       "@/*": ["./apps/api/src/*"]
     }
   },
-  "include": ["tests/**/*.ts", "scripts/**/*.mts", "scripts/**/*.ts"]
+  "include": ["scripts/**/*.mts", "scripts/**/*.ts"]
 }

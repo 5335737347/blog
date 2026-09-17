@@ -17,6 +17,11 @@ model User {
   apiKey      String?   @unique
   createdAt   DateTime  @default(now())
   comments    Comment[]
+
+  /// 会话代次。JWT 中带上该值，校验时与数据库比对；自增即可让该用户
+  /// 已签发的全部令牌立即失效（登出、改密、管理员踢下线）。
+  /// 校验复用 getOptionalAuthSession 已有的那次用户查询，不增加额外开销。
+  tokenVersion Int @default(0)
 }
 
 model Post {
@@ -38,6 +43,8 @@ model Post {
   comments   Comment[]
 
   @@index([published, publishedAt])
+  // 分类页与标签页按 categoryId 过滤；没有这个索引时查询只能先按 published 扫描。
+  @@index([categoryId])
 }
 
 model Category {
@@ -61,6 +68,8 @@ model TagOnPost {
   tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
   @@id([postId, tagId])
+  // 复合主键只能服务 (postId, tagId) 方向；按标签反查文章和标签云计数需要 tagId 索引。
+  @@index([tagId])
 }
 
 model Comment {
@@ -71,8 +80,11 @@ model Comment {
   approved  Boolean  @default(false)
   createdAt DateTime @default(now())
 
-  postId String
-  post   Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  // 可空：postId 为 null 表示这条是「留言板」留言而非文章评论。
+  // 复用同一张表是为了免费得到审核状态机、二级回复、身份防伪和频率限制，
+  // 独立建表会把这些逻辑再抄一遍。
+  postId String?
+  post   Post?   @relation(fields: [postId], references: [id], onDelete: Cascade)
 
   userId String?
   user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
@@ -97,6 +109,30 @@ model Setting {
   id    String @id @default(cuid())
   key   String @unique
   value String
+}
+
+/// 站点所有者的个人资料。单行表：id 固定为 "singleton"。
+///
+/// 这些内容原先写在 apps/web/src/config/profile.ts 里，改一句简介需要改代码、
+/// 重新构建再重启服务；而博客标题却能直接在后台改。移到数据库后二者一致。
+///
+/// socialLinks 存 JSON 字符串而不是拆成独立表：它总是整体读写、条目数量很小
+///（个位数），拆表只会带来额外的 join 与端点。写入时由 profile-service 做
+/// 严格的结构校验。
+model Profile {
+  id       String @id @default("singleton")
+  name     String @default("")
+  headline String @default("")
+  bio      String @default("")
+  location String @default("")
+  avatar   String @default("")
+  email    String @default("")
+  now      String @default("")
+
+  /// JSON: [{ "label": string, "href": string }]
+  socialLinks String @default("[]")
+
+  updatedAt DateTime @updatedAt
 }
 
 model VerificationCode {

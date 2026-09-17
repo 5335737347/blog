@@ -18,6 +18,10 @@
 
 新增或修改契约后，必须同时检查 API 返回值、Web 调用方、测试和 `docs/openapi.yaml`。
 
+Contracts 描述可序列化的注册能力与请求/响应形状，但不包含服务商 SDK、环境变量、模板或
+投递实现。相关运行时边界见
+[`docs/registration-delivery.md`](../../docs/registration-delivery.md)。
+
 ```bash
 npm run typecheck --workspace @kpblog/contracts
 ```
