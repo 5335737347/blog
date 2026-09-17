@@ -194,6 +194,28 @@ pm2 status                                     # blog-web 与 blog-api 均 onlin
 | 暗色模式 | 头部主题切换菜单选「黑暗」，刷新后保持 |
 | 打印预览（Ctrl+P） | 无页头页脚、无目录栏、无评论区，代码块换行 |
 
+### 部署路径预验证（可选，但建议在首次部署前跑一次）
+
+`npm run update` 一般在开发工作区里被验证，而那里的依赖树是完整的，于是发现不了
+三类只在服务器上暴露的问题：`package.json` 漏声明依赖、构建产物入口路径不对、
+生产启动方式与 `ecosystem.config.cjs` 不一致。
+
+`scripts/deploy-verify/verify-deploy.sh` 在独立 worktree 上复现干净安装：
+
+```bash
+git worktree add --detach /tmp/kpblog-clean origin/main
+cp scripts/deploy-verify/verify-deploy.sh /tmp/kpblog-clean/
+cd /tmp/kpblog-clean && bash verify-deploy.sh
+```
+
+它会依次执行 `npm ci`、`prisma generate`、`npm run build`，检查两个构建产物存在，
+然后**按 PM2 的方式**启动入口：`node apps/api/dist/index.js` 并轮询 `/health`，
+以及 `next start --hostname 127.0.0.1 --port 3101` 并请求首页。全部通过时输出
+`RESULT: ALL_DEPLOY_CHECKS_PASSED`。
+
+2026-09-17 在 commit `acaf81e` 上实测通过：`npm ci` 安装 777 个包，
+两个构建产物齐全，API `/health` 返回 ok，Web 首页返回 200。
+
 ### 4. 回滚
 
 代码回滚：
