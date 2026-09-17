@@ -227,6 +227,30 @@ which chromium chromium-browser google-chrome || ls ~/.cache/ms-playwright
 没有的话，`npx playwright install --with-deps chromium` 后把可执行文件路径写进
 `CHROME_BIN`（写进 PM2 的 env 或 shell 配置）。
 
+### 常见失败：Validate workspace 里的 typecheck 报 TS2307
+
+首次更新时出现过：
+
+```text
+.next/types/app/(public)/gallery/page.ts(2,24): error TS2307:
+Cannot find module '.../src/app/(public)/gallery/page.js'
+```
+
+这不是代码缺陷，而是**生成物过期**。`apps/web/tsconfig.json` 会把
+`.next/types/**/*.ts` 纳入编译范围，而这份类型是上一版构建按当时的文件树生成的；
+本次上线删除了 `gallery` 与 `admin/images` 两个路由，旧类型仍去 import 已不存在的
+`page.ts`。`typecheck` 跑在 `build` 之前，自己无法自愈。
+
+`npm run update` 已在校验前删除 `apps/web/.next/types`（以及 `.next/dev/types`），
+所以现在会自动恢复，不需要手工干预。若在其它流程里再遇到同类报错，等价的手工处理是：
+
+```bash
+rm -rf apps/web/.next/types
+```
+
+顺带说明：更新脚本也会在构建前删除 `apps/api/dist`。`tsc` 不清理已移除源文件对应的
+旧输出，残留文件会让构建产物与源码不一致。
+
 ### 4. 回滚
 
 代码回滚：
