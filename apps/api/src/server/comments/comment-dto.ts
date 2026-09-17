@@ -7,7 +7,8 @@ export const publicCommentSelect = {
   createdAt: true,
   replies: {
     where: { approved: true },
-    orderBy: { createdAt: "asc" },
+    // id 作为第二排序键：同秒创建的回复否则顺序不稳定。
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     select: {
       id: true,
       author: true,
@@ -64,6 +65,8 @@ export function toAdminCommentDto(comment: AdminCommentRecord) {
   return {
     ...comment,
     createdAt: comment.createdAt.toISOString(),
+    // 留言板留言没有所属文章；显式给出 scope，省得管理端靠 post === null 猜。
+    scope: comment.postId === null ? ("guestbook" as const) : ("post" as const),
   };
 }
 

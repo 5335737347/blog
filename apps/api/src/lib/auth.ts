@@ -13,6 +13,11 @@ export interface AuthUser {
   username: string;
   role: UserRole;
   displayName: string | null;
+  /**
+   * 会话代次。签发时写入令牌，校验时与数据库比对。
+   * 数据库中的值一旦自增，该用户所有已签发的令牌立即失效。
+   */
+  tokenVersion: number;
 }
 
 let jwtSecret: Uint8Array | null = null;
@@ -30,7 +35,12 @@ function tokenPayload(payload: Record<string, unknown>): AuthUser | null {
   if (
     typeof payload.userId !== "string" ||
     typeof payload.username !== "string" ||
-    (payload.role !== "ADMIN" && payload.role !== "USER")
+    (payload.role !== "ADMIN" && payload.role !== "USER") ||
+    // 缺少代次的令牌一律拒绝（历史令牌没有该字段），
+    // 与已有的「不声明角色即拒绝」保持同一策略。
+    typeof payload.tokenVersion !== "number" ||
+    !Number.isInteger(payload.tokenVersion) ||
+    payload.tokenVersion < 0
   ) {
     return null;
   }
@@ -40,6 +50,7 @@ function tokenPayload(payload: Record<string, unknown>): AuthUser | null {
     username: payload.username,
     role: roleValue(payload.role),
     displayName: typeof payload.displayName === "string" ? payload.displayName : null,
+    tokenVersion: payload.tokenVersion,
   };
 }
 

@@ -1,5 +1,4 @@
 import type { FastifyPluginAsync } from "fastify";
-import { getAuthUser } from "@/lib/auth";
 import {
   createArticle,
   deleteArticle,
@@ -8,7 +7,7 @@ import {
   listArticles,
   updateArticle,
 } from "@/server/articles/article-service";
-import { requireAdminSession } from "@/server/auth/auth-service";
+import { getOptionalAuthSession, requireAdminSession } from "@/server/auth/auth-service";
 import { listCategories, listTags } from "@/server/taxonomy/taxonomy-service";
 import { apiSuccess, assertRequestOrigin, positiveInt, sessionToken } from "@/http";
 
@@ -25,7 +24,7 @@ type ArticleQuery = {
 
 const articleRoutes: FastifyPluginAsync = async (app) => {
   app.get<{ Querystring: ArticleQuery }>("/articles", async (request) => {
-    const user = await getAuthUser(sessionToken(request));
+    const user = await getOptionalAuthSession(sessionToken(request));
     const query = request.query;
     return apiSuccess(await listArticles({
       page: positiveInt(query.page, 1),
@@ -45,7 +44,7 @@ const articleRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.get<{ Params: ArticleParams }>("/articles/:id", async (request) => {
-    const user = await getAuthUser(sessionToken(request));
+    const user = await getOptionalAuthSession(sessionToken(request));
     return apiSuccess(await getArticleById(request.params.id, { isAdmin: user?.role === "ADMIN" }));
   });
 

@@ -42,6 +42,10 @@ npm run start:api
 - `TRUST_PROXY` 默认关闭，启用前必须确认代理会覆盖选定请求头。
 - 上传同时受 Nginx、Fastify multipart 和媒体服务校验约束。
 - 新数据库字段必须配套 Prisma migration。
+- 验证码生命周期、投递适配器、Turnstile 校验和最终渠道可用性判断都属于 API。
+
+注册投递和防刷边界见
+[`docs/registration-delivery.md`](../../docs/registration-delivery.md)。
 
 ## 计划中的 Admin API 边界
 

@@ -3,17 +3,17 @@ import { requireAdminSession } from "@/server/auth/auth-service";
 import {
   createMusicFromFile,
   createMusicFromUrl,
-  deleteImage,
   deleteMusicTrack,
-  listImages,
   listMusicTracks,
-  uploadImage,
 } from "@/server/media/media-service";
 import { apiSuccess, assertRequestOrigin, multipartFiles, sessionToken } from "@/http";
 
 type IdParams = { id: string };
-type ImageQuery = { file?: string };
 
+/**
+ * 媒体路由。目前只剩音乐：站点的图片走外部图床（GitHub），
+ * 本地上传/列举/删除图片的端点与后台页面已移除。
+ */
 const mediaRoutes: FastifyPluginAsync = async (app) => {
   app.get("/music", async () => apiSuccess(await listMusicTracks()));
 
@@ -33,24 +33,6 @@ const mediaRoutes: FastifyPluginAsync = async (app) => {
     assertRequestOrigin(request);
     await requireAdminSession(sessionToken(request));
     return apiSuccess(await deleteMusicTrack(request.params.id));
-  });
-
-  app.get("/images", async (request) => {
-    await requireAdminSession(sessionToken(request));
-    return apiSuccess(await listImages());
-  });
-
-  app.delete<{ Querystring: ImageQuery }>("/images", async (request) => {
-    assertRequestOrigin(request);
-    await requireAdminSession(sessionToken(request));
-    return apiSuccess(await deleteImage(request.query.file || null));
-  });
-
-  app.post("/upload", async (request, reply) => {
-    assertRequestOrigin(request);
-    await requireAdminSession(sessionToken(request));
-    const { files } = await multipartFiles(request);
-    return reply.status(201).send(apiSuccess(await uploadImage(files[0] || null)));
   });
 };
 

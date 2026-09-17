@@ -5,33 +5,51 @@ import {
   SESSION_MAX_AGE_SECONDS,
 } from "@/lib/auth";
 import {
+  changeOwnPassword,
   getCurrentSession,
   getCurrentUserApiKey,
   loginUser,
   logoutCurrentUser,
   regenerateCurrentUserApiKey,
   registerUser,
+  requestPasswordReset,
+  resetPasswordWithCode,
 } from "@/server/auth/auth-service";
 import {
   getRegistrationCapabilities,
   normalizeVerificationTarget,
-  sendRegisterVerificationCode,
-  type VerificationChannel,
+  sendVerificationCode,
 } from "@/server/auth/verification-code-service";
-import { badRequest } from "@/server/errors";
-import { inferCountry } from "@/server/location/country-service";
-import { assertRateLimit, requestIp } from "@/server/request-guard";
+import {
+  assertRateLimit,
+  assertRateLimitNotExceeded,
+  clearRateLimit,
+  recordRateLimitFailure,
+  requestIp,
+} from "@/server/request-guard";
 import {
   apiSuccess,
   assertRequestOrigin,
   guardRequest,
-  requestHeaders,
   sessionToken,
 } from "@/http";
 
-function channelValue(value: unknown): VerificationChannel {
-  if (value === "email" || value === "phone") return value;
-  throw badRequest("验证码渠道不正确");
+const LOGIN_ACCOUNT_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_ACCOUNT_MAX_FAILURES = 10;
+
+/**
+ * 登录的账号维度限流键。
+ *
+ * 用 SHA-256 而不是明文：限流表里不应留下用户名或邮箱。
+ * 标识符可能是用户名、邮箱或手机号，统一 trim + 小写后哈希。
+ */
+function loginAccountKey(body: unknown): string | null {
+  const identifier = (body as { identifier?: unknown } | null)?.identifier;
+  if (typeof identifier !== "string") return null;
+  const normalized = identifier.trim().toLowerCase();
+  if (!normalized) return null;
+  const hash = crypto.createHash("sha256").update(`login:${normalized}`).digest("hex");
+  return `auth:login:account:${hash}`;
 }
 
 const authRoutes: FastifyPluginAsync = async (app) => {
@@ -40,13 +58,12 @@ const authRoutes: FastifyPluginAsync = async (app) => {
   app.post("/auth/verification-code", async (request) => {
     assertRequestOrigin(request);
     const body = (request.body || {}) as Record<string, unknown>;
-    const channel = channelValue(body.channel);
-    const target = normalizeVerificationTarget(channel, body.target);
-    const targetHash = crypto.createHash("sha256").update(`${channel}:${target}`).digest("hex");
+    const target = normalizeVerificationTarget(body.target);
+    const targetHash = crypto.createHash("sha256").update(`email:${target}`).digest("hex");
     const guard = guardRequest(request);
     await assertRateLimit(`auth:verification-code:ip:${requestIp(guard)}`, 5, 60 * 60 * 1000);
     await assertRateLimit(`auth:verification-code:target:${targetHash}`, 5, 60 * 60 * 1000);
-    return apiSuccess(await sendRegisterVerificationCode(channel, target));
+    return apiSuccess(await sendVerificationCode("register", target));
   });
 
   app.post("/auth/register", async (request, reply) => {
@@ -66,7 +83,26 @@ const authRoutes: FastifyPluginAsync = async (app) => {
   app.post("/auth/login", async (request, reply) => {
     assertRequestOrigin(request);
     await assertRateLimit(`auth:login:${requestIp(guardRequest(request))}`, 20, 15 * 60 * 1000);
-    const result = await loginUser(request.body);
+
+    // 按账号维度补充一道限流：仅有 IP 维度时，攻击者换 IP 就能绕过。
+    // 只统计失败次数，因此正常用户多次成功登录不会被计入，
+    // 也不会被攻击者用故意输错的方式定向锁死账号。
+    const accountKey = loginAccountKey(request.body);
+    if (accountKey) {
+      await assertRateLimitNotExceeded(accountKey, LOGIN_ACCOUNT_MAX_FAILURES);
+    }
+
+    let result: Awaited<ReturnType<typeof loginUser>>;
+    try {
+      result = await loginUser(request.body);
+    } catch (error) {
+      if (accountKey) {
+        await recordRateLimitFailure(accountKey, LOGIN_ACCOUNT_WINDOW_MS);
+      }
+      throw error;
+    }
+    if (accountKey) await clearRateLimit(accountKey);
+
     reply.setCookie(SESSION_COOKIE_NAME, result.token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
@@ -77,10 +113,50 @@ const authRoutes: FastifyPluginAsync = async (app) => {
     return apiSuccess(result.data);
   });
 
+  // ===== 密码 =====
+
+  app.post("/auth/password/reset-code", async (request) => {
+    assertRequestOrigin(request);
+    const body = (request.body || {}) as Record<string, unknown>;
+    const target = normalizeVerificationTarget(body.email);
+    const targetHash = crypto.createHash("sha256").update(`reset:${target}`).digest("hex");
+    const guard = guardRequest(request);
+
+    // 与注册验证码同一套限流：按 IP 与按目标各 5 次/小时。
+    await assertRateLimit(`auth:reset-code:ip:${requestIp(guard)}`, 5, 60 * 60 * 1000);
+    await assertRateLimit(`auth:reset-code:target:${targetHash}`, 5, 60 * 60 * 1000);
+
+    return apiSuccess(await requestPasswordReset(body));
+  });
+
+  app.post("/auth/password/reset", async (request) => {
+    assertRequestOrigin(request);
+    const guard = guardRequest(request);
+    // 限制尝试次数，避免验证码被暴力枚举。
+    await assertRateLimit(`auth:password-reset:ip:${requestIp(guard)}`, 10, 60 * 60 * 1000);
+    return apiSuccess(await resetPasswordWithCode(request.body));
+  });
+
+  app.put("/auth/password", async (request, reply) => {
+    assertRequestOrigin(request);
+    const result = await changeOwnPassword(sessionToken(request), request.body);
+
+    // 改密会吊销全部旧令牌；这里把新令牌写回当前设备，避免用户被自己踢下线。
+    reply.setCookie(SESSION_COOKIE_NAME, result.token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: SESSION_MAX_AGE_SECONDS,
+    });
+    return apiSuccess({ changed: true });
+  });
+
   app.post("/auth/logout", async (request, reply) => {
     assertRequestOrigin(request);
     reply.clearCookie(SESSION_COOKIE_NAME, { path: "/" });
-    return apiSuccess(await logoutCurrentUser());
+    // 传入令牌，让服务端把这个账号已签发的全部令牌一并作废。
+    return apiSuccess(await logoutCurrentUser(sessionToken(request)));
   });
 
   app.get("/auth/me", async (request) => apiSuccess(await getCurrentSession(sessionToken(request))));
@@ -92,13 +168,6 @@ const authRoutes: FastifyPluginAsync = async (app) => {
     return apiSuccess(await regenerateCurrentUserApiKey(sessionToken(request)));
   });
 
-  app.get("/location/country", async (request, reply) => {
-    reply.headers({
-      "Cache-Control": "private, no-store",
-      Vary: "Accept-Language, CF-IPCountry, X-Vercel-IP-Country, CloudFront-Viewer-Country",
-    });
-    return apiSuccess(inferCountry(requestHeaders(request)));
-  });
 };
 
 export default authRoutes;

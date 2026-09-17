@@ -9,6 +9,8 @@ import {
   toPostDetailDto,
   toPostSummaryDto,
 } from "./article-dto";
+import { POST_ORDER_DESC } from "./article-order";
+import { resolveTagIds } from "@/server/taxonomy/taxonomy-service";
 
 export interface ListArticlesOptions {
   page: number;
@@ -27,8 +29,34 @@ export interface ArticleMutationInput {
   content?: unknown;
   coverImage?: unknown;
   published?: unknown;
+  /** 可选发布日期（ISO 字符串）。用于回填旧文章，见 parsePublishedAt。 */
+  publishedAt?: unknown;
   categoryId?: unknown;
   tagIds?: unknown;
+}
+
+/**
+ * 解析可选的发布日期。
+ *
+ * 之前只有 CLI 发布（frontmatter 的 `date:`）能指定日期，后台编辑器恒为
+ * 「保存那一刻」。结果是：通过后台回填的旧文章全部落在今年，归档按年份分组
+ * 失真、文章列表排序也错乱。
+ *
+ * 语义：
+ *   undefined → 未提供，保持原有行为（发布时取当前时间）
+ *   null / "" → 显式清空
+ *   合法日期串 → 使用该日期
+ */
+function parsePublishedAt(value: unknown): Date | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  const text = trimmedString(value);
+  if (!text) return null;
+  const date = new Date(text);
+  if (Number.isNaN(date.getTime())) {
+    throw badRequest("发布日期格式不正确");
+  }
+  return date;
 }
 
 function trimmedString(value: unknown): string | undefined {
@@ -45,23 +73,26 @@ function booleanValue(value: unknown): boolean | undefined {
 }
 
 function stringArray(value: unknown): string[] {
-  return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === "string")
-    : [];
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+    throw badRequest("标签数据格式不正确");
+  }
+  const values = [...new Set(value.map((item) => item.trim()).filter(Boolean))];
+  if (values.length > 50) throw badRequest("单篇文章最多选择 50 个标签");
+  return values;
 }
 
-async function resolveTags(tagNames: string[]): Promise<string[]> {
-  const ids: string[] = [];
-  for (const name of tagNames) {
-    const s = slugify(name);
-    const tag = await prisma.tag.upsert({
-      where: { slug: s },
-      update: {},
-      create: { name, slug: s },
-    });
-    ids.push(tag.id);
-  }
-  return ids;
+async function assertTaxonomyReferences(categoryId: string | null, tagIds: string[]) {
+  const [category, tagCount] = await Promise.all([
+    categoryId
+      ? prisma.category.findUnique({ where: { id: categoryId }, select: { id: true } })
+      : Promise.resolve(null),
+    tagIds.length
+      ? prisma.tag.count({ where: { id: { in: tagIds } } })
+      : Promise.resolve(0),
+  ]);
+  if (categoryId && !category) throw badRequest("分类不存在");
+  if (tagCount !== tagIds.length) throw badRequest("包含不存在的标签");
 }
 
 function buildArticleWhere(options: ListArticlesOptions): Prisma.PostWhereInput {
@@ -100,7 +131,7 @@ export async function listArticles(options: ListArticlesOptions) {
   const [articles, total] = await Promise.all([
     prisma.post.findMany({
       where,
-      orderBy: { publishedAt: "desc" },
+      orderBy: POST_ORDER_DESC,
       skip: (options.page - 1) * options.pageSize,
       take: options.pageSize,
       select: postSummarySelect,
@@ -128,20 +159,26 @@ export async function createArticle(input: ArticleMutationInput) {
   }
 
   const slugInput = trimmedString(input.slug);
-  const finalSlug = slugInput || slugify(title);
+  const finalSlug = slugify(slugInput || title);
   const existing = await prisma.post.findUnique({ where: { slug: finalSlug } });
   if (existing) {
     throw badRequest("slug 已存在，请修改");
   }
 
+  const explicitTagIds = stringArray(input.tagIds);
+  const categoryId = optionalText(input.categoryId) || null;
+  await assertTaxonomyReferences(categoryId, explicitTagIds);
+
   const autoTags = extractHashTags(content);
   const allTagIds = [
-    ...new Set([...stringArray(input.tagIds), ...(await resolveTags(autoTags))]),
+    ...new Set([...explicitTagIds, ...(await resolveTagIds(autoTags))]),
   ];
   const published = booleanValue(input.published) ?? false;
+  const requestedPublishedAt = parsePublishedAt(input.publishedAt);
   const excerpt = optionalText(input.excerpt);
   const coverImage = optionalText(input.coverImage);
-  const categoryId = optionalText(input.categoryId);
+  if (excerpt && excerpt.length > 500) throw badRequest("摘要不能超过 500 个字符");
+  if (coverImage && coverImage.length > 2048) throw badRequest("封面图 URL 过长");
 
   const post = await prisma.post.create({
     data: {
@@ -151,8 +188,8 @@ export async function createArticle(input: ArticleMutationInput) {
       content,
       coverImage: coverImage || null,
       published,
-      publishedAt: published ? new Date() : null,
-      categoryId: categoryId || null,
+      publishedAt: published ? (requestedPublishedAt ?? new Date()) : null,
+      categoryId,
       tags: allTagIds.length
         ? { create: allTagIds.map((tagId) => ({ tagId })) }
         : undefined,
@@ -186,20 +223,16 @@ export async function getPublicArticleBySlug(slug: string) {
 }
 
 export async function updateArticle(id: string, input: ArticleMutationInput) {
-  const existing = await prisma.post.findUnique({ where: { id } });
+  const existing = await prisma.post.findUnique({
+    where: { id },
+    // 需要已有的标签 id：只改正文时不能把它们清掉。
+    include: { tags: { select: { tagId: true } } },
+  });
   if (!existing) {
     throw notFound("文章不存在");
   }
 
   const slugInput = trimmedString(input.slug);
-  if (slugInput) {
-    const slugConflict = await prisma.post.findFirst({
-      where: { slug: slugInput, id: { not: id } },
-    });
-    if (slugConflict) {
-      throw badRequest("slug 已存在");
-    }
-  }
 
   const title = trimmedString(input.title);
   const content = trimmedString(input.content);
@@ -218,14 +251,24 @@ export async function updateArticle(id: string, input: ArticleMutationInput) {
     throw badRequest("正文不能超过 100 万个字符");
   }
 
+  // 显式传入的日期优先级最高，其次是「由草稿转为发布」取当前时间。
+  const requestedPublishedAt = parsePublishedAt(input.publishedAt);
   let publishedAt = existing.publishedAt;
-  if (published && !existing.published) {
+  if (requestedPublishedAt !== undefined) {
+    publishedAt = requestedPublishedAt;
+  } else if (published && !existing.published) {
     publishedAt = new Date();
   } else if (published === false) {
     publishedAt = null;
   }
 
-  const finalSlug = slugInput || slugify(title || existing.title);
+  // slug 只在显式传入时才变化。此前是 `slugify(slugInput || title || existing.title)`，
+  // 于是「只改正文/封面」也会用标题重算出新 slug，把文章 URL 换掉、断掉所有已有链接
+  // 与外链。未提供 slug 时必须沿用 existing.slug。
+  const finalSlug = slugInput ? slugify(slugInput) : existing.slug;
+  if (!finalSlug) {
+    throw badRequest("slug 不能为空");
+  }
   const slugConflict = await prisma.post.findFirst({
     where: { slug: finalSlug, id: { not: id } },
   });
@@ -237,6 +280,7 @@ export async function updateArticle(id: string, input: ArticleMutationInput) {
   if (input.title !== undefined) data.title = title;
   if (input.excerpt !== undefined || input.content !== undefined) {
     const excerpt = optionalText(input.excerpt);
+    if (excerpt && excerpt.length > 500) throw badRequest("摘要不能超过 500 个字符");
     data.excerpt = excerpt || (content ? autoExcerpt(content) : existing.excerpt);
   }
   if (input.content !== undefined) {
@@ -244,17 +288,29 @@ export async function updateArticle(id: string, input: ArticleMutationInput) {
   }
   if (input.coverImage !== undefined) {
     const coverImage = optionalText(input.coverImage);
+    if (coverImage && coverImage.length > 2048) throw badRequest("封面图 URL 过长");
     data.coverImage = coverImage || null;
   }
   if (published !== undefined) {
     data.published = published;
+  }
+  if (published !== undefined || input.publishedAt !== undefined) {
     data.publishedAt = publishedAt;
   }
 
   if (input.content !== undefined || input.tagIds !== undefined) {
-    const autoTags = content ? extractHashTags(content) : [];
-    const autoTagIds = await resolveTags(autoTags);
-    const allTagIds = [...new Set([...stringArray(input.tagIds), ...autoTagIds])];
+    // tagIds 未显式提供时必须沿用文章已有标签。
+    // 之前 stringArray(undefined) 返回空数组，于是「只改正文」会把手工挑选的标签
+    // 连同自动标签一起替换掉，造成静默的数据丢失。
+    const explicitTagIds =
+      input.tagIds !== undefined
+        ? stringArray(input.tagIds)
+        : existing.tags.map((item) => item.tagId);
+    if (input.tagIds !== undefined) {
+      await assertTaxonomyReferences(null, explicitTagIds);
+    }
+    const autoTagIds = content ? await resolveTagIds(extractHashTags(content)) : [];
+    const allTagIds = [...new Set([...explicitTagIds, ...autoTagIds])];
     data.tags = {
       deleteMany: {},
       create: allTagIds.map((tagId) => ({ tagId })),
@@ -263,6 +319,7 @@ export async function updateArticle(id: string, input: ArticleMutationInput) {
 
   if (input.categoryId !== undefined) {
     const categoryId = optionalText(input.categoryId);
+    await assertTaxonomyReferences(categoryId || null, []);
     data.category = categoryId
       ? { connect: { id: categoryId } }
       : { disconnect: true };

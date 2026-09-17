@@ -2,15 +2,11 @@ import crypto from "crypto";
 import net from "net";
 import tls from "tls";
 import { getJwtSecret } from "@/lib/env";
-import { normalizePhoneNumber } from "@/lib/phone";
 import { prisma } from "@/lib/prisma";
 import { badRequest } from "@/server/errors";
 
 const CODE_TTL_MS = 10 * 60 * 1000;
 const MAX_ATTEMPTS = 5;
-
-export type VerificationChannel = "email" | "phone";
-type VerificationPurpose = "register";
 
 interface SmtpConfig {
   host: string;
@@ -21,12 +17,6 @@ interface SmtpConfig {
   from: string;
 }
 
-interface SmsConfig {
-  apiUrl: string;
-  token: string;
-  sender: string;
-}
-
 function normalizeEmail(value: unknown): string {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
 }
@@ -35,19 +25,27 @@ function validEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-function codeKey(channel: VerificationChannel, target: string, purpose: VerificationPurpose): string {
-  return `${purpose}:${channel}:${target}`;
+/**
+ * 验证码用途。注册与重置密码共用同一套生成、投递、限流与校验机制，
+ * 只用前缀区分，避免两套几乎相同的代码各自演化。
+ *
+ * 前缀不同还有一个安全作用：注册验证码无法被拿去重置密码，反之亦然。
+ */
+export type VerificationPurpose = "register" | "reset";
+
+const MAIL_COPY: Record<VerificationPurpose, { subject: string; lead: string }> = {
+  register: { subject: "注册验证码", lead: "你的注册验证码是" },
+  reset: { subject: "重置密码验证码", lead: "你的重置密码验证码是" },
+};
+
+function codeKey(purpose: VerificationPurpose, target: string): string {
+  return `${purpose}:email:${target}`;
 }
 
-function codeHash(
-  channel: VerificationChannel,
-  target: string,
-  purpose: VerificationPurpose,
-  code: string
-): string {
+function codeHash(purpose: VerificationPurpose, target: string, code: string): string {
   return crypto
     .createHmac("sha256", getJwtSecret())
-    .update(`${purpose}:${channel}:${target}:${code}`)
+    .update(`${purpose}:email:${target}:${code}`)
     .digest("hex");
 }
 
@@ -58,7 +56,8 @@ function timingSafeEqualHex(a: string, b: string): boolean {
   return crypto.timingSafeEqual(Buffer.from(a, "hex"), Buffer.from(b, "hex"));
 }
 
-function smtpConfig(): SmtpConfig | null {
+/** 导出仅供 scripts/smtp-check.ts 诊断使用；业务代码请走 sendSmtpMail。 */
+export function smtpConfig(): SmtpConfig | null {
   const host = process.env.SMTP_HOST?.trim();
   const user = process.env.SMTP_USER?.trim();
   const password = process.env.SMTP_PASSWORD?.trim();
@@ -81,25 +80,6 @@ function smtpConfig(): SmtpConfig | null {
     password,
     from,
   };
-}
-
-function smsConfig(): SmsConfig | null {
-  const apiUrl = process.env.SMS_API_URL?.trim();
-  const token = process.env.SMS_API_TOKEN?.trim();
-  const sender = process.env.SMS_SENDER?.trim() || "KpBlog";
-  if (!apiUrl || !token) return null;
-
-  try {
-    const url = new URL(apiUrl);
-    if (process.env.NODE_ENV === "production" && url.protocol !== "https:") {
-      throw badRequest("生产环境短信网关必须使用 HTTPS");
-    }
-  } catch (error) {
-    if (error && typeof error === "object" && "status" in error) throw error;
-    throw badRequest("短信网关地址配置不正确");
-  }
-
-  return { apiUrl, token, sender };
 }
 
 function safeHeader(value: string): string {
@@ -179,181 +159,298 @@ async function maybeUpgradeStartTls(
   return tls.connect({ socket, servername: config.host });
 }
 
+/**
+ * 是否允许把验证码直接回显给调用方（仅用于本地开发没有 SMTP 的场景）。
+ *
+ * 之前用 `NODE_ENV !== "production"` 判断，一旦部署时漏设 NODE_ENV
+ * （例如绕过 PM2 直接 `node dist/index.js`），接口就会把真实验证码返回给任何人，
+ * 等于任何人都能完成任意邮箱的注册。改为必须显式开启，默认安全。
+ */
+function debugCodeAllowed(): boolean {
+  return process.env.ALLOW_DEBUG_VERIFICATION_CODE === "true";
+}
+
 async function sendSmtpMail(to: string, subject: string, text: string) {
   const config = smtpConfig();
   if (!config) {
-    if (process.env.NODE_ENV === "production") {
-      throw badRequest("邮箱服务未配置");
+    if (debugCodeAllowed()) {
+      return false;
     }
-    return false;
+    throw badRequest("邮箱服务未配置");
   }
 
   let socket = await connectSmtp(config);
-  await readSmtpResponse(socket);
-  let ehlo = await smtpCommand(socket, "EHLO localhost", [250]);
-  socket = await maybeUpgradeStartTls(socket, config, ehlo);
-  if (isTlsSocket(socket)) {
-    ehlo = await smtpCommand(socket, "EHLO localhost", [250]);
-  }
-  void ehlo;
-
-  const auth = Buffer.from(`\0${config.user}\0${config.password}`, "utf8").toString("base64");
-  await smtpCommand(socket, `AUTH PLAIN ${auth}`, [235]);
-  await smtpCommand(socket, `MAIL FROM:<${config.from}>`, [250]);
-  await smtpCommand(socket, `RCPT TO:<${to}>`, [250, 251]);
-  await smtpCommand(socket, "DATA", [354]);
-  await socketWrite(
-    socket,
-    [
-      `From: ${safeHeader(config.from)}`,
-      `To: ${safeHeader(to)}`,
-      `Subject: ${safeHeader(subject)}`,
-      "MIME-Version: 1.0",
-      "Content-Type: text/plain; charset=utf-8",
-      "",
-      text.replace(/\r?\n/g, "\r\n"),
-      ".",
-      "",
-    ].join("\r\n")
-  );
-  await readSmtpResponse(socket);
-  await smtpCommand(socket, "QUIT", [221]).catch(() => {});
-  socket.end();
-  return true;
-}
-
-async function sendSms(phone: string, code: string) {
-  const config = smsConfig();
-  if (!config) {
-    if (process.env.NODE_ENV === "production") {
-      throw badRequest("短信服务未配置");
+  try {
+    await readSmtpResponse(socket);
+    let ehlo = await smtpCommand(socket, "EHLO localhost", [250]);
+    socket = await maybeUpgradeStartTls(socket, config, ehlo);
+    if (isTlsSocket(socket)) {
+      ehlo = await smtpCommand(socket, "EHLO localhost", [250]);
     }
-    return false;
-  }
+    void ehlo;
 
-  const response = await fetch(config.apiUrl, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${config.token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      to: phone,
-      code,
-      sender: config.sender,
-      purpose: "register",
-      message: `你的注册验证码是 ${code}，10 分钟内有效。`,
-    }),
-    signal: AbortSignal.timeout(15_000),
-  });
+    // 服务器未提供 STARTTLS 时，之前会继续在明文连接上发 AUTH PLAIN，
+    // 等于把邮箱密码泄漏到网络上。除非显式允许（例如本机中继），否则拒绝。
+    if (!isTlsSocket(socket) && process.env.SMTP_ALLOW_INSECURE !== "true") {
+      throw new Error(
+        "SMTP 连接未加密，拒绝发送凭据。请启用 SMTP_SECURE 或 STARTTLS；" +
+          "若确实使用本机明文中继，请显式设置 SMTP_ALLOW_INSECURE=true。"
+      );
+    }
 
-  if (!response.ok) {
-    throw badRequest("短信发送失败，请稍后重试");
+    const auth = Buffer.from(`\0${config.user}\0${config.password}`, "utf8").toString("base64");
+    await smtpCommand(socket, `AUTH PLAIN ${auth}`, [235]);
+    await smtpCommand(socket, `MAIL FROM:<${config.from}>`, [250]);
+    await smtpCommand(socket, `RCPT TO:<${to}>`, [250, 251]);
+    await smtpCommand(socket, "DATA", [354]);
+    await socketWrite(
+      socket,
+      [
+        `From: ${safeHeader(config.from)}`,
+        `To: ${safeHeader(to)}`,
+        `Subject: ${safeHeader(subject)}`,
+        "MIME-Version: 1.0",
+        "Content-Type: text/plain; charset=utf-8",
+        "",
+        text.replace(/\r?\n/g, "\r\n"),
+        ".",
+        "",
+      ].join("\r\n")
+    );
+    await readSmtpResponse(socket);
+    await smtpCommand(socket, "QUIT", [221]).catch(() => {});
+    return true;
+  } finally {
+    // 任何一步失败都要关闭连接，否则 socket 会一直挂到 15 秒超时。
+    socket.end();
   }
-  return true;
 }
 
-export function normalizeVerificationTarget(
-  channel: VerificationChannel,
-  value: unknown
-): string {
-  if (channel === "email") {
-    const email = normalizeEmail(value);
-    if (!validEmail(email)) throw badRequest("请输入有效邮箱");
-    return email;
-  }
-
-  const phone = normalizePhoneNumber(value);
-  if (!phone) throw badRequest("请输入有效手机号");
-  return phone;
+export function normalizeVerificationTarget(value: unknown): string {
+  const email = normalizeEmail(value);
+  if (!validEmail(email)) throw badRequest("请输入有效邮箱");
+  return email;
 }
 
-export async function sendRegisterVerificationCode(
-  channel: VerificationChannel,
+export async function sendVerificationCode(
+  purpose: VerificationPurpose,
   inputTarget: unknown
 ) {
-  const target = normalizeVerificationTarget(channel, inputTarget);
+  const target = normalizeVerificationTarget(inputTarget);
   const code = crypto.randomInt(0, 1_000_000).toString().padStart(6, "0");
   const expiresAt = Date.now() + CODE_TTL_MS;
-  const sent = channel === "email"
-    ? await sendSmtpMail(
-        target,
-        "注册验证码",
-        `你的注册验证码是：${code}\n\n验证码 10 分钟内有效。如果不是你本人操作，请忽略这封邮件。`
-      )
-    : await sendSms(target, code);
+  const copy = MAIL_COPY[purpose];
+  const sent = await sendSmtpMail(
+    target,
+    copy.subject,
+    `${copy.lead}：${code}\n\n验证码 10 分钟内有效。如果不是你本人操作，请忽略这封邮件。`
+  );
 
-  const key = codeKey(channel, target, "register");
+  const key = codeKey(purpose, target);
+  const hash = codeHash(purpose, target, code);
   await prisma.verificationCode.upsert({
     where: { key },
     update: {
-      hash: codeHash(channel, target, "register", code),
+      hash,
       expiresAt: new Date(expiresAt),
       attempts: 0,
     },
     create: {
       key,
-      hash: codeHash(channel, target, "register", code),
+      hash,
       expiresAt: new Date(expiresAt),
     },
   });
 
-  void prisma.verificationCode.deleteMany({
-    where: { expiresAt: { lt: new Date() } },
-  });
+  // 清理过期验证码。必须捕获拒绝：未处理的 Promise 拒绝在 Node 默认策略下会终止进程。
+  void prisma.verificationCode
+    .deleteMany({ where: { expiresAt: { lt: new Date() } } })
+    .catch((error) => {
+      console.error("[verification-code] 清理过期验证码失败:", error);
+    });
 
   return {
     sent,
-    channel,
     target,
     expiresAt: new Date(expiresAt).toISOString(),
-    debugCode: sent ? undefined : code,
+    debugCode: debugCodeAllowed() && !sent ? code : undefined,
   };
 }
 
-export async function assertRegisterVerificationCode(
-  channel: VerificationChannel,
+export async function assertVerificationCode(
+  purpose: VerificationPurpose,
   inputTarget: unknown,
   inputCode: unknown
 ) {
-  const target = normalizeVerificationTarget(channel, inputTarget);
+  const target = normalizeVerificationTarget(inputTarget);
   const code = typeof inputCode === "string" ? inputCode.trim() : "";
-  const key = codeKey(channel, target, "register");
+  const key = codeKey(purpose, target);
   const entry = await prisma.verificationCode.findUnique({ where: { key } });
-  const label = channel === "email" ? "邮箱" : "手机";
 
   if (!/^\d{6}$/.test(code) || !entry) {
-    throw badRequest(`${label}验证码错误`);
+    throw badRequest("邮箱验证码错误");
   }
   if (entry.expiresAt.getTime() < Date.now()) {
     await prisma.verificationCode.delete({ where: { key } });
-    throw badRequest(`${label}验证码已过期，请重新获取`);
+    throw badRequest("邮箱验证码已过期，请重新获取");
   }
   if (entry.attempts >= MAX_ATTEMPTS) {
     await prisma.verificationCode.delete({ where: { key } });
-    throw badRequest(`${label}验证码尝试次数过多，请重新获取`);
+    throw badRequest("邮箱验证码尝试次数过多，请重新获取");
   }
 
-  if (!timingSafeEqualHex(entry.hash, codeHash(channel, target, "register", code))) {
+  if (!timingSafeEqualHex(entry.hash, codeHash(purpose, target, code))) {
     await prisma.verificationCode.update({
       where: { key },
       data: { attempts: { increment: 1 } },
     });
-    throw badRequest(`${label}验证码错误`);
+    throw badRequest("邮箱验证码错误");
   }
 
   await prisma.verificationCode.delete({ where: { key } });
 }
 
-export interface RegistrationCapabilities {
-  email: boolean;
-  phone: boolean;
+export function getRegistrationCapabilities(): { email: boolean } {
+  return {
+    email: smtpConfig() !== null || debugCodeAllowed(),
+  };
 }
 
-export function getRegistrationCapabilities(): RegistrationCapabilities {
-  const developmentFallback = process.env.NODE_ENV !== "production";
-  return {
-    email: developmentFallback || smtpConfig() !== null,
-    phone: developmentFallback || smsConfig() !== null,
-  };
+export interface SmtpProbeStep {
+  name: string;
+  ok: boolean;
+  detail: string;
+}
+
+/**
+ * 把 SMTP 裸状态码翻译成能照着做的提示。
+ *
+ * 协议层只会抛出 `SMTP command failed: 535` 这种句子——配置阶段真正卡人的是
+ * 「Key 错」和「域名没验证」这两种完全不同的原因，却都表现为一个三位数。
+ */
+function smtpHint(code: number, stage: string): string {
+  switch (code) {
+    case 534:
+    case 535:
+      return "认证被拒：API Key 可能无效或已撤销，或 SMTP_PASSWORD 填的不是 Key。";
+    case 550:
+    case 553:
+      return stage === "发件人"
+        ? "发件人被拒：SMTP_FROM 的域名通常需要先在服务商完成 DNS 验证（SPF/DKIM）。"
+        : "收件人被拒：确认地址拼写，且服务商允许发往该域名。";
+    case 530:
+    case 538:
+      return "服务器要求先建立加密连接：检查 SMTP_SECURE / SMTP_STARTTLS / SMTP_PORT 是否配套。";
+    case 421:
+      return "服务端限流或暂时不可用，稍后重试。";
+    default:
+      return "服务端返回了非预期状态码。";
+  }
+}
+
+function smtpFailure(error: unknown, stage: string): string {
+  const message = error instanceof Error ? error.message : String(error);
+  const match = /SMTP command failed: (\d{3})/.exec(message);
+  return match ? `${message} —— ${smtpHint(Number.parseInt(match[1], 10), stage)}` : message;
+}
+
+/**
+ * 逐级探测 SMTP 配置，走到 MAIL FROM 为止（不发送正文）。
+ *
+ * 刻意复用 connectSmtp / smtpCommand / maybeUpgradeStartTls——诊断必须跑在
+ * 生产同一条路径上。另写一份协议实现的话，「诊断通过但线上失败」就毫无意义。
+ */
+export async function probeSmtpConnection(): Promise<SmtpProbeStep[]> {
+  const steps: SmtpProbeStep[] = [];
+  const config = smtpConfig();
+
+  if (!config) {
+    steps.push({
+      name: "配置",
+      ok: false,
+      detail: "SMTP_HOST / SMTP_USER / SMTP_PASSWORD 未配置完整",
+    });
+    return steps;
+  }
+
+  steps.push({
+    name: "配置",
+    ok: true,
+    detail:
+      `${config.host}:${config.port}` +
+      `${config.secure ? "（隐式 TLS）" : "（明文，视服务器能力升级 STARTTLS）"}` +
+      `　用户 ${config.user}　发件人 ${config.from}`,
+  });
+
+  let socket: net.Socket | tls.TLSSocket;
+  try {
+    socket = await connectSmtp(config);
+  } catch (error) {
+    steps.push({ name: "连接", ok: false, detail: smtpFailure(error, "连接") });
+    return steps;
+  }
+
+  try {
+    const banner = await readSmtpResponse(socket);
+    steps.push({ name: "连接", ok: true, detail: banner.trim().split(/\r?\n/)[0] });
+
+    let ehlo = await smtpCommand(socket, "EHLO localhost", [250]);
+    socket = await maybeUpgradeStartTls(socket, config, ehlo);
+    if (isTlsSocket(socket)) {
+      ehlo = await smtpCommand(socket, "EHLO localhost", [250]);
+    }
+    steps.push({
+      name: "能力",
+      ok: true,
+      detail: /STARTTLS/i.test(ehlo) ? "服务器通告 STARTTLS" : "服务器未通告 STARTTLS",
+    });
+
+    if (isTlsSocket(socket)) {
+      steps.push({
+        name: "传输安全",
+        ok: true,
+        detail: `${socket.getProtocol() ?? "TLS"} / ${socket.getCipher()?.name ?? "未知套件"}`,
+      });
+    } else if (process.env.SMTP_ALLOW_INSECURE === "true") {
+      steps.push({ name: "传输安全", ok: true, detail: "明文（已显式允许 SMTP_ALLOW_INSECURE=true）" });
+    } else {
+      steps.push({ name: "传输安全", ok: false, detail: "连接未加密，已拒绝发送凭据" });
+      return steps;
+    }
+
+    try {
+      const auth = Buffer.from(`\0${config.user}\0${config.password}`, "utf8").toString("base64");
+      await smtpCommand(socket, `AUTH PLAIN ${auth}`, [235]);
+      steps.push({ name: "认证", ok: true, detail: "AUTH PLAIN 通过" });
+    } catch (error) {
+      steps.push({ name: "认证", ok: false, detail: smtpFailure(error, "认证") });
+      return steps;
+    }
+
+    try {
+      await smtpCommand(socket, `MAIL FROM:<${config.from}>`, [250]);
+      steps.push({ name: "发件人", ok: true, detail: `${config.from} 被服务器接受` });
+    } catch (error) {
+      steps.push({ name: "发件人", ok: false, detail: smtpFailure(error, "发件人") });
+      return steps;
+    }
+
+    await smtpCommand(socket, "QUIT", [221]).catch(() => {});
+    return steps;
+  } catch (error) {
+    steps.push({ name: "会话", ok: false, detail: smtpFailure(error, "会话") });
+    return steps;
+  } finally {
+    socket.end();
+  }
+}
+
+/** 诊断用：真发一封测试邮件，走与生产完全相同的投递路径。 */
+export async function sendTestEmail(to: string): Promise<void> {
+  const target = normalizeVerificationTarget(to);
+  await sendSmtpMail(
+    target,
+    "SMTP 连通性测试",
+    "收到这封邮件说明本站的 SMTP 投递已经配置成功。\n\n这是一封测试邮件，不需要回复。"
+  );
 }

@@ -28,6 +28,7 @@ export function guardRequest(request: FastifyRequest): GuardRequest {
   return {
     headers: requestHeaders(request),
     origin: `${request.protocol}://${request.host}`,
+    directIp: request.socket.remoteAddress || request.ip,
   };
 }
 
@@ -48,6 +49,20 @@ export function registerErrorHandler(reply: FastifyReply, error: unknown) {
   if (isServiceError(error)) {
     return reply.status(error.status).send(apiFailure(error.message, error.code));
   }
+
+  // Fastify 自身的错误（请求体 JSON 解析失败、超限等）带有 4xx 的 statusCode。
+  // 之前这里一律压成 500，把客户端错误报成服务端错误，还会以 ERROR 级别刷日志——
+  // 任何客户端发一个畸形 JSON 就能制造一条"服务器内部错误"。
+  const statusCode = (error as { statusCode?: unknown }).statusCode;
+  if (typeof statusCode === "number" && statusCode >= 400 && statusCode < 500) {
+    const code = (error as { code?: unknown }).code;
+    // 细节只进服务端日志，响应体保持泛化，避免回显框架内部信息。
+    reply.log.warn({ err: error }, "客户端请求无效");
+    return reply
+      .status(statusCode)
+      .send(apiFailure("请求格式不正确", typeof code === "string" ? code : "BAD_REQUEST"));
+  }
+
   reply.log.error(error);
   return reply.status(500).send(apiFailure("服务器内部错误"));
 }

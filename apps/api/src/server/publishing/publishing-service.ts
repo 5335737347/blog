@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { normalizeMarkdown, parseMarkdownDocument, parseOptionalDate } from "@/lib/content";
 import { autoExcerpt, extractHashTags, slugify } from "@/lib/utils";
 import { badRequest, ServiceError } from "@/server/errors";
+import { resolveTagIds } from "@/server/taxonomy/taxonomy-service";
 import mammoth from "mammoth";
 
 const MAX_IMPORT_FILE_SIZE = 10 * 1024 * 1024;
@@ -62,30 +63,31 @@ function stringArray(value: unknown): string[] {
     : [];
 }
 
-async function resolveTagConnects(tagNames: string[]) {
-  const tagConnects = [];
-  for (const name of tagNames) {
-    const tagSlug = slugify(name);
-    const tag = await prisma.tag.upsert({
-      where: { slug: tagSlug },
-      update: {},
-      create: { name, slug: tagSlug },
-    });
-    tagConnects.push({ tagId: tag.id });
-  }
-  return tagConnects;
-}
-
+/**
+ * 解析 frontmatter / 导入参数里的分类。
+ *
+ * `name` 与 `slug` 都是唯一字段，且可能各自指向不同记录：
+ * 分类先由后台按中文名建立时，它的 slug 与按名字 slugify 的结果并不一致。
+ * 所以先按 slug 查（同 slug 改名），再按 name 查（同名不同 slug），最后才新建。
+ *
+ * 原先直接 `upsert({ where: { slug }, create: { name } })`：当已存在
+ * `{ name: "技术", slug: "tech" }` 而 frontmatter 写 `category: 技术` 时，
+ * 会往 create 分支写入重复的 name，撞 `Category.name` 唯一约束并让发布 500。
+ */
 async function resolveCategory(categoryName: string | undefined) {
   if (!categoryName) return null;
-  return prisma.category.upsert({
-    where: { slug: slugify(categoryName) },
-    update: {},
-    create: {
-      name: categoryName,
-      slug: slugify(categoryName),
-    },
-  });
+  const slug = slugify(categoryName);
+
+  const bySlug = await prisma.category.findUnique({ where: { slug } });
+  if (bySlug) {
+    if (bySlug.name === categoryName) return bySlug;
+    return prisma.category.update({ where: { id: bySlug.id }, data: { name: categoryName } });
+  }
+
+  const byName = await prisma.category.findUnique({ where: { name: categoryName } });
+  if (byName) return byName;
+
+  return prisma.category.create({ data: { name: categoryName, slug } });
 }
 
 async function createPostFromMarkdown(input: CreatePostFromMarkdownInput) {
@@ -111,10 +113,11 @@ async function createPostFromMarkdown(input: CreatePostFromMarkdownInput) {
   }
 
   const autoTags = extractHashTags(content);
+  // 按名字的 Set 只做粗略去重；真正保证唯一性的是 resolveTagIds 内部的 slug 去重。
   const allTags = [
     ...new Set([...(input.tags || []), ...parsed.frontmatter.tags, ...autoTags]),
   ];
-  const tagConnects = await resolveTagConnects(allTags);
+  const tagConnects = (await resolveTagIds(allTags)).map((tagId) => ({ tagId }));
   const category = await resolveCategory(input.category || parsed.frontmatter.category);
   const published =
     input.publishedOverride ?? parsed.frontmatter.published ?? input.publishedDefault;
