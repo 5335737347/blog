@@ -138,6 +138,8 @@ Nginx 只公开代理 Web `127.0.0.1:3001`，API 默认仅监听 `127.0.0.1:3002
 
 ## 维护规则
 
+- 评估、升级或改动本项目前先读 `.codex/project-memory.md`（项目记忆）；架构、安全、
+  部署或产品决策变化后同步更新它。
 - Web 和 API 只通过 HTTP 与 `@kpblog/contracts` 共享契约通信，不跨应用导入实现文件。
 - Prisma 和安全逻辑只存在于 `apps/api`；React 页面只负责展示和交互。
 - 新数据库变更必须提交 migration，新接口变更应同步契约、测试和 OpenAPI。
