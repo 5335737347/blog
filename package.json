@@ -1,8 +1,11 @@
 {
   "name": "kp-blog-workspace",
-  "version": "2.1.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": "^20.19 || ^22.12 || >=24.0"
+  },
   "workspaces": [
     "apps/*",
     "packages/*"
@@ -17,45 +20,55 @@
     "start:web": "npm run start --workspace @kpblog/web",
     "start:api": "npm run start --workspace @kpblog/api",
     "start:pm2": "pm2 startOrReload ecosystem.config.cjs --update-env",
-    "lint": "eslint apps packages scripts tests",
+    "lint": "eslint apps packages scripts",
     "typecheck": "tsc --noEmit && npm run typecheck --workspaces --if-present",
-    "test": "npm run test:services && npm run test --workspace @kpblog/api",
-    "test:services": "tsx --test tests/*.test.ts",
-    "check": "npm run lint && npm run typecheck && npm test",
+    "test": "npm run test --workspace @kpblog/api",
+    "check": "npm run lint && npm run typecheck && npm test && npm run check:docs && npm run check:openapi && npm run smoke",
+    "check:docs": "node scripts/check-docs.mjs",
+    "check:openapi": "tsx apps/api/scripts/check-openapi.ts",
+    "check:audit": "node scripts/check-audit.mjs",
+    "smoke": "node scripts/smoke.mjs",
+    "smoke:prod": "node scripts/smoke-prod.mjs",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
     "db:reset": "prisma migrate reset",
+    "db:backup": "node scripts/backup.mjs db",
     "publish:note": "node scripts/publish-note.mjs",
     "publish:draft": "node scripts/publish-note.mjs --draft",
     "publish:post": "node scripts/publish-note.mjs --publish",
-    "update": "node scripts/update.mjs"
+    "publish:local": "tsx scripts/publish-local.ts",
+    "update": "node scripts/update.mjs",
+    "smtp:check": "tsx apps/api/scripts/smtp-check.ts",
+    "db:restore": "node scripts/restore.mjs db",
+    "media:backup": "node scripts/backup.mjs media",
+    "media:restore": "node scripts/restore.mjs media"
   },
   "devDependencies": {
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.2.10",
-    "prisma": "7.8.0",
+    "eslint-config-next": "16.2.11",
+    "prisma": "7.9.0",
     "tsx": "^4.22.4",
     "typescript": "^5"
   },
   "allowScripts": {
     "better-sqlite3@12.11.1": true,
-    "prisma@7.8.0": true,
-    "@prisma/engines@7.8.0": true,
-    "sharp@0.34.5": true,
+    "prisma@7.9.0": true,
+    "@prisma/engines@7.9.0": true,
+    "sharp@0.35.0": true,
     "esbuild@0.28.1": true,
     "unrs-resolver@1.12.2": true
   },
   "overrides": {
-    "next": {
-      "postcss": "8.5.10"
-    },
-    "@prisma/dev": {
-      "@hono/node-server": "1.19.13"
-    }
+    "sharp": "0.35.4",
+    "postcss": "8.5.26",
+    "nanoid": "3.3.18",
+    "valibot": "1.4.2",
+    "js-yaml": "4.3.1",
+    "find-my-way": "9.7.0"
   }
 }

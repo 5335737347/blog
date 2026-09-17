@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DATABASE_URL: file:./prisma/ci.db
+      JWT_SECRET: ci-only-secret-at-least-32-characters
+      SITE_URL: https://example.test
+      NEXT_PUBLIC_SITE_URL: https://example.test
+      API_INTERNAL_URL: http://127.0.0.1:3002
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --include=dev
+
+      - name: Generate Prisma Client
+        run: npm run db:generate
+
+      - name: Validate workspace
+        run: npm run check
+
+      - name: Build production applications
+        run: npm run build
+
+      - name: Browser smoke check
+        # 只做静态检查不够：本轮出现过 tsc 与生产构建都通过、
+        # 只有真实渲染才暴露的缺陷（文章页运行时 500、音乐播放器面板消失）。
+        # 该步骤自建临时数据库与独立端口的实例，跑完自动清理。
+        run: npm run smoke
+
+      - name: Audit production dependencies
+        # 在仓库内审计：--omit=dev 会覆盖各 workspace 的真实生产依赖。
+        #
+        # 这里原先把 package.json 与 package-lock.json 复制到临时目录再 npm ci，
+        # 但根包生产依赖数为 0、workspaces 目录又没有一起复制，于是那棵树是空的，
+        # `npm audit` 恒定输出 "found 0 vulnerabilities"——门禁静默失效。
+        # 现在由 scripts/check-audit.mjs 审计真实依赖树，并对运行时不可达的
+        # Prisma 工具链公告使用显式白名单（含可达性自检）。
+        run: npm run check:audit

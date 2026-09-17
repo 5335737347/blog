@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 import {
-  copyFileSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -9,6 +8,11 @@ import {
 } from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { loadProjectEnv } from "./load-env.mjs";
+
+// 环境加载统一走 scripts/load-env.mjs（此前这里有一份手写正则解析器，
+// 与 dotenv 在行内注释、export 前缀和转义上的行为都不一致）。
+loadProjectEnv();
 
 const rawArgs = process.argv.slice(2);
 const args = new Set(rawArgs);
@@ -59,19 +63,6 @@ if (args.has("--help")) {
   printHelp();
   process.exit(0);
 }
-
-function loadEnvFile(file) {
-  if (!existsSync(file)) return;
-  const text = readFileSync(file, "utf8");
-  for (const line of text.split(/\r?\n/)) {
-    const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);
-    if (!match || process.env[match[1]] !== undefined) continue;
-    process.env[match[1]] = match[2].replace(/^["']|["']$/g, "");
-  }
-}
-
-loadEnvFile(".env.local");
-loadEnvFile(".env");
 
 function section(title) {
   console.log(`\n==> ${title}`);
@@ -188,7 +179,7 @@ function backupSqlite() {
   const backupDir = path.resolve("backups");
   const backupPath = path.join(backupDir, `${path.basename(dbPath)}.${stamp}.bak`);
   mkdirSync(backupDir, { recursive: true });
-  copyFileSync(dbPath, backupPath);
+  run("node", ["apps/api/scripts/backup-sqlite.mjs", backupPath]);
   console.log(`Backed up database: ${backupPath}`);
 }
 
