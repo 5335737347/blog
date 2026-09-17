@@ -60,7 +60,7 @@ jobs:
       # 显式安装并导出 CHROME_BIN；冒烟脚本自己也会兜底查找 PATH 上的 chromium。
       - name: Prepare browser for smoke check
         run: |
-          npx --yes playwright@1.56.0 install --with-deps chromium
+          npx --yes playwright@1.56.1 install --with-deps chromium
           CHROME_BIN="$(find "$HOME/.cache/ms-playwright" -type f \
             \( -name chrome-headless-shell -o -name chrome \) 2>/dev/null | head -1)"
           if [ -z "$CHROME_BIN" ] || [ ! -x "$CHROME_BIN" ]; then
