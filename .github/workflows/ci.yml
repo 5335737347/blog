@@ -80,7 +80,19 @@ jobs:
         # 这里对**生产构建**（next build + next start）跑，而不是 next dev：
         # 既更贴近真实部署形态，也少一个会引入差异的开发服务器。
         # 该步骤自建临时数据库与独立端口的实例，并用 API 启动日志核对目标库，跑完自动清理。
-        run: npm run smoke:prod
+        #
+        # 输出落盘：GitHub 的日志接口对公开仓库要求认证，失败时本地读不到内容，
+        # 于是「CI 冒烟失败」会变成无法定位的结论。失败时把日志作为 artifact 上传。
+        run: npm run smoke:prod 2>&1 | tee /tmp/smoke.log
+
+      - name: Upload smoke logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-logs
+          path: /tmp/smoke.log
+          retention-days: 5
+          if-no-files-found: ignore
 
       - name: Audit production dependencies
         # 在仓库内审计：--omit=dev 会覆盖各 workspace 的真实生产依赖。
