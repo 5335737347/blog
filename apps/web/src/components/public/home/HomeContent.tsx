@@ -62,6 +62,7 @@ export default function HomeContent({ recentPosts, categories, tags, profile }: 
           <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
             {recentPosts.slice(0, 6).map((post) => (
               <ArticleCard
+                headingLevel="h3"
                 key={post.id}
                 slug={post.slug}
                 title={post.title}
@@ -108,7 +109,7 @@ export default function HomeContent({ recentPosts, categories, tags, profile }: 
       {(categories.length > 0 || tags.length > 0) && (
         <section className="mt-14 grid gap-10 lg:grid-cols-[1fr_1.4fr]">
           {categories.length > 0 && (
-            <div aria-labelledby="home-categories">
+            <div role="region" aria-labelledby="home-categories">
               <SectionHeader id="home-categories" kicker="Categories" title="分类浏览" />
               <ul className="grid gap-1.5">
                 {categories.map((category) => (
@@ -128,7 +129,7 @@ export default function HomeContent({ recentPosts, categories, tags, profile }: 
           )}
 
           {tags.length > 0 && (
-            <div aria-labelledby="home-tags">
+            <div role="region" aria-labelledby="home-tags">
               <SectionHeader id="home-tags" kicker="Tags" title="标签" />
               <div className="flex flex-wrap gap-1.5">
                 {tags.slice(0, 24).map((tag) => (

@@ -428,12 +428,24 @@ if (!tocReady) {
     copyState.clicked && (copyLabel === "代码已复制" || copyLabel === "复制失败"),
     `label=${copyLabel}`);
 
-  // 长代码可键盘聚焦（axe 曾报过滚动区不可聚焦）
+  // 长代码可键盘聚焦（axe 曾报过滚动区不可聚焦）。
+  //
+  // 这里**不再要求 `aria-label`**：`pre` 没有可承载名称的角色，写在上面的
+  // `aria-label` 会被辅助技术忽略（axe aria-prohibited-attr），已随可访问性
+  // 修复移除；语言信息由代码块头部那段可见文本提供。
   const codeFocusable = await evaluate(readerPage.sessionId, `(() => {
     const pre = document.querySelector('.markdown-code-frame pre');
-    return pre ? pre.getAttribute('tabindex') === '0' && !!pre.getAttribute('aria-label') : false;
+    if (!pre) return null;
+    return {
+      tabindex: pre.getAttribute('tabindex'),
+      languageLabel: !!document.querySelector('.markdown-code-frame .markdown-code-language'),
+    };
   })()`);
-  check("代码块滚动区可键盘聚焦", codeFocusable === true, `tabindex=${codeFocusable}`);
+  check(
+    "代码块滚动区可键盘聚焦且带语言标签",
+    codeFocusable !== null && codeFocusable.tabindex === '0' && codeFocusable.languageLabel === true,
+    `tabindex=${codeFocusable?.tabindex} language=${codeFocusable?.languageLabel}`
+  );
 }
 
 // 移动端目录抽屉（窄视口下桌面目录隐藏、浮动按钮出现）

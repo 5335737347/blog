@@ -210,6 +210,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
           <div className="grid gap-5 sm:grid-cols-2">
             {adjacent.related.map((relatedPost) => (
               <ArticleCard
+                headingLevel="h3"
                 key={relatedPost.id}
                 slug={relatedPost.slug}
                 title={relatedPost.title}

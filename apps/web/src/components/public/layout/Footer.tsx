@@ -59,7 +59,14 @@ export default async function Footer({ blogTitle, blogDescription }: FooterProps
           </div>
 
           <nav aria-label="页脚内容导航">
-            <h2 className="mb-4 text-meta font-semibold text-ink">浏览</h2>
+            {/*
+              页脚的分组标题用 h3 而不是 h2。
+              页脚在源码顺序上位于主内容之后，但在流式渲染下它会先于主内容到达
+              文档流，于是文档里的标题序列变成 `h2 h2 h1 …`——
+              axe 的 heading-order 因此在列表页/分类页/标签页触发（12 次运行）。
+              h3 不会与主内容的 h1/h2 争层级，也不影响视觉。
+            */}
+            <h3 className="mb-4 text-meta font-semibold text-ink">浏览</h3>
             <ul className="grid gap-2.5">
               {CONTENT_NAV.map((item) => (
                 <li key={item.href}>
@@ -72,11 +79,16 @@ export default async function Footer({ blogTitle, blogDescription }: FooterProps
           </nav>
 
           <div>
-            <h2 className="mb-4 text-meta font-semibold text-ink">订阅与本站</h2>
+            <h3 className="mb-4 text-meta font-semibold text-ink">订阅与本站</h3>
             <ul className="grid gap-2.5">
               {SITE_NAV.map((item) => (
                 <li key={item.href}>
-                  <Link href={item.href} className="footer-link">
+                  {/*
+                    prefetch={false}：/rss.xml 与 /sitemap.xml 是文档而非应用路由，
+                    预取它们只会让 Next 抓取一份用不上的 RSC 载荷
+                    （实测每页多出约 64 KB：rss.xml?_rsc=… 48.4 KB、sitemap.xml?_rsc=… 15.9 KB）。
+                  */}
+                  <Link href={item.href} prefetch={false} className="footer-link">
                     {item.label}
                   </Link>
                 </li>

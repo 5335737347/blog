@@ -44,15 +44,18 @@ export default function HeroSection({ blogTitle, blogDescription }: HeroSectionP
       data-home-hero
       className="relative isolate flex min-h-[calc(100svh-4rem)] items-center overflow-hidden bg-slate-900"
     >
-      {/* 背景模糊氛围层：填满拉伸，避免裁切导致露底 */}
-      <Image
-        key={`blur-${wallpaper}`}
-        src={wallpaper}
-        alt=""
-        fill
-        priority
-        sizes="100vw"
-        className="scale-110 object-cover opacity-70 blur-2xl"
+      {/*
+        氛围层从 `<Image fill>` 改成 CSS 背景 + blur：
+        - 原来为了「模糊铺底 + 清晰前景」请求了**同一张壁纸两次**
+          （第一次进首屏网络瀑布），纯属浪费；
+        - CSS 背景不是 <img>，也就没有「无 width/height 的图片」这一结构性问题
+          （评估中首页实测 imgNoDims=2）。
+        清晰前景仍用 next/image，负责 LCP 与响应式 srcset。
+      */}
+      <div
+        aria-hidden="true"
+        className="absolute inset-0 scale-110 bg-cover bg-center opacity-70 blur-2xl"
+        style={{ backgroundImage: `url(${wallpaper})` }}
       />
       <Image
         key={wallpaper}
@@ -71,13 +74,13 @@ export default function HeroSection({ blogTitle, blogDescription }: HeroSectionP
 
       <div className="relative z-10 mx-auto w-full max-w-content px-5 py-16 sm:px-6">
         <div className="animate-fade-in-up max-w-3xl">
-          <p className="mb-3 text-meta font-medium tracking-[0.16em] text-white/75">
+          <p className="mb-3 text-meta font-medium tracking-[0.16em] text-white [text-shadow:0_1px_12px_rgba(15,23,42,.75)]">
             WELCOME
           </p>
-          <h1 className="text-[2rem] font-bold leading-[1.15] text-white [text-shadow:0_2px_20px_rgba(15,23,42,.6)] sm:text-[2.75rem] lg:text-6xl">
+          <h1 className="text-[2rem] font-bold leading-[1.15] text-white [text-shadow:0_2px_20px_rgba(15,23,42,.75)] sm:text-[2.75rem] lg:text-6xl">
             {blogTitle}
           </h1>
-          <p className="mt-4 max-w-xl text-ui leading-relaxed text-white/85 [text-shadow:0_1px_10px_rgba(15,23,42,.7)] sm:text-base">
+          <p className="mt-4 max-w-xl text-ui leading-relaxed text-white [text-shadow:0_1px_12px_rgba(15,23,42,.8)] sm:text-base">
             {blogDescription}
           </p>
 
@@ -94,7 +97,7 @@ export default function HeroSection({ blogTitle, blogDescription }: HeroSectionP
             </a>
           </div>
 
-          <p className="mt-6 inline-flex items-center gap-2 text-micro text-white/70">
+          <p className="mt-6 inline-flex items-center gap-2 text-micro text-white [text-shadow:0_1px_10px_rgba(15,23,42,.8)]">
             <SearchIcon className="h-3.5 w-3.5" />
             按 Enter 直接搜索，支持标题、标签与正文关键词
           </p>

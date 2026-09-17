@@ -19,6 +19,25 @@ import "katex/dist/katex.min.css";
  */
 const HIGHLIGHT_OPTIONS = { languages: common, detect: false } as const;
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/**
+ * 把正文里的一级标题降为二级。
+ *
+ * 文章页的 `<h1>` 是文章标题本身（由页面渲染）。作者在 Markdown 里写 `# 小标题`
+ * 完全正常，但如果原样渲染，页面就会出现**两个 h1**（评估实测所有视口 h1=2），
+ * 标题层级也随之错乱。这里在 mdast 阶段把 `depth: 1` 改成 `2`，
+ * 后续 rehype-slug 生成的锚点 id 不受影响，目录仍然可用。
+ */
+function remarkDemoteHeadings() {
+  return (tree: any) => {
+    const walk = (node: any) => {
+      if (node?.type === "heading" && node.depth === 1) node.depth = 2;
+      for (const child of node?.children ?? []) walk(child);
+    };
+    walk(tree);
+  };
+}
+
 interface MarkdownContentProps {
   content: string;
 }
@@ -94,7 +113,7 @@ export default function MarkdownContent({ content }: MarkdownContentProps) {
   return (
     <div className="reading">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkMath]}
+        remarkPlugins={[remarkGfm, remarkMath, remarkDemoteHeadings]}
         rehypePlugins={[
           rehypeKatex,
           [rehypeHighlight, HIGHLIGHT_OPTIONS],

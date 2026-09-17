@@ -109,9 +109,11 @@ export default function MarkdownCodeBlock({
       <pre
         ref={preRef}
         className={["markdown-code-block", className].filter(Boolean).join(" ")}
-        // 长代码需要横向滚动，滚动区必须能被键盘聚焦（axe: scrollable-region-focusable）
+        // 长代码需要横向滚动，滚动区必须能被键盘聚焦（axe: scrollable-region-focusable）。
+        // 这里不再写 aria-label：`pre` 没有可承载名称的角色，该属性会被 AT 忽略
+        //（axe aria-prohibited-attr）。可访问名称交给代码块头部已有的语言标签，
+        // 它已经是可见文本，屏幕阅读器会先读到它。
         tabIndex={0}
-        aria-label={`${displayLanguage(language)} 代码块，可横向滚动`}
         {...props}
       >
         {children}

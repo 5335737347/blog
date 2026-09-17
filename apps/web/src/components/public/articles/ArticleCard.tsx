@@ -15,6 +15,15 @@ interface ArticleCardProps {
   category: { name: string; slug: string } | null;
   /** 列表与首页共用；传入时在元信息行展示阅读时长 */
   readingMinutes?: number;
+  /**
+   * 卡片标题的标题级别。
+   *
+   * 列表页（`/articles`、标签页、分类页）的 `<h1>` 由 PageHeader 提供，
+   * 卡片标题用 `h2` 才不会跳级；首页/相关文章里卡片位于一个 `h2` 小节之下，
+   * 这时必须传 `h3`。此前固定为 `h3`，导致列表页出现 h1 → h3 的跳级
+   *（axe `heading-order`，评估中 12 次运行触发）。
+   */
+  headingLevel?: "h2" | "h3";
 }
 
 /**
@@ -30,7 +39,9 @@ export default function ArticleCard({
   tags,
   category,
   readingMinutes,
+  headingLevel = "h2",
 }: ArticleCardProps) {
+  const Heading = headingLevel;
   const visibleTags = tags.slice(0, 2);
   const hiddenTagCount = tags.length - visibleTags.length;
 
@@ -68,11 +79,11 @@ export default function ArticleCard({
           </Link>
         )}
 
-        <h3 className="text-balance text-base font-semibold leading-snug text-ink">
+        <Heading className="text-balance text-base font-semibold leading-snug text-ink">
           <Link href={`/articles/${slug}`} className="transition-colors hover:text-primary-deep">
             {title}
           </Link>
-        </h3>
+        </Heading>
 
         {excerpt && (
           <p className="line-clamp-2 text-meta leading-relaxed text-ink-3">{excerpt}</p>

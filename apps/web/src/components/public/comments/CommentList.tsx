@@ -6,9 +6,11 @@ function CommentAvatar({ author }: { author: string }) {
   const tones = ["bg-primary-solid", "bg-accent-solid"];
   const idx = author.charCodeAt(0) % tones.length;
   return (
+    // 头像是纯装饰：作者名就在旁边的文本里，用 `aria-hidden` 让屏幕阅读器跳过，
+    // 而不是在无角色的 div 上写 aria-label（那不会产生可访问名称，属于无效 ARIA）。
     <div
+      aria-hidden="true"
       className={`grid h-9 w-9 shrink-0 place-items-center rounded-full ${tones[idx]} text-meta font-bold text-on-solid`}
-      aria-label={author}
     >
       {author.charAt(0).toUpperCase()}
     </div>

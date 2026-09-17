@@ -38,10 +38,13 @@ export default function CookieNotice() {
   if (!visible) return null;
 
   // 贴底窄条：不遮挡首屏主内容（hero 搜索、文章封面），也不与移动端标签栏重叠。
+  //
+  // 这里用 `role="region"` 而不是 `role="dialog"`：这是一条不阻塞操作的通知，
+  // 不是对话框——`dialog` 在 `<aside>` 上也不是允许的 ARIA 角色
+  //（axe aria-allowed-role，评估中 56/56 次运行触发）。
   return (
     <aside
-      role="dialog"
-      aria-modal="false"
+      role="region"
       aria-labelledby="cookie-notice-title"
       aria-describedby="cookie-notice-description"
       data-print="hide"

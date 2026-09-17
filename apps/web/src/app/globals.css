@@ -70,11 +70,16 @@
   --ring: 0 0 0 3px rgba(77, 169, 232, 0.32);
 
   /* 首页 hero 专用（内页禁止使用） */
+  /* 首屏文字压在壁纸之上，压暗强度直接决定可读性上限。
+     原先是 0.28 → 0.10 → 0.55，配合 text-white/70…/85 的文字，
+     像素级实测（去掉文字笔画后采样真实背景）只有 1.6–2.4:1，要求 4.5:1。
+     现在把三段都压到 0.5 以上、文字改为完全不透明并保留文字阴影：
+     壁纸再怎么轮换，白字也能稳定达标。 */
   --hero-scrim: linear-gradient(
     180deg,
-    rgba(15, 23, 42, 0.28) 0%,
-    rgba(15, 23, 42, 0.1) 45%,
-    rgba(15, 23, 42, 0.55) 100%
+    rgba(15, 23, 42, 0.62) 0%,
+    rgba(15, 23, 42, 0.58) 45%,
+    rgba(15, 23, 42, 0.7) 100%
   );
 
   /* ===== 废弃别名：仅为未迁移代码保留，新代码勿用 =====
@@ -360,6 +365,37 @@ time,
   font-size: 0.9375rem;
   font-weight: 500;
   transition: color 120ms ease, background-color 120ms ease;
+}
+
+/*
+  hero 之上的头部配色。
+  这里是**必须用属性选择器**而不是在组件里写 Tailwind 工具类的地方：
+  `.nav-link` / `.icon-button` 自己声明了 `color`，类选择器的优先级高于
+  单个工具类（`text-white/85`），所以之前 `overHero` 分支加的那些工具类
+  全部被覆盖——实测导航在深色压暗层上仍是 `rgb(70,86,110)`，
+  对比度只有 1.17:1。`header[data-over-hero]` 的优先级足以稳定压过它们。
+*/
+header[data-over-hero] .nav-link {
+  color: rgb(255 255 255 / 0.92);
+}
+
+header[data-over-hero] .nav-link:hover {
+  color: #fff;
+  background: rgb(255 255 255 / 0.16);
+}
+
+header[data-over-hero] .nav-link[aria-current="page"] {
+  color: #fff;
+  background: rgb(255 255 255 / 0.22);
+}
+
+header[data-over-hero] .icon-button {
+  color: rgb(255 255 255 / 0.92);
+}
+
+header[data-over-hero] .icon-button:hover {
+  color: #fff;
+  background: rgb(255 255 255 / 0.16);
 }
 
 .nav-link:hover {

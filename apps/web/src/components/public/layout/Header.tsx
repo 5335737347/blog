@@ -54,20 +54,28 @@ export default function Header({ blogTitle }: { blogTitle: string }) {
 
   return (
     <header
+      // `data-over-hero` 是给 CSS 用来提高优先级的钩子，见 globals.css 的同名规则：
+      // 组件类（.nav-link/.icon-button）自带 color，Tailwind 工具类压不过它们。
+      data-over-hero={overHero ? "" : undefined}
       className={`sticky top-0 z-50 transition-colors duration-200 ${
         overHero
           ? "border-b border-transparent bg-transparent"
           : "border-b border-line bg-bg/85 backdrop-blur-md"
       }`}
     >
-      {/* hero 之上加一层顶部压暗，保证浅色壁纸下站名与导航仍可读 */}
+      {/*
+        hero 之上加一层顶部压暗，保证浅色壁纸下站名与导航仍可读。
+        强度按像素级实测调整（顶部 0.45 → 0.62、中段 0.18 → 0.42），文字颜色另见
+        globals.css 的 `header[data-over-hero]` 规则。
+        此前白色站名压在浅色壁纸上的实测对比度只有 1.64:1（要求 4.5:1）。
+      */}
       {overHero && (
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-0"
           style={{
             backgroundImage:
-              "linear-gradient(180deg, rgba(15,23,42,.45) 0%, rgba(15,23,42,.18) 60%, transparent 100%)",
+              "linear-gradient(180deg, rgba(15,23,42,.62) 0%, rgba(15,23,42,.42) 60%, rgba(15,23,42,.16) 100%)",
           }}
         />
       )}
