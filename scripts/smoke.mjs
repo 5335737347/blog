@@ -122,8 +122,10 @@ async function waitFor(url, label) {
   const deadline = Date.now() + 120000;
   while (Date.now() < deadline) {
     try {
-      const res = await fetch(url);
-      if (res.status < 500) return;
+      // 只接受 2xx/3xx：Next 在 rewrites 生效前会对 /api/* 返回 404，
+      // 那时就算「就绪」会让冒烟在通道未打通时开始。
+      const res = await fetch(url, { redirect: "manual" });
+      if (res.status > 0 && res.status < 400) return;
     } catch { /* retry */ }
     await new Promise((r) => setTimeout(r, 500));
   }
@@ -134,6 +136,33 @@ async function waitFor(url, label) {
 
 await waitFor(`http://127.0.0.1:${apiPort}/health`, "API");
 await waitFor(`http://127.0.0.1:${webPort}/`, "Web");
+
+// 同 smoke-prod：Web 到 API 的通道打通后才继续，
+// 否则页面只会渲染成空状态，数据断言失败但看不出原因。
+{
+  const deadline = Date.now() + 60000;
+  let ok = false;
+  let last = "";
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch(`http://127.0.0.1:${webPort}/api/public/settings`);
+      if (res.ok) { ok = true; break; }
+      last = `HTTP ${res.status}`;
+    } catch (error) {
+      last = String(error?.message || error);
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  if (!ok) {
+    console.error(`[失败] 经 Web 访问 API 不通（${last}）。`);
+    for (const [child, lines] of logs) {
+      console.error(`--- ${child.spawnargs.join(" ")}`);
+      console.error(lines.join("").slice(-1200) || "（无输出）");
+    }
+    shutdown(1);
+  }
+  console.log("Web → API 通道已打通");
+}
 
 // 自检：确认被测实例真的连在临时库上。
 // Next 与 API 都会加载 .env.local；不核对的话，冒烟可能跑在开发库上，

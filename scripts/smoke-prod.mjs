@@ -119,12 +119,19 @@ for (const child of [api, web]) {
   child.stderr.on("data", (d) => logs.get(child).push(String(d)));
 }
 
+/**
+ * 等待实例就绪。
+ *
+ * 判据不能只是「有响应」：Next 在 rewrites 生效前会对 /api/* 返回 404，
+ * 若在这里就算就绪，冒烟会在 API 通道尚未打通时开始，SSR 取数全部失败。
+ * 因此只接受 2xx/3xx，并在最后额外验证一次「经 Web 访问 API」确实可用。
+ */
 async function waitFor(url, label) {
   const deadline = Date.now() + 90000;
   while (Date.now() < deadline) {
     try {
-      const res = await fetch(url);
-      if (res.status < 500) return;
+      const res = await fetch(url, { redirect: "manual" });
+      if (res.status > 0 && res.status < 400) return;
     } catch { /* retry */ }
     await new Promise((r) => setTimeout(r, 400));
   }
@@ -135,6 +142,34 @@ async function waitFor(url, label) {
 
 await waitFor(`http://127.0.0.1:${apiPort}/health`, "API");
 await waitFor(`http://127.0.0.1:${webPort}/`, "Web");
+
+// Web 到 API 的通道必须真的打通再往下跑：SSR 取数失败时页面仍返回 200，
+// 只会渲染成空状态，而冒烟的数据断言会以「内容缺失」的形式失败，难以定位。
+{
+  const deadline = Date.now() + 60000;
+  let ok = false;
+  let last = "";
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch(`http://127.0.0.1:${webPort}/api/public/settings`);
+      if (res.ok) { ok = true; break; }
+      last = `HTTP ${res.status}`;
+    } catch (error) {
+      last = String(error?.message || error);
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  if (!ok) {
+    console.error(`[失败] 经 Web 访问 API 不通（${last}）。`);
+    console.error(`  Web 用的 API_INTERNAL_URL 应为 http://127.0.0.1:${apiPort}`);
+    for (const [child, lines] of logs) {
+      console.error(`--- ${child.spawnargs.join(" ")}`);
+      console.error(lines.join("").slice(-1200) || "（无输出）");
+    }
+    shutdown(1);
+  }
+  console.log("Web → API 通道已打通");
+}
 
 // 自检：确认被测实例真的连在临时库上。
 // 没有这道检查时，「首页渲染出文章」这类断言可能因为撞上开发库/旧实例而假通过。
