@@ -75,7 +75,31 @@ function run(command, args, label) {
 // 优先用本地安装的二进制，避免 npx 在依赖不完整时尝试联网解析版本
 const bin = (name) => path.join(repositoryRoot, "node_modules/.bin", name);
 
+/**
+ * 端口占用预检。
+ *
+ * 不检查的话，上一次异常退出留下的实例仍占着端口时，`waitFor` 探到的会是
+ * **那个旧实例**，于是冒烟对着错误的进程给出结论；更糟的情况是它一直不健康、
+ * 脚本卡住不返回（本机就遇到过一次，排查耗时很久）。
+ * 任何 HTTP 响应（含 404）都说明端口被占用。
+ */
+async function assertPortFree(port, label) {
+  if (process.env.SMOKE_IGNORE_PORT_CHECK === "1") return;
+  try {
+    await fetch(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(2000) });
+  } catch {
+    return; // 连接失败 = 端口空闲
+  }
+  console.error(`[失败] ${label} 端口 ${port} 已被占用。`);
+  console.error("  可能是上一次冒烟异常退出留下的进程。请结束它，或用");
+  console.error(`  SMOKE_WEB_PORT / SMOKE_API_PORT 指定其它端口。`);
+  process.exit(3);
+}
+
 console.log("[1/4] 准备临时数据库");
+await assertPortFree(apiPort, "API");
+await assertPortFree(webPort, "Web");
+
 run(bin("prisma"), ["migrate", "deploy"], "prisma migrate deploy");
 
 console.log("[2/4] 写入冒烟数据");
@@ -111,6 +135,23 @@ async function waitFor(url, label) {
 
 await waitFor(`http://127.0.0.1:${apiPort}/health`, "API");
 await waitFor(`http://127.0.0.1:${webPort}/`, "Web");
+
+// 自检：确认被测实例真的连在临时库上。
+// 没有这道检查时，「首页渲染出文章」这类断言可能因为撞上开发库/旧实例而假通过。
+const apiLog = logs.get(api).join("");
+const expectedDb = env.DATABASE_URL.slice("file:".length);
+if (!apiLog.includes(expectedDb)) {
+  console.error("[失败] API 未使用预期的临时数据库。");
+  console.error(`  期望：${expectedDb}`);
+  const shown = apiLog.match(/\[api\] database=([^\s]+)/);
+  console.error(`  实际：${shown ? shown[1] : "（日志中未出现 database 字段）"}`);
+  for (const [child, lines] of logs) {
+    console.error(`--- ${child.spawnargs.join(" ")}`);
+    console.error(lines.join("").slice(-1200) || "（无输出）");
+  }
+  shutdown(1);
+}
+console.log(`数据库自检通过：${expectedDb}`);
 
 if (process.env.SMOKE_VERBOSE === "1") {
   for (const [child, lines] of logs) {

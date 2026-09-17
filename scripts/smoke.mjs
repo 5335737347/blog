@@ -74,7 +74,31 @@ function run(command, args, label) {
 // 优先用本地安装的二进制，避免 npx 在依赖不完整时尝试联网解析版本
 const bin = (name) => path.join(repositoryRoot, "node_modules/.bin", name);
 
+/**
+ * 端口占用预检。
+ *
+ * 不检查的话，上一次异常退出留下的实例仍占着端口时，`waitFor` 探到的会是
+ * **那个旧实例**，于是冒烟对着错误的进程给出结论；更糟的情况是它一直不健康、
+ * 脚本卡住不返回（本机就遇到过一次，排查耗时很久）。
+ * 任何 HTTP 响应（含 404）都说明端口被占用。
+ */
+async function assertPortFree(port, label) {
+  if (process.env.SMOKE_IGNORE_PORT_CHECK === "1") return;
+  try {
+    await fetch(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(2000) });
+  } catch {
+    return; // 连接失败 = 端口空闲
+  }
+  console.error(`[失败] ${label} 端口 ${port} 已被占用。`);
+  console.error("  可能是上一次冒烟异常退出留下的进程。请结束它，或用");
+  console.error(`  SMOKE_WEB_PORT / SMOKE_API_PORT 指定其它端口。`);
+  process.exit(3);
+}
+
 console.log("[1/4] 准备临时数据库");
+await assertPortFree(apiPort, "API");
+await assertPortFree(webPort, "Web");
+
 run(bin("prisma"), ["migrate", "deploy"], "prisma migrate deploy");
 
 console.log("[2/4] 写入冒烟数据");

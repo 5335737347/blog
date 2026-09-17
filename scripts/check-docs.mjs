@@ -176,6 +176,7 @@ const runtimeProvidedEnv = new Set([
   "SMOKE_SEEDED",
   "SMOKE_SEED_DATABASE_URL",
   "SMOKE_VERBOSE",
+  "SMOKE_IGNORE_PORT_CHECK",
 ]);
 
 const usedEnv = new Set();

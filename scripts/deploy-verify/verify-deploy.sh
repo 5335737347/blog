@@ -40,6 +40,23 @@ echo "npm ci 完成"
 echo "=== prisma generate ==="
 npm run db:generate || fail GENERATE_FAILED 11
 
+# 下面这些就是 `npm run update` 在服务器上会跑的检查。
+# 在干净检出里先跑一遍，避免「本地开发工作区能过、服务器上挂掉」。
+echo "=== lint ==="
+npm run lint || fail LINT_FAILED 17
+
+echo "=== typecheck ==="
+npm run typecheck || fail TYPECHECK_FAILED 18
+
+echo "=== tests ==="
+npm test || fail TEST_FAILED 19
+
+echo "=== check:docs ==="
+npm run check:docs || fail DOCS_FAILED 20
+
+echo "=== check:openapi ==="
+npm run check:openapi || fail OPENAPI_FAILED 21
+
 echo "=== 构建（等价于服务器的 npm run build）==="
 npm run build || fail BUILD_FAILED 12
 
@@ -79,5 +96,10 @@ if [ "$up" != "1" ]; then
 fi
 echo "Web 入口可运行，首页返回 200"
 kill "$WEB_PID" 2>/dev/null
+
+# 冒烟检查是 `npm run update` 的最后一环，也是最依赖环境的一环（需要浏览器）。
+# 它在这里跑通，服务器上才不会再遇到新的意外。
+echo "=== 浏览器冒烟（对生产构建）==="
+npm run smoke:prod || fail SMOKE_FAILED 22
 
 echo "RESULT: ALL_DEPLOY_CHECKS_PASSED"
