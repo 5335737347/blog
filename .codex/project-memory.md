@@ -590,6 +590,32 @@ they need a Chromium binary (found via `CHROME_BIN` or the Playwright cache).
   change; the app already rejects flood traffic cheaply). If the site ever faces a
   real flood, that is the next layer, and `docs/deployment.md` should gain the snippet.
 
+## Follow-up 2026-09-17: the "网络错误" report and an atomicity fix
+
+- The owner reported that a wrong admin password surfaced as **网络错误** instead of
+  the real message. Cause was in my own previous change: the login page called
+  `await res.json()` (to read `retryAfterSeconds`) and then `readApiError(res.clone())`.
+  A Response body can only be consumed once, so the clone threw
+  `TypeError: Body has already been consumed`, and the page's `catch` turned it into
+  "网络错误". Fix: `apiErrorMessage(payload, fallback)` in `apps/web/src/lib/api-client.ts`
+  renders a message from an **already parsed** payload; the login page reads the body
+  exactly once. The catch block now logs the real error and says
+  "网络错误，请检查网络连接后重试" only for genuine transport failures — blanketing
+  everything as "network error" is what hid this for a whole round.
+- The same investigation exposed a **concurrency hole in the lockout**: the sequence
+  "read count → decide → record failure" let four simultaneous wrong-password
+  requests all read the same old count and all pass. Lockout decisions now go through
+  `consumeFailureAllowance(key, windowMs, allowed)` in `request-guard.ts`, which
+  increments and compares inside one transaction, so each attempt consumes exactly
+  one allowance and `resetAt` is still only written when the bucket is created.
+  Measured after the fix: 6 concurrent requests ⇒ exactly 3×401 + 3×429.
+- `apps/api/tests/error-envelope.test.ts` (new) pins two server-side guarantees the UI
+  depends on: every failure response is a parseable JSON envelope, and a 429 carries
+  `error.retryAfterSeconds`. Tests are now 120.
+- Reminder for future UI work: never read a `Response` twice, and never `clone()` after
+  reading. When a client shows a generic "network error", check the server response
+  first — in this case the API had been returning the correct 401 the whole time.
+
 - The deploy smoke's TOC assertion was also measuring the wrong thing: it parked the
   heading at the very top of the viewport, inside the highlight observer's
   `-96px 0px -70% 0px` dead band, so the highlight legitimately did not update. It

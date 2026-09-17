@@ -52,6 +52,12 @@ next-env.d.ts
 # browser smoke runs use an isolated Next distDir; a killed run can leave it behind
 /apps/web/tmp/
 
+# Next resolves an absolute NEXT_DIST_DIR against apps/web, so passing an absolute
+# path silently creates a build tree here (it once produced a 230 MB
+# apps/web/eval-3321/ that got committed and pushed). Keep this as a safety net;
+# next.config.ts now resolves such paths correctly instead.
+/apps/web/eval-*/
+
 # prisma
 /prisma/dev.db
 /prisma/dev.db-journal

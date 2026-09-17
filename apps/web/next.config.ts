@@ -1,5 +1,7 @@
 import type { NextConfig } from "next";
 import { networkInterfaces } from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { loadProjectEnv, repositoryRoot } from "../../scripts/load-env.mjs";
 
 // 环境加载统一走 scripts/load-env.mjs，与 API、Prisma CLI、仓库脚本同一份实现。
@@ -17,6 +19,19 @@ loadProjectEnv();
  * 等于完全放弃 WebP/AVIF 与 srcset；但用通配符放行任意主机又会让
  * /_next/image 变成可被滥用的开放图片代理。折中为只信任 SITE_URL。
  */
+/**
+ * 把 NEXT_DIST_DIR 归一成相对 apps/web 的路径。
+ *
+ * 绝对路径直接交给 Next 会被当成相对路径二次拼接（见上面 distDir 处的说明）。
+ * 相对路径原样返回，行为与以前完全一致。
+ */
+function relativeDistDir(value: string): string {
+  if (!path.isAbsolute(value)) return value;
+  const appDir = path.dirname(fileURLToPath(import.meta.url));
+  // path.relative 会给出 ../ 开头的相对路径，Next 支持这种写法。
+  return path.relative(appDir, value) || value;
+}
+
 function siteImagePatterns() {
   const candidates = [process.env.SITE_URL, process.env.NEXT_PUBLIC_SITE_URL];
   const patterns: { protocol: "http" | "https"; hostname: string }[] = [];
@@ -81,7 +96,14 @@ const nextConfig: NextConfig = {
   transpilePackages: ["@kpblog/contracts"],
   // 允许用环境变量指定构建目录：冒烟检查要在不干扰开发者已运行的 dev server
   // 的前提下起自己的实例（Next 16 不允许同目录两个 dev server 共用 .next）。
-  ...(process.env.NEXT_DIST_DIR ? { distDir: process.env.NEXT_DIST_DIR } : {}),
+  // Next 把 distDir 当作**相对应用目录**的路径，传绝对路径会被错误地拼到
+  // apps/web 下面（实测：/home/.../eval-dist 变成了 apps/web/home/.../eval-dist，
+  // 另一个脚本传的绝对路径甚至生成了 230 MB 的 apps/web/eval-3321 并被提交）。
+  // 这里显式识别绝对路径并转成相对 apps/web 的路径，保留调用方「指定任意目录」
+  // 的意图，同时把产物放到调用方真正想放的位置。
+  ...(process.env.NEXT_DIST_DIR
+    ? { distDir: relativeDistDir(process.env.NEXT_DIST_DIR) }
+    : {}),
   images: {
     remotePatterns: siteImagePatterns(),
     formats: ["image/avif", "image/webp"],
