@@ -19,9 +19,10 @@ export async function generateMetadata(): Promise<Metadata> {
       template: `%s | ${settings.blogTitle}`,
     },
     description: settings.blogDescription,
-    alternates: {
-      types: { "application/rss+xml": "/rss.xml" },
-    },
+    // 这里刻意**不**声明 alternates：Next 的 metadata 是浅合并，页面导出的
+    // `alternates`（写 canonical 时必然会有）会整体替换布局里的这一份——之前
+    // RSS 自动发现链接就是这样在全站静默消失的。feed 声明现在由每个页面通过
+    // `pageAlternates()` 统一产出（apps/web/src/lib/metadata.ts）。
     openGraph: {
       title: settings.blogTitle,
       description: settings.blogDescription,

@@ -522,6 +522,34 @@ they need a Chromium binary (found via `CHROME_BIN` or the Playwright cache).
   `apps/web/src/app/globals.css`, `scripts/smoke-web.mjs`, plus the design plan and
   deployment checklist entries that described the removed tab bar.
 
+## Completed 2026-09-17 RSS discovery fix and footer cleanup
+
+- The owner asked why the footer still carries "RSS 订阅 / 站点地图 / 版本 v0.1.0".
+  RSS and the sitemap are **production requirements** (`robots.txt` advertises the
+  sitemap; feed readers and browsers need the feed), so only the version label was
+  cruft — but answering the question surfaced a real production defect.
+- **Defect: the RSS autodiscovery link was missing on every page.** The root layout
+  declared `<link rel="alternate" type="application/rss+xml">`, but Next merges
+  metadata **shallowly**: a page that exports its own `alternates` (which every page
+  does to set a canonical URL) replaces the layout's whole `alternates` object.
+  Measured on the live site: 0 occurrences on `/`, `/articles`, `/about`,
+  `/messages`, `/archive`. Feed readers could only find the feed through the footer
+  link. Fix: `apps/web/src/lib/metadata.ts` exposes `pageAlternates(path)`, which
+  returns canonical **and** `types` together, and all 13 public pages use it. The
+  root layout no longer declares `alternates` at all, so there is exactly one source
+  and no duplicate link. `scripts/smoke-web.mjs` asserts the link exists and points
+  at `/rss.xml`.
+- **Footer version label removed.** It came from `apps/web/package.json`, had been
+  `0.1.0` since the initial scaffold, and the `v` prefix made it read like a release
+  marker while corresponding to no release. The question it was trying to answer
+  ("which build is live?") belongs to `/health`. A new test
+  (`apps/api/tests/version-consistency.test.ts`) pins the health service's
+  `API_VERSION` to `apps/api/package.json` so those two cannot drift.
+- Lesson worth keeping: because Next metadata merges shallowly, any page-level
+  metadata key silently discards the layout's version of that same key. When adding
+  a page that sets `alternates`, `openGraph` or `twitter`, use the shared helpers
+  instead of hand-writing the object.
+
 ## Completed 2026-09-17 production deployment (hardening release)
 
 - Deployed to the single production host behind Nginx: repository `/home/ubuntu/blog`,
