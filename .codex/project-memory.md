@@ -1,6 +1,6 @@
 # Blog project memory
 
-Last updated: 2026-07-21 (Asia/Shanghai)
+Last updated: 2026-09-17 (Asia/Shanghai)
 
 ## Product direction
 
@@ -106,19 +106,20 @@ Last updated: 2026-07-21 (Asia/Shanghai)
 - `/messages` is an honest standalone Guestbook destination with a preparation
   state. It does not invent a second comment data model; article comments remain
   the current working conversation channel until a guestbook backend is chosen.
-- Falling sakura/star/snow effects and their header toggle are temporarily
-  removed from the rendered public shell. The implementation remains available
-  for a future explicit re-enable.
+- Falling sakura/star/snow effects and their header toggle were removed from the
+  rendered public shell. The components (`EffectsToggle`, `FallingEffects`) have
+  since been deleted outright as unreferenced dead code; re-adding them means
+  writing them again (see the 2026-09-17 entry).
 - The compact music popover was redesigned as a complete player card with track
   metadata, play/pause and previous/next controls, seek progress, elapsed and
   total time, persistent volume, and a clear close action.
 
 ## Technical baseline
 
-- Next.js 16.2.10, React 19, TypeScript, Tailwind CSS 4.
+- Next.js 16.3.5, React 19, TypeScript, Tailwind CSS 4.
 - npm-workspaces Monorepo: `apps/web` (Next.js on 3001), `apps/api` (Fastify on
   3002), and `packages/contracts` (shared serializable TypeScript contracts).
-- Prisma 7.8 with the official better-sqlite3 adapter and SQLite.
+- Prisma 7.9 with the official better-sqlite3 adapter and SQLite.
 - JWT cookie authentication, bcrypt passwords, persisted email codes, persisted
   rate-limit buckets, hashed publishing API keys, article/comment/media/admin APIs.
 - Server-rendered Markdown via react-markdown, RSS, dynamic sitemap, robots,
@@ -232,14 +233,18 @@ Last updated: 2026-07-21 (Asia/Shanghai)
 - `apps/web/src/app` remains the routing/composition layer;
   `apps/api/src/server` is the backend domain/service layer. Do not move
   database or authorization logic into Web page components.
-- The former sidebar-bearing `PublicLayout` component is named `ContentLayout`
-  to distinguish it from the actual `(public)/layout.tsx` route layout.
+- The former sidebar-bearing `PublicLayout`/`ContentLayout` component was removed
+  on 2026-09-17 along with `Sidebar`: public pages now use `PageShell` +
+  `PageHeader`, and the article page uses `ArticleReader` (TOC / body / actions).
+  Do not reintroduce a global sidebar.
 - Same-domain components use relative imports; cross-domain imports use the
   `@/` alias. Avoid broad barrel exports across Client/Server boundaries because
   they can accidentally expand client bundles.
 - Formal development conventions are documented in `docs/development.md`.
-  `npm run typecheck` performs strict TypeScript validation and `npm run check`
-  runs lint, typecheck, and all service tests in sequence.
+  `npm run check` now runs lint, typecheck, all tests, documentation and OpenAPI
+  contract validation, and the browser smoke check in sequence.
+- Visual system decisions, research and acceptance evidence live in
+  `docs/design-plan.md`; read it before changing public-site styling.
 
 ## Completed 2026-07-20 upgrade
 
@@ -265,23 +270,23 @@ Last updated: 2026-07-21 (Asia/Shanghai)
 
 ## Validation baseline
 
-- Service tests: 13/13 passing.
-- Fastify injection tests: 3/3 passing.
-- ESLint: passing.
-- Root, API, Web, and Contracts TypeScript checks: passing.
-- API and Next.js production builds: passing.
-- Chromium checks completed for desktop homepage and registration. No hydration
-  or console errors were observed. A dark-theme registration-card contrast bug
-  found during the check was fixed with an explicit dark panel surface.
+- Tests: 107/107 passing (was 16 when this section was first written).
+- ESLint, root/API/Web/Contracts typecheck: passing.
+- Documentation and OpenAPI contract validation: passing (37 routes).
+- Browser smoke check: 11 pages render without console errors, internal links
+  resolve, key components render and real data appears. Runs in CI against the
+  production build.
+- API and Next.js production builds: passing; GitHub CI green end to end.
 
 Run after material changes:
 
 ```bash
-npm test
-npm run lint
-npm run typecheck
-npm run build
+npm run check && npm run build
 ```
+
+`npm run smoke` (dev shape) and `npm run smoke:prod` (production build) spin up
+their own temporary database, API and Web instances and clean up afterwards;
+they need a Chromium binary (found via `CHROME_BIN` or the Playwright cache).
 
 ## Environment and secret rules
 
@@ -321,8 +326,64 @@ npm run build
    verifiable changes; keep the current Admin deployment working until cutover.
 2. Add automated encrypted off-host backups for SQLite, uploaded media, and
    production configuration, with a tested restore procedure.
-3. Supply real owner profile content later through
-   `apps/web/src/config/profile.ts` or a future admin-managed profile model.
-4. Add broader Fastify authorization tests and browser-level interaction tests.
+3. Supply real owner profile content. DONE as a mechanism: the `Profile` singleton
+   model and `/admin/settings` form now exist (see 2026-09-17). `src/config/profile.ts`
+   was removed. The production database still holds no owner content.
+4. Broader Fastify authorization tests DONE (`apps/api/tests/authorization.test.ts`
+   plus the journey test). Browser-level page-render smoke DONE; interaction and
+   form end-to-end assertions are still missing.
 5. Consider object storage/CDN before moving beyond single-machine deployment.
+7. Consider whether the public site should use a serif face for article body text;
+   `docs/design-plan.md` records it as an optional experiment with the tradeoff.
 6. Consider Ed25519 JWT rotation only when independent services need verification.
+
+## Completed 2026-09-17 frontend redesign and stability pass
+
+- Rewrote the public visual system as design tokens in `apps/web/src/app/globals.css`
+  (neutral surfaces carrying the structure, pink/blue accents, four radii, two
+  shadows, `.panel` / `.btn` / `.reading` primitives). The old color ramps are
+  remapped through `@theme inline` so the admin UI stays consistent without edits.
+- Homepage is four sections (immersive hero, latest posts, current work, categories
+  and tags). The article page became a reader: sticky desktop TOC with scroll
+  highlighting, a mobile TOC drawer, 720px reading column, keyboard-focusable code
+  blocks, image lightbox, and an actions rail. Added a mobile bottom tab bar.
+- Verified rather than assumed: 40 foreground/background pairs meet WCAG AA in both
+  themes, axe-core reports zero violations across 12 pages x 2 viewports, 96
+  responsive combinations have no horizontal overflow and no interface text below
+  13px, and a print-media pass hides chrome and flattens grid columns.
+- Fixed real defects found while verifying:
+  - `MarkdownContent` passed a string array to rehype-highlight's `languages`,
+    which expects lowlight grammar objects, so syntax highlighting had been
+    silently dead site-wide.
+  - Rewriting `Header` dropped `<LazyMusicPlayer />`, leaving the music button
+    able to toggle its icon but never open the panel.
+  - `updateArticle` computed `slugify(slugInput || title || existing.title)`, so
+    editing only the body changed the slug and broke published URLs and inbound
+    links. The slug now changes only when explicitly supplied (regression test).
+  - `AuthNav` read the session once on mount, so a client-side navigation after
+    login left the header showing Register/Login; it now uses a subscribable
+    session store via `useSyncExternalStore`.
+  - Print rules matched `[class*="CommentForm"]` against class names that never
+    contained the component name, so they never applied. Hidden regions now carry
+    an explicit `data-print="hide"` marker.
+- Deleted unreferenced code: `ContentLayout`, `Sidebar`, `MobileNavigation`,
+  `SearchBox`, `EffectsToggle`, `FallingEffects`, `hashTagColor`, and
+  `src/config/profile.ts`.
+- `/messages` is now a working guestbook backed by the comment model with a
+  nullable `postId`; the gallery route and its profile field were removed.
+- Added the browser smoke check (`scripts/smoke.mjs`, `smoke-web.mjs`,
+  `smoke-prod.mjs`) with its own temporary database. It cross-checks the database
+  file the API reports on stderr, because without that check the suite could run
+  against a developer database and pass on data it did not create.
+- CI first run exposed a defect that could not reproduce locally: the smoke
+  orchestrator started the API with `npx tsx`, and `tsx` is a root devDependency,
+  so under a production/CI dependency tree npx tried to resolve a version over the
+  network and failed. Both smoke variants now run the built API (`apps/api/dist`)
+  and local `node_modules/.bin` binaries, with the seed script at
+  `apps/api/scripts/smoke-seed.mjs`.
+- Note for future sessions: `scripts/check-docs.mjs` validates that every
+  `process.env.NAME` in the source also appears in `.env.example` or its
+  runtime-provided allowlist. Adding a script-only variable without registering it
+  fails `npm run check`; running the check before the edit hides this.
+- Repository state: pushed to `origin/main`, GitHub CI green (14 steps). The
+  production server had not been updated at the time of this entry.
