@@ -20,7 +20,7 @@ import {
 import { apiSuccess, positiveInt } from "@/http";
 
 type ArchiveParams = { slug: string };
-type PageQuery = { page?: string; limit?: string };
+type PageQuery = { page?: string; limit?: string; q?: string };
 
 const publicRoutes: FastifyPluginAsync = async (app) => {
   app.get("/public/settings", async () => apiSuccess(await getPublicSettings()));
@@ -41,7 +41,9 @@ const publicRoutes: FastifyPluginAsync = async (app) => {
   app.get<{ Querystring: PageQuery }>("/public/article-index", async (request) =>
     apiSuccess(await getArticleIndexPageData(
       positiveInt(request.query.page, 1),
-      Math.min(50, positiveInt(request.query.limit, 10))
+      Math.min(50, positiveInt(request.query.limit, 10)),
+      // 与 admin 列表同一约定:关键词截断到 100 字符,过滤已发布文章
+      request.query.q?.slice(0, 100)
     ))
   );
 

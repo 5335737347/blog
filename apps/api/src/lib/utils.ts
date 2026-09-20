@@ -45,13 +45,35 @@ export function generateUniqueFilename(original: string): string {
 
 // ====== 内容处理 ======
 
+/**
+ * 从 Markdown 正文自动派生纯文本摘要。
+ *
+ * 必须按「结构」剥离而不是删字符：之前的实现直接删掉 `![]()`、`|` 这些语法字符，
+ * 结果图片语法变成「alt 文本/图片路径」（如 泛型推断示意/images/hero-bg.webp）、
+ * 表格的单元格粘连且 `------` 分隔线残留，被原样存进数据库并展示在文章页。
+ * 顺序很重要：先代码块，再图片（必须在链接之前，`!` 才不会被误当普通文本），
+ * 再链接（保留文字），最后才是行内强调符号。
+ */
 export function autoExcerpt(content: string, maxLen = 200): string {
   const clean = content
-    .replace(/^---[\s\S]*?---\s*/m, "")
-    .replace(/^#+\s+.*$/gm, "")
-    .replace(/```[\s\S]*?```/g, "")
-    .replace(/[|*_~>`\[\]()!#]/g, "")
+    .replace(/^---[\s\S]*?---\s*/m, "") // frontmatter
+    .replace(/```[\s\S]*?```/g, " ") // 围栏代码块
+    .replace(/~~~[\s\S]*?~~~/g, " ")
+    .replace(/`([^`\n]*)`/g, "$1") // 行内代码 → 保留内容（行内代码常是句子的一部分）
+    .replace(/!\[[^\]]*\]\([^)\s]*(?:\s+"[^"]*")?\)/g, " ") // 图片
+    .replace(/!\[[^\]]*\]\[[^\]]*\]/g, " ") // 引用式图片
+    .replace(/\[([^\]]*)\]\([^)\s]*(?:\s+"[^"]*")?\)/g, "$1") // 链接 → 保留文字
+    .replace(/\[([^\]]*)\]\[[^\]]*\]/g, "$1") // 引用式链接
+    .replace(/^\s*\[[^\]]+\]:\s+\S+.*$/gm, " ") // 引用定义行
+    .replace(/^\s*\|?[\s:|-]*-[\s:|-]*\|[\s:|-]*$/gm, " ") // 表格分隔行
+    .replace(/\|/g, " ") // 剩余表格竖线 → 空格（保留单元格文字）
+    .replace(/^#{1,6}\s+.*$/gm, "") // 标题行（标题另有展示位）
+    .replace(/^\s*([-*_][\s-]*){3,}$/gm, " ") // 水平线
+    .replace(/^>\s?/gm, "") // 引用块标记
+    .replace(/<[^>\n]+>/g, " ") // 内联 HTML 标签
+    .replace(/[*_~]/g, "") // 强调符号
     .replace(/\n+/g, " ")
+    .replace(/\s{2,}/g, " ")
     .trim();
   return clean.slice(0, maxLen) + (clean.length > maxLen ? "..." : "");
 }

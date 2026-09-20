@@ -78,10 +78,16 @@ export async function getPublicSettings(): Promise<PublicSettingsDto> {
   };
 }
 
-export async function getArticleIndexPageData(page: number, pageSize: number) {
+export async function getArticleIndexPageData(
+  page: number,
+  pageSize: number,
+  query?: string
+) {
   return listArticles({
     page,
     pageSize,
+    // 关键词搜索(标题/摘要/正文 contains);/articles 列表页的搜索框走这里
+    query: query ?? null,
     isAdmin: false,
   });
 }

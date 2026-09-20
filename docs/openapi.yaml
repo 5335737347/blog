@@ -128,6 +128,14 @@ paths:
       parameters:
         - $ref: "#/components/parameters/Page"
         - $ref: "#/components/parameters/Limit"
+        - name: q
+          in: query
+          schema:
+            type: string
+            maxLength: 100
+          description: >-
+            Keyword filter over title, excerpt and content of published
+            articles. The API truncates the value to 100 characters.
       responses:
         "200":
           description: Paginated published articles
