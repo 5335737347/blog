@@ -14,8 +14,9 @@ export function KunFishIcon(props: IconProps) {
       {/* 眼睛 */}
       <circle cx="16" cy="20" r="2.8" fill="#1e293b" />
       <circle cx="17.1" cy="18.9" r="1" fill="white" />
-      {/* 腮红 */}
-      <circle cx="11.5" cy="27" r="2.6" fill="#f472b6" opacity="0.9" />
+      {/* 腮红：这是插画元素的固有色，随 currentColor 会被眼睛同化，所以保留硬编码；
+          但取值对齐当前 --primary（#ef5f7a），不再用旧版 #f472b6。 */}
+      <circle cx="11.5" cy="27" r="2.6" fill="#ef5f7a" opacity="0.9" />
       {/* 微笑 */}
       <path d="M14 26 C15.5 28 18 29 20 28" stroke="#1e293b" strokeWidth="1.6" strokeLinecap="round" fill="none" />
     </svg>

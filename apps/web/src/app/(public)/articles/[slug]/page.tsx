@@ -107,7 +107,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
       />
 
       <article>
-        <header className="max-w-read">
+        <header className="mx-auto max-w-read">
           <nav aria-label="面包屑" className="flex flex-wrap items-center gap-1.5 text-meta text-ink-3">
             <Link href="/" className="transition-colors hover:text-primary-deep">首页</Link>
             {post.category && (
@@ -149,7 +149,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
         </header>
 
         {post.coverImage && (
-          <div data-print="cover" className="relative mt-8 aspect-[16/9] max-w-read overflow-hidden rounded-md border border-line bg-bg-subtle">
+          <div data-print="cover" className="relative mt-8 aspect-[16/9] max-w-read mx-auto overflow-hidden rounded-md border border-line bg-bg-subtle">
             <Image
               src={post.coverImage}
               alt=""
@@ -163,13 +163,13 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
           </div>
         )}
 
-        <div className="mt-10 max-w-read border-t border-line pt-8">
+        <div className="mt-10 max-w-read mx-auto border-t border-line pt-8">
           <MarkdownContent content={post.content} />
         </div>
       </article>
 
       {(adjacent?.previous || adjacent?.next) && (
-        <nav aria-label="文章导航" className="mt-12 grid max-w-read gap-4 sm:grid-cols-2">
+        <nav aria-label="文章导航" className="mt-12 grid max-w-read mx-auto gap-4 sm:grid-cols-2">
           {adjacent.previous ? (
             <Link
               href={`/articles/${adjacent.previous.slug}`}
@@ -215,18 +215,16 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
                 key={relatedPost.id}
                 slug={relatedPost.slug}
                 title={relatedPost.title}
-                excerpt={relatedPost.excerpt}
                 coverImage={relatedPost.coverImage ?? null}
                 publishedAt={relatedPost.publishedAt}
                 tags={relatedPost.tags}
-                category={relatedPost.category}
               />
             ))}
           </div>
         </section>
       )}
 
-      <div data-print="hide" className="mt-14 max-w-read border-t border-line pt-10">
+      <div data-print="hide" className="mt-14 max-w-read mx-auto border-t border-line pt-10">
         <CommentSection postId={post.id} />
       </div>
     </ArticleReader>

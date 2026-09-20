@@ -108,8 +108,10 @@ export const getPublicSettings = cache(async (): Promise<PublicSettingsDto> => {
   }
 });
 
-export function getArticleIndexPageData(page: number, pageSize: number) {
-  return getApiData<PaginatedResult<PostSummary>>(`/api/public/article-index?page=${page}&limit=${pageSize}`);
+export function getArticleIndexPageData(page: number, pageSize: number, query?: string) {
+  const params = new URLSearchParams({ page: String(page), limit: String(pageSize) });
+  if (query) params.set("q", query);
+  return getApiData<PaginatedResult<PostSummary>>(`/api/public/article-index?${params.toString()}`);
 }
 
 export const getArticlePageData = cache((slug: string) =>

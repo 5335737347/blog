@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import ThemeSelector from "@/components/public/preferences/ThemeSelector";
 import MusicToggle from "@/components/public/music/MusicToggle";
 import LazyMusicPlayer from "@/components/public/music/LazyMusicPlayer";
 import AuthNav from "@/components/public/auth/AuthNav";
+import HeaderSearch from "./HeaderSearch";
 import { KunFishIcon, MenuIcon, CloseIcon, SearchIcon } from "./SiteIcons";
 
 const NAV = [
@@ -48,6 +49,29 @@ export default function Header({ blogTitle }: { blogTitle: string }) {
   }, []);
 
   const menuVisible = menuOpen && menuPath === pathname;
+  // 头部原位搜索:展开时中间区域变成输入框(Esc/点击头部以外/路由变化时收起)
+  const [searchOpen, setSearchOpen] = useState(false);
+  const headerRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    if (!searchOpen) return;
+    const closeOnClickOutside = (event: MouseEvent) => {
+      if (headerRef.current && !headerRef.current.contains(event.target as Node)) {
+        setSearchOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", closeOnClickOutside);
+    return () => document.removeEventListener("mousedown", closeOnClickOutside);
+  }, [searchOpen]);
+
+  // 路由变化(搜索提交、点击导航)后收起,避免输入框挂在下一个页面上。
+  // react-hooks/set-state-in-effect 禁止在 effect 里同步 setState,
+  // 官方推荐的模式是在渲染期间用「上一个值」比对来调整状态。
+  const [lastPathname, setLastPathname] = useState(pathname);
+  if (pathname !== lastPathname) {
+    setLastPathname(pathname);
+    if (searchOpen) setSearchOpen(false);
+  }
 
   /**
    * 菜单展开时锁定背景滚动并支持 Esc 关闭。
@@ -79,11 +103,13 @@ export default function Header({ blogTitle }: { blogTitle: string }) {
     };
   }, [menuVisible]);
 
-  // 只有首页 hero 之上才允许出现「透明 + 白字」形态
+  // 只有首页 hero 之上才允许出现「透明 + 白字」形态;搜索展开时输入框切换为
+  // 玻璃白字样式(HeaderSearch 的 overHero 分支),头部本身不再变色。
   const overHero = isHome && !scrolled;
 
   return (
     <header
+      ref={headerRef}
       // `data-over-hero` 是给 CSS 用来提高优先级的钩子，见 globals.css 的同名规则：
       // 组件类（.nav-link/.icon-button）自带 color，Tailwind 工具类压不过它们。
       data-over-hero={overHero ? "" : undefined}
@@ -95,9 +121,11 @@ export default function Header({ blogTitle }: { blogTitle: string }) {
     >
       {/*
         hero 之上加一层顶部压暗，保证浅色壁纸下站名与导航仍可读。
-        强度按像素级实测调整（顶部 0.45 → 0.62、中段 0.18 → 0.42），文字颜色另见
+        头部在文档流上并不压在壁纸里——透明形态下它背后是白色页面底，
+        因此文字位置的渐变不透明度必须 ≥0.82（白底上白字达到 4.5:1 的数学下限），
+        这里取 0.85 留出余量；数值按像素级实测校准，文字颜色另见
         globals.css 的 `header[data-over-hero]` 规则。
-        此前白色站名压在浅色壁纸上的实测对比度只有 1.64:1（要求 4.5:1）。
+        此前 0.62/0.42/0.16 的渐变在文字行只有约 3:1（实测中位 3.0、最差 2.68）。
       */}
       {overHero && (
         <div
@@ -105,7 +133,7 @@ export default function Header({ blogTitle }: { blogTitle: string }) {
           className="pointer-events-none absolute inset-0"
           style={{
             backgroundImage:
-              "linear-gradient(180deg, rgba(15,23,42,.62) 0%, rgba(15,23,42,.42) 60%, rgba(15,23,42,.16) 100%)",
+              "linear-gradient(180deg, rgba(15,23,42,.94) 0%, rgba(15,23,42,.86) 55%, rgba(15,23,42,.34) 100%)",
           }}
         />
       )}
@@ -131,7 +159,10 @@ export default function Header({ blogTitle }: { blogTitle: string }) {
           </span>
         </Link>
 
-        <nav className="ml-4 hidden items-center gap-0.5 lg:flex" aria-label="主导航">
+        <nav
+          aria-label="主导航"
+          className={`ml-4 hidden items-center gap-0.5 lg:flex ${searchOpen ? "lg:hidden" : ""}`}
+        >
           {NAV.map((item) => {
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
             return (
@@ -139,7 +170,7 @@ export default function Header({ blogTitle }: { blogTitle: string }) {
                 key={item.href}
                 href={item.href}
                 aria-current={active ? "page" : undefined}
-                className={`nav-link ${overHero ? "text-white/85 hover:bg-white/15 hover:text-white" : ""} ${
+                className={`nav-link ${overHero ? "text-white hover:bg-white/15 hover:text-white" : ""} ${
                   overHero && active ? "bg-white/20 text-white" : ""
                 }`}
               >
@@ -148,11 +179,21 @@ export default function Header({ blogTitle }: { blogTitle: string }) {
             );
           })}
         </nav>
+        {searchOpen && (
+          <HeaderSearch onClose={() => setSearchOpen(false)} overHero={overHero} />
+        )}
 
         <div className={`ml-auto flex items-center gap-0.5 ${overHero ? "text-white" : ""}`}>
-          <Link href="/articles" className="icon-button" aria-label="搜索文章" title="搜索文章">
+          <button
+            type="button"
+            onClick={() => setSearchOpen((v) => !v)}
+            aria-label={searchOpen ? "关闭搜索" : "打开搜索"}
+            aria-expanded={searchOpen}
+            aria-controls="header-search"
+            className="icon-button"
+          >
             <SearchIcon className="h-[18px] w-[18px]" />
-          </Link>
+          </button>
           {/* 播放器面板定位依赖这个 relative 容器；重写 Header 时曾漏掉 LazyMusicPlayer，
               导致音乐按钮只能切换图标、打不开面板。 */}
           <div className="relative">

@@ -371,12 +371,14 @@ time,
   hero 之上的头部配色。
   这里是**必须用属性选择器**而不是在组件里写 Tailwind 工具类的地方：
   `.nav-link` / `.icon-button` 自己声明了 `color`，类选择器的优先级高于
-  单个工具类（`text-white/85`），所以之前 `overHero` 分支加的那些工具类
+  单个工具类，所以之前 `overHero` 分支加的那些工具类
   全部被覆盖——实测导航在深色压暗层上仍是 `rgb(70,86,110)`，
   对比度只有 1.17:1。`header[data-over-hero]` 的优先级足以稳定压过它们。
+  颜色必须完全不透明：透明形态下头部背后是白色页面底（不是壁纸），
+  半透明白在数学上就到不了 4.5:1——0.92 时实测中位只有 3.0:1。
 */
 header[data-over-hero] .nav-link {
-  color: rgb(255 255 255 / 0.92);
+  color: #fff;
 }
 
 header[data-over-hero] .nav-link:hover {
@@ -390,7 +392,7 @@ header[data-over-hero] .nav-link[aria-current="page"] {
 }
 
 header[data-over-hero] .icon-button {
-  color: rgb(255 255 255 / 0.92);
+  color: #fff;
 }
 
 header[data-over-hero] .icon-button:hover {
@@ -659,15 +661,34 @@ html[data-menu-open] [data-print="hide"].fixed.inset-x-0 {
 
 .reading :is(h1, h2, h3, h4)[id] {
   position: relative;
+  /* 锚点跳转的落点避开粘性头部（h-16），否则标题会被盖在头部下面 */
+  scroll-margin-top: 5rem;
 }
 
-/* 标题锚点：hover 显示 #，颜色走最弱一级文字色 */
-.reading :is(h1, h2, h3, h4)[id]:hover::before {
-  content: "#";
+/*
+  标题锚点：rehype-autolink-headings 在每个带 id 的标题内前置
+  `<a.heading-anchor>#</a>`（见 MarkdownContent 的 AUTOLINK_OPTIONS）。
+  hover 时出现在标题左侧边距里，点击跳转到该标题；tabIndex=-1 不进 Tab 序
+  （几十个标题不该稀释键盘流，键盘用户走目录），所以只做 hover 显隐、
+  不需要 focus-visible 态。此前这里是一条 hover 伪元素装饰——提示了「可点」
+  却点不了，且和 h2 的左边框叠在一起。
+*/
+.reading .heading-anchor {
   position: absolute;
   left: -1.1em;
   color: var(--text-4);
   font-weight: 500;
+  text-decoration: none;
+  opacity: 0;
+  transition: opacity 120ms ease, color 120ms ease;
+}
+
+.reading :is(h1, h2, h3, h4)[id]:hover > .heading-anchor {
+  opacity: 1;
+}
+
+.reading .heading-anchor:hover {
+  color: var(--accent-deep);
 }
 
 .reading a {

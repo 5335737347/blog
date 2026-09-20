@@ -5,6 +5,14 @@ import { getArchiveData } from "@/lib/api/public-api";
 import { formatDate } from "@/lib/utils";
 import { pageAlternates } from "@/lib/metadata";
 
+/*
+  归档页是数据驱动的静态页：没有这个声明，它会在构建期被预渲染成
+  固定 HTML——构建时 API 不可达，空状态就被永久烤进产物（实测复现）；
+  生产上即使构建时 API 在线，两次部署之间新发布的文章也不会出现。
+  revalidate = 300 与首页的 60 秒同策略：允许短暂滞后，但一定会自愈。
+*/
+export const revalidate = 300;
+
 export function generateMetadata(): Metadata {
   return {
     title: "归档",

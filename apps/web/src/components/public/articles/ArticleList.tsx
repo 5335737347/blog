@@ -17,17 +17,15 @@ export default function ArticleList({ articles }: ArticleListProps) {
   }
 
   return (
-    <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+    <div className="grid gap-4">
       {articles.map((article) => (
         <ArticleCard
           key={article.id}
           slug={article.slug}
           title={article.title}
-          excerpt={article.excerpt}
           coverImage={article.coverImage ?? null}
           publishedAt={article.publishedAt}
           tags={article.tags}
-          category={article.category}
         />
       ))}
     </div>

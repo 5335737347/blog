@@ -4,7 +4,7 @@ import Image from "next/image";
 import { useEffect, useState } from "react";
 import { HOME_WALLPAPERS, HOME_WALLPAPER_INTERVAL_MS } from "@/config/home";
 import HomeSearch from "./HomeSearch";
-import { ChevronRightIcon, SearchIcon } from "@/components/public/layout/SiteIcons";
+import { ChevronRightIcon } from "@/components/public/layout/SiteIcons";
 
 interface HeroSectionProps {
   blogTitle: string;
@@ -71,6 +71,12 @@ export default function HeroSection({ blogTitle, blogDescription }: HeroSectionP
         style={{ backgroundImage: "var(--hero-scrim)" }}
         aria-hidden="true"
       />
+      {/* 底部向页面底色的渐隐：消除壁纸直切白色内容区的生硬边界。 */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-28"
+        style={{ backgroundImage: "linear-gradient(180deg, transparent, var(--bg))" }}
+      />
 
       <div className="relative z-10 mx-auto w-full max-w-content px-5 py-16 sm:px-6">
         <div className="animate-fade-in-up max-w-3xl">
@@ -97,10 +103,6 @@ export default function HeroSection({ blogTitle, blogDescription }: HeroSectionP
             </a>
           </div>
 
-          <p className="mt-6 inline-flex items-center gap-2 text-micro text-white [text-shadow:0_1px_10px_rgba(15,23,42,.8)]">
-            <SearchIcon className="h-3.5 w-3.5" />
-            按 Enter 直接搜索，支持标题、标签与正文关键词
-          </p>
         </div>
       </div>
     </section>

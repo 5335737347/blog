@@ -117,7 +117,25 @@ export default function CommentSection({ postId }: CommentSectionProps) {
       </div>
 
       {loading ? (
-        <p className="text-meta text-ink-3">加载中...</p>
+        /*
+          加载态骨架必须占位足够高：留言板（/messages）的表单和列表都在首屏，
+          之前只有一行「加载中...」（约 20px），第一页评论到达后页脚被猛推下去
+          ——真实留言量（54 条）下实测 CLS 0.272。骨架 60svh 起步后，
+          页脚在加载期间就位于折叠线以下，列表替换不再移动视口内元素。
+          文章页的评论区本来就在首屏之外，这个占位对它没有观感影响。
+        */
+        <div className="min-h-[60svh] animate-pulse" aria-hidden="true">
+          {[0, 1, 2].map((index) => (
+            <div key={index} className="flex gap-3 py-4">
+              <div className="h-9 w-9 shrink-0 rounded-full bg-bg-subtle" />
+              <div className="min-w-0 flex-1">
+                <div className="mb-2 h-3.5 w-28 rounded-xs bg-bg-subtle" />
+                <div className="h-3.5 w-3/4 rounded-xs bg-bg-subtle" />
+              </div>
+            </div>
+          ))}
+          <span className="sr-only">正在加载评论…</span>
+        </div>
       ) : (
         <>
           <CommentList
