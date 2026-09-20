@@ -10,7 +10,10 @@ const repositoryRoot = path.resolve(fileURLToPath(new URL("../", import.meta.url
 // apps/web/tmp/<dist>/server/middleware.js 会被当成源码扫描，把 Next 内部的
 // NEXT_* / VERCEL_* 变量报成「未写入 .env.example」，让 check:docs 在残留产物
 // 存在时限入假失败。
+// `eval-` 前缀同理：量化评估隔离实例（.research/tools/eval2-stack.mjs）的构建目录
+// 叫 eval-<端口><代号>，实例运行期间一直存在，门禁必须无视它。
 const ignoredDirectories = new Set([".git", ".next", "coverage", "dist", "node_modules", "tmp"]);
+const ignoredDirectoryPrefixes = ["eval-"];
 const markdownRoots = [
   "README.md",
   "docs",
@@ -66,7 +69,7 @@ async function collectFiles(target, predicate) {
 
   const files = [];
   for (const entry of await readdir(absolute, { withFileTypes: true })) {
-    if (entry.isDirectory() && ignoredDirectories.has(entry.name)) continue;
+    if (entry.isDirectory() && (ignoredDirectories.has(entry.name) || ignoredDirectoryPrefixes.some((p) => entry.name.startsWith(p)))) continue;
     const relative = path.join(target, entry.name);
     if (entry.isDirectory()) {
       files.push(...await collectFiles(relative, predicate));
