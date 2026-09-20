@@ -14,6 +14,7 @@
 | 文档 | 适用场景 |
 |---|---|
 | [总体架构](architecture.md) | 理解当前 Web/API 边界及已批准的私有 Admin 目标架构 |
+| [后端代码地图与流程图](backend-map.md) | 阅读 `apps/api` 的分层、路由、请求管线与流程图源 |
 | [开发规范](development.md) | 修改代码、增加接口、执行验证和准备提交 |
 | [环境变量](environment.md) | 创建本地或生产环境配置 |
 | [部署手册](deployment.md) | 使用 PM2、Nginx 和更新脚本部署单机实例 |
@@ -22,6 +23,7 @@
 | [前端设计方案](design-plan.md) | 查看视觉体系、设计令牌、页面结构与前端改版顺序 |
 | [OpenAPI](openapi.yaml) | 查询 HTTP 接口、请求和响应契约 |
 | [量化评估报告](evaluation-report.md) | 查看多维度量化评估的得分、证据与修复清单 |
+| [前端量化评估](frontend-evaluation.md) | 查看前端专项复测的得分、冷加载 CLS 与可访问性实测 |
 | [后续计划](next-plan.md) | 查看私有 Admin 迁移阶段、验收标准和其他技术债 |
 
 ## 应用文档

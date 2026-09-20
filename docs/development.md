@@ -7,15 +7,60 @@
 这是单 Git 仓库、npm workspaces 管理的 Monorepo：
 
 ```text
-apps/web/                 Next.js 页面、管理界面和同域 API 代理
-apps/api/                 Fastify HTTP API、业务服务、认证和数据库访问
-packages/contracts/       跨进程共享的 TypeScript DTO 与 API envelope
-prisma/                   schema、migrations、seed
-docs/                     面向开发者和用户的正式文档
-scripts/                  仓库级开发、发布和部署自动化
+blog/
+├── apps/
+│   ├── web/                    Next.js 页面、管理界面和同域 API 代理
+│   │   ├── src/app/             App Router 路由（(public) 一组、admin 一组）
+│   │   ├── src/components/      admin / public / ui 三类组件
+│   │   ├── src/lib/             SSR 与浏览器请求基础设施（api/public-api.ts、api-client.ts）
+│   │   ├── src/proxy.ts         管理页面会话预检
+│   │   ├── src/config/          可提交的产品配置（首页壁纸等）
+│   │   ├── public/              静态资源；images/ 与 music/ 是上传目录
+│   │   ├── .env.local           ⚠ 本地生成物，存在时会阻止冒烟脚本启动
+│   │   ├── .next/               构建产物
+│   │   └── tmp/ eval-*/         冒烟与评估实例的隔离构建目录
+│   └── api/                    Fastify HTTP API、业务服务、认证和数据库访问
+│       ├── src/{routes,server,lib}/   HTTP 层 / 领域层 / 基础设施
+│       ├── tests/               20 个测试文件，各自使用独立临时 SQLite
+│       ├── scripts/             契约校验、SMTP 诊断、SQLite 备份、冒烟种子
+│       └── dist/                构建产物
+├── packages/contracts/         跨进程共享的序列化 DTO 与 API envelope
+├── prisma/                     schema、migrations、seed、开发库
+├── content/                    Markdown 原稿（发布脚本的输入）
+├── docs/                       正式文档（含 openapi.yaml）
+├── scripts/                    仓库级开发、发布、部署与校验自动化
+├── backups/                    本地 SQLite 快照（不提交）
+├── .github/workflows/ci.yml    CI 门禁定义
+├── .codex/project-memory.md    项目记忆：决策背景与历史约束（提交）
+├── .agents/                    本地空目录，未纳入 Git
+├── .next/ .npm-cache/ .research/  本地构建/缓存/研究产物（不提交）
+├── .env  .env.local            本地真实配置（不提交）
+├── .env.example                唯一可提交的配置模板
+├── AGENTS.md  CLAUDE.md        代理与工具的使用说明
+└── package.json  package-lock.json  tsconfig*.json  eslint.config.mjs
+    prisma.config.ts  ecosystem.config.cjs   仓库级配置
 ```
 
 物理分离意味着两个应用可以独立构建和启动。它不意味着拆成两个 Git 仓库：原子提交、共享契约、迁移和部署脚本仍应处在同一提交中。
+
+## 忽略规则与本地残留
+
+`.gitignore` 的分组含义：
+
+| 规则 | 覆盖的内容 |
+|---|---|
+| `/node_modules`、`/.npm-cache/` | 依赖与本地 npm 缓存（`~/.npm` 不可写时使用后者） |
+| `**/.next/`、`**/dist/`、`*.tsbuildinfo`、`next-env.d.ts` | 构建产物与增量编译信息 |
+| `.env*` + `!.env.example` | 真实配置永不入库，只放行模板 |
+| `/backups/`、`/prisma/dev.db` | 数据库与快照（含 journal 文件） |
+| `/apps/web/public/images/*`、`/apps/web/public/music/*` | 上传媒体；主页壁纸 `home/*.webp` 被显式放行，属于版本化主题资源 |
+| `/.research/` | 本地研究产物（截图、爬取数据、Chromium 配置、临时脚本） |
+| `/apps/web/tmp/`、`/apps/web/eval-*/` | 冒烟与评估实例的隔离构建目录，异常退出时可能残留 |
+
+两类**本地残留会挡住门禁**，排障时先查这里：
+
+1. **`apps/web/.env.local` 存在即无法冒烟。** `scripts/smoke.mjs` 与 `scripts/smoke-prod.mjs` 都要往这个位置写临时 API 地址，发现文件已存在会直接报错退出——`npm run smoke` 是 `npm run check` 的最后一步。该文件由评估栈脚本生成，正常结束时会被删除；被强杀时会留下。
+2. **被忽略的构建残留会被文档校验当成源码扫描。** `scripts/check-docs.mjs` 忽略 `.next`、`dist`、`tmp`，但不忽略 `eval-*`；残留的 Next 产物里有框架内部的 `NEXT_*`/`VERCEL_*` 变量，会让 `npm run check:docs` 报一堆「未写入 `.env.example`」的假失败。删除残留目录即可恢复。（历史目录名 `apps/web/eval-3321/` 已于清理中删除，此处仅作说明。）<!-- check-docs:allow-missing-path -->
 
 ## 依赖方向
 
@@ -43,7 +88,10 @@ apps/web/src/
 │   ├── public/             # articles/auth/comments/home/layout/music/preferences
 │   └── ui/                 # 无业务含义的基础组件
 ├── config/                 # 可提交的产品配置，不放密钥
-├── lib/api/                # SSR API 客户端和浏览器请求基础设施
+├── lib/api/public-api.ts   # SSR 数据读取客户端（走 API_INTERNAL_URL）
+├── lib/api-client.ts       # 浏览器请求基础设施（同源 /api/*）
+├── lib/{metadata,images,theme,utils,env}.ts
+├── instrumentation.ts      # Next 运行时探针入口
 └── proxy.ts                # 管理页面会话预检
 ```
 
