@@ -18,7 +18,7 @@ const groups: { title: string; links: { href: string; label: string; exact?: boo
     links: [
       { href: "/admin/categories", label: "分类管理" },
       { href: "/admin/tags", label: "标签管理" },
-      { href: "/admin/music", label: "音乐管理" },
+      { href: "/admin/resources", label: "资源管理" },
       { href: "/admin/settings", label: "博客设置" },
     ],
   },

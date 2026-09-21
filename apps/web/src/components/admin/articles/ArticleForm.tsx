@@ -186,12 +186,17 @@ export default function ArticleForm({
         placeholder="文章简短描述（会显示在列表和 RSS 中）"
       />
 
-      <Input
-        label="封面图 URL"
-        value={coverImage}
-        onChange={(e) => setCoverImage(e.target.value)}
-        placeholder="https://... 或 /images/... 或留空"
-      />
+      <div>
+        <Input
+          label="封面图 URL"
+          value={coverImage}
+          onChange={(e) => setCoverImage(e.target.value)}
+          placeholder="https://... 或 /images/... 或留空"
+        />
+        <p className="mt-1 text-micro text-ink-3">
+          本站图片可在后台「资源管理」上传后复制地址粘贴到这里；外链同样支持。
+        </p>
+      </div>
 
       <div>
         <label className="mb-1 block text-meta font-medium text-ink-2">内容 *</label>

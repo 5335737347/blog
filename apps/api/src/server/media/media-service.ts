@@ -1,4 +1,4 @@
-import { mkdir, unlink, writeFile } from "fs/promises";
+import { mkdir, readdir, stat, unlink, writeFile } from "fs/promises";
 import path from "path";
 import { prisma } from "@/lib/prisma";
 import { generateUniqueFilename } from "@/lib/utils";
@@ -6,8 +6,10 @@ import { badRequest, notFound } from "@/server/errors";
 import { musicTrackSelect, toMusicTrackDto } from "./media-dto";
 
 /**
- * 媒体服务。目前只有音乐：站点图片走外部图床（GitHub），
- * 本地上传/列举/删除图片的服务函数与端点已一并移除。
+ * 媒体服务：音乐（数据库记录，含外链）与封面图片（纯文件系统，无数据库）。
+ *
+ * 图片端点曾在切图床时被整体移除；2026-09-21 产品决定恢复本地图库，
+ * 与音乐合并为后台「资源管理」页（文章仍可直接填外链 URL，两者共存）。
  */
 
 const ALLOWED_AUDIO_TYPES = ["audio/mpeg", "audio/wav", "audio/ogg", "audio/mp3", "audio/webm"];
@@ -145,5 +147,94 @@ export async function deleteMusicTrack(id: string) {
   }
 
   await prisma.music.delete({ where: { id } });
+  return { deleted: true };
+}
+
+// ===== 封面图片 =====
+//
+// 与音乐不同，图片不进数据库：图库就是 MEDIA_ROOT/images 下的文件本身，
+// 文章通过「封面图 URL」字段引用 /images/<name>。没有列表页之外的元数据
+// 需要维护，也就没有删文章后残留引用的问题。
+
+const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif", "image/avif"];
+const IMAGE_EXT_RE = /\.(jpe?g|png|webp|gif|avif)$/i;
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
+
+export interface ImageFileInput {
+  file: File | null;
+}
+
+export interface ImageInfo {
+  name: string;
+  url: string;
+  size: number;
+  modified: string;
+}
+
+export async function listImages(): Promise<ImageInfo[]> {
+  let entries;
+  try {
+    entries = await readdir(publicPath("images"), { withFileTypes: true });
+  } catch {
+    // 目录还不存在（从未上传过）视为空图库，而不是让后台报错。
+    return [];
+  }
+
+  const files = entries.filter((entry) => entry.isFile() && IMAGE_EXT_RE.test(entry.name));
+  const infos = await Promise.all(
+    files.map(async (entry) => {
+      const stats = await stat(publicPath("images", entry.name));
+      return {
+        name: entry.name,
+        url: `/images/${entry.name}`,
+        size: stats.size,
+        modified: stats.mtime.toISOString(),
+      };
+    })
+  );
+
+  return infos.sort((a, b) => b.modified.localeCompare(a.modified));
+}
+
+export async function createImageFromFile(input: ImageFileInput): Promise<ImageInfo> {
+  if (!input.file) {
+    throw badRequest("请选择文件");
+  }
+
+  const { file } = input;
+  if (!ALLOWED_IMAGE_TYPES.includes(file.type) || !IMAGE_EXT_RE.test(file.name)) {
+    throw badRequest("不支持的文件类型，仅支持 JPG/PNG/WebP/GIF/AVIF");
+  }
+  if (file.size > MAX_IMAGE_SIZE) {
+    throw badRequest("文件大小不能超过 10MB");
+  }
+
+  const filename = generateUniqueFilename(file.name);
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const uploadDir = publicPath("images");
+
+  await mkdir(uploadDir, { recursive: true });
+  await writeFile(path.join(uploadDir, filename), buffer);
+
+  return {
+    name: filename,
+    url: `/images/${filename}`,
+    size: buffer.length,
+    modified: new Date().toISOString(),
+  };
+}
+
+export async function deleteImage(name: unknown): Promise<{ deleted: true }> {
+  // 文件名直接拼进路径，遍历检查（..、分隔符）+ 扩展名白名单缺一不可。
+  if (typeof name !== "string" || !isSafeFilename(name) || !IMAGE_EXT_RE.test(name)) {
+    throw badRequest("文件名不合法");
+  }
+
+  try {
+    await unlink(publicPath("images", name));
+  } catch {
+    throw notFound("图片不存在");
+  }
+
   return { deleted: true };
 }

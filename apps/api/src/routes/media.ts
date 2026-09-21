@@ -2,9 +2,12 @@ import type { FastifyPluginAsync } from "fastify";
 import { requireAdminSession } from "@/server/auth/auth-service";
 import type { MusicUrlInput } from "@/server/media/media-service";
 import {
+  createImageFromFile,
   createMusicFromFile,
   createMusicFromUrl,
+  deleteImage,
   deleteMusicTrack,
+  listImages,
   listMusicTracks,
 } from "@/server/media/media-service";
 import { apiSuccess, assertRequestOrigin, multipartFiles, requestBody, sessionToken } from "@/http";
@@ -12,10 +15,25 @@ import { apiSuccess, assertRequestOrigin, multipartFiles, requestBody, sessionTo
 type IdParams = { id: string };
 
 /**
- * 媒体路由。目前只剩音乐：站点的图片走外部图床（GitHub），
- * 本地上传/列举/删除图片的端点与后台页面已移除。
+ * 媒体路由：音乐与封面图片（后台「资源管理」页共用）。
  */
 const mediaRoutes: FastifyPluginAsync = async (app) => {
+  app.get("/images", async () => apiSuccess(await listImages()));
+
+  app.post("/images", async (request, reply) => {
+    assertRequestOrigin(request);
+    await requireAdminSession(sessionToken(request));
+    const { files } = await multipartFiles(request);
+    const image = await createImageFromFile({ file: files[0] || null });
+    return reply.status(201).send(apiSuccess(image));
+  });
+
+  app.delete<{ Params: { name: string } }>("/images/:name", async (request) => {
+    assertRequestOrigin(request);
+    await requireAdminSession(sessionToken(request));
+    return apiSuccess(await deleteImage(request.params.name));
+  });
+
   app.get("/music", async () => apiSuccess(await listMusicTracks()));
 
   app.post("/music", async (request, reply) => {

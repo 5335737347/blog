@@ -1167,6 +1167,72 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /api/images:
+    get:
+      tags: [Media]
+      summary: List uploaded cover images
+      responses:
+        "200":
+          description: Cover images
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImageListResponse"
+    post:
+      tags: [Media]
+      summary: Upload a cover image (JPG/PNG/WebP/GIF/AVIF, max 10MB)
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/ImageUploadInput"
+      responses:
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "201":
+          description: Cover image uploaded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/images/{name}:
+    parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+    delete:
+      tags: [Media]
+      summary: Delete an uploaded cover image
+      security:
+        - sessionCookie: []
+      responses:
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "200":
+          description: Cover image deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /api/import:
     post:
       tags: [Publishing]
@@ -2138,6 +2204,14 @@ components:
                 url:
                   type: string
                   example: /images/example.webp
+
+    ImageUploadInput:
+      type: object
+      required: [file]
+      properties:
+        file:
+          type: string
+          format: binary
 
     ImageItem:
       type: object
