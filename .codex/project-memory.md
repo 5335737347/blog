@@ -1018,3 +1018,86 @@ they need a Chromium binary (found via `CHROME_BIN` or the Playwright cache).
   "bg-[…] text-primary/30" on " text-" and the fish icon class lost its prefix — it
   rendered with a bare invalid `primary/25` class, so fish icons inherited the dark ink
   color. Fixed by storing full class strings per variant (bg + fish keys).
+
+## Deployed 2026-09-20: production updated to a18b579 (design + search + fixes release)
+
+- `npm run update` on the production host finished green end to end: pull → npm ci →
+  prisma generate → stale-output cleanup → check:ci (lint, 4 typechecks, **128/128 tests**
+  including the new article-search and auto-excerpt suites) → docs/openapi checks →
+  SQLite backup → migrate deploy (14 migrations, none pending) → build → smoke:prod →
+  PM2 reload → health checks. Deployed commit: a18b579.
+- Build output confirms /archive is now ISR (○ with revalidate + expire) instead of a
+  permanently frozen static page — the F6 fix is live. Home keeps 1m revalidation.
+- Smoke asserts the new header search entry point (「打开搜索」 among header components)
+  and all previous assertions still pass. Known cosmetic: the code-copy assertion reports
+  `label=复制失败` — headless Chromium has no clipboard permission; the button DID show
+  visible feedback, which is what the assertion checks. Real browsers copy normally.
+- Scope of the release: article search (header inline + list page ?q=), horizontal cards,
+  home sidebar, single-band footer, heading anchors, hydration root-cause fix, cold-load
+  CLS fix, header contrast fix, archive staleness fix, autoExcerpt rewrite, gate ignores.
+
+## Fixed 2026-09-20 (production): register page 500 — Resend SMTP key rejected + 500→503 translation
+
+- Owner hit 「服务器内部错误」 on /register. Production logs: `SMTP command failed: 535`
+  from the send-code route — Resend's SMTP relay rejects the configured credentials
+  (probe: connect+TLS ok, AUTH rejected). Registration/reset were effectively down.
+- Two-part fix (cb776f0):
+  1. Code: SMTP raw errors from sendVerificationCode now translate at the auth ROUTE
+     layer into 503 SERVICE_UNAVAILABLE 「验证码发送失败…」; ServiceErrors (400/429)
+     pass through; details go to server logs only. Kept OUT of the service layer on
+     purpose — smtp.test.ts asserts raw service-level errors (未加密 guard), and the
+     in-service catch broke those tests AND hung the suite (pending promise at exit).
+  2. Operator action REQUIRED: regenerate the Resend API key and update SMTP_PASSWORD in
+     /home/ubuntu/blog/.env, then `pm2 restart blog-api`. Until then, register/reset show
+     a clean 503 message instead of 500. Verified live: /api/auth/verification-code now
+     returns 503 with the friendly envelope.
+- Lesson: diagnostic reports (SIGUSR2) on the hung test child didn't reveal the cause;
+  running the single hanging test file with a timeout did (assertion mismatch + pending
+  promise). Also: a catch in the service layer changes what route-level tests see —
+  translate at the boundary that owns the user-facing contract.
+
+## Fixed 2026-09-21 (local→prod): email delivery moved to Resend HTTPS API (db5e58c)
+
+- Docs check (resend.com Send Email API) confirmed the implemented contract:
+  POST https://api.resend.com/emails, Bearer auth, `{from, to:[], subject, text}`,
+  response `{id}`; `delivered@resend.dev` is the official test sink. Official Node
+  examples use the `resend` SDK, but raw fetch matches the documented cURL contract
+  and fits this repo's zero-mail-dependency style (SMTP client is hand-rolled too).
+- KEY FINDING: the SMTP 535 was never about "SMTP relay not enabled". The key stored
+  in production SMTP_PASSWORD is simply INVALID (Resend API answers 401
+  "API key is invalid" for it); the owner's working key (from their curl test, found
+  in fish history) differs by one character count (36 vs 35 bytes). Same invalid key
+  explains both the SMTP 535 and the API 401.
+- Implementation (db5e58c): `sendMail` prefers RESEND_API_KEY (RESEND_FROM falls back
+  to SMTP_FROM); SMTP path kept as fallback when RESEND_API_KEY is empty.
+  getRegistrationCapabilities now counts a RESEND-only setup as email-capable.
+  .env.example + docs/environment.md + docs/registration-delivery.md updated —
+  the docs previously told the operator to put the API key INTO SMTP_PASSWORD;
+  that guidance is now explicitly reversed.
+- Local verification on the eval stack: Test A (fake SMTP reject on :4650) → 503
+  SERVICE_UNAVAILABLE with raw `SMTP command failed: 535` in server log only;
+  Test B (real key via RESEND_API_KEY) → 200 with Resend messageId through the full
+  route path. 137/137 tests, lint, typecheck, check:docs green.
+- Prod env: RESEND_API_KEY + RESEND_FROM appended to /home/ubuntu/blog/.env (key
+  piped over ssh stdin, never printed). Old invalid SMTP_PASSWORD left in place but
+  dead (RESEND short-circuits); safe to clean up later.
+- Ops footgun for next time: `pkill -f "apps/api/dist/index.js"` kills your OWN
+  shell (pattern matches the shell's own cmdline) — use `pkill -f "dist/index[.]js"`.
+- Deployed 2026-09-21: production at b1be9dd (Resend API path + offline-env scrub +
+  smoke hardening), live-verified: POST /api/auth/verification-code to
+  delivered@resend.dev over the real domain returns 200 with a Resend messageId.
+  Registration and password-reset email are functional again.
+- Two deploy-gate incidents hit the same evening, both environmental, neither a
+  product regression:
+  1. The first npm run update HUNG 37+ min at npm test — the offline-env RESEND
+     scrub gap above (server .env leaked into the suite via app.ts→bootstrap-env).
+     Reproduced locally by exporting RESEND_API_KEY before npm test; the scrub fix
+     made the poisoned-env suite pass 137/137.
+  2. smoke:prod then failed twice with DIFFERENT interaction assertions
+     (mobile TOC drawer ×2, scroll-spy ×1) while data/render checks stayed green —
+     load-dependent flakiness (server load avg ~2 during deploys), same web code as
+     the previous green run. Hardened smoke-web.mjs to re-click inside the drawer
+     polls and re-scroll inside the highlight poll (b1be9dd). The web startup
+     banner 「无法连接 API (3312)：fetch failed」 appears in smoke runs but NOT in
+     PM2 production logs even though the API is provably listening and runtime
+     proxying succeeds — non-fatal, unresolved, worth a look if it ever turns fatal.
