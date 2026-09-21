@@ -29,6 +29,7 @@ export default function ProfileForm() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [messageKind, setMessageKind] = useState<"success" | "error">("error");
 
   useEffect(() => {
     let cancelled = false;
@@ -41,7 +42,8 @@ export default function ProfileForm() {
       })
       .catch((reason) => {
         if (cancelled) return;
-        setMessage(reason instanceof Error ? `❌ ${reason.message}` : "❌ 加载个人资料失败");
+        setMessageKind("error");
+        setMessage(reason instanceof Error ? reason.message : "加载个人资料失败");
         setLoading(false);
       });
     return () => {
@@ -64,32 +66,35 @@ export default function ProfileForm() {
         body: JSON.stringify(profile),
       });
       if (!res.ok) {
-        setMessage(`❌ ${await readApiError(res, "保存失败")}`);
+        setMessageKind("error");
+        setMessage(await readApiError(res, "保存失败"));
         return;
       }
       const saved = await readApiData<ProfileDto>(res);
       setProfile({ ...EMPTY, ...saved });
-      setMessage("✅ 个人资料已保存");
+      setMessageKind("success");
+      setMessage("个人资料已保存");
     } catch {
-      setMessage("❌ 网络错误，保存失败");
+      setMessageKind("error");
+      setMessage("网络错误，保存失败");
     } finally {
       setSaving(false);
     }
   };
 
   if (loading) {
-    return <p className="text-purple-400 dark:text-purple-500">加载中...</p>;
+    return <p className="text-ink-3">加载中…</p>;
   }
 
   return (
     <form onSubmit={handleSave} className="flex max-w-2xl flex-col gap-6">
       {message && (
         <div
-          role="status"
-          className={`rounded-xl px-4 py-2 text-sm ${
-            message.startsWith("✅")
-              ? "bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300"
-              : "bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400"
+          role={messageKind === "error" ? "alert" : "status"}
+          className={`rounded-sm border px-4 py-2.5 text-meta ${
+            messageKind === "success"
+              ? "border-success/30 bg-success-soft text-success"
+              : "border-danger/30 bg-danger-soft text-danger"
           }`}
         >
           {message}
@@ -98,9 +103,7 @@ export default function ProfileForm() {
 
       {/* ===== 基本信息 ===== */}
       <fieldset className="flex flex-col gap-4">
-        <legend className="mb-1 text-sm font-semibold text-purple-900 dark:text-purple-100">
-          基本信息
-        </legend>
+        <legend className="mb-1 text-ui font-semibold text-ink">基本信息</legend>
         <Input
           label="昵称"
           value={profile.name}
@@ -151,12 +154,8 @@ export default function ProfileForm() {
 
       {/* ===== 社交链接 ===== */}
       <fieldset className="flex flex-col gap-3">
-        <legend className="mb-1 text-sm font-semibold text-purple-900 dark:text-purple-100">
-          社交链接
-        </legend>
-        <p className="text-xs text-purple-400 dark:text-purple-500">
-          显示在个人介绍页与页脚，最多 12 条。
-        </p>
+        <legend className="mb-1 text-ui font-semibold text-ink">社交链接</legend>
+        <p className="text-micro text-ink-3">显示在个人介绍页与页脚，最多 12 条。</p>
         {profile.socialLinks.map((link, index) => (
           <SocialLinkRow
             key={index}
@@ -187,7 +186,7 @@ export default function ProfileForm() {
 
       <div>
         <Button type="submit" disabled={saving}>
-          {saving ? "保存中..." : "保存个人资料"}
+          {saving ? "保存中…" : "保存个人资料"}
         </Button>
       </div>
     </form>

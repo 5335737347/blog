@@ -2,6 +2,8 @@
 
 import { useState, useRef } from "react";
 import Link from "next/link";
+import AdminPageHeader from "@/components/admin/ui/AdminPageHeader";
+import Alert from "@/components/admin/ui/Alert";
 import { readApiData, readApiError } from "@/lib/api-client";
 
 interface ImportResult {
@@ -59,25 +61,20 @@ export default function ImportPage() {
 
   return (
     <div>
-      <h2 className="mb-6 text-xl font-semibold text-purple-950 dark:text-purple-50">
-        📥 导入笔记
-      </h2>
+      <AdminPageHeader title="导入笔记" />
 
-      <p className="mb-4 text-sm text-purple-400 dark:text-purple-500">
-        上传 Markdown (.md)、Word (.docx)、HTML (.html) 或纯文本 (.txt)。
-        Word (.docx) 自动转 Markdown。支持 YAML frontmatter：title、slug、tags、excerpt、category、coverImage、published。
+      <Alert variant="info" className="leading-relaxed">
+        上传 Markdown (.md)、Word (.docx)、HTML (.html) 或纯文本 (.txt)。Word (.docx)
+        自动转 Markdown。支持 YAML frontmatter：title、slug、tags、excerpt、category、coverImage、published。
         默认导入为草稿，设置 published: true 时会直接发布。
-      </p>
+      </Alert>
 
       <div
         onDragOver={(e) => e.preventDefault()}
         onDrop={handleDrop}
-        className="mb-6 rounded-2xl border-2 border-dashed border-pink-200 p-12 text-center transition-colors hover:border-purple-300 dark:border-purple-800/50 dark:hover:border-purple-600"
+        className="panel mb-6 flex flex-col items-center border-dashed p-10 text-center"
       >
-        <div className="text-4xl mb-3">📂</div>
-        <p className="mb-4 text-sm text-purple-500 dark:text-purple-400">
-          拖拽文件到此处，或点击选择
-        </p>
+        <p className="mb-4 text-meta text-ink-3">拖拽文件到此处，或点击选择</p>
         <input
           ref={fileRef}
           type="file"
@@ -90,38 +87,30 @@ export default function ImportPage() {
         />
         <label
           htmlFor="import-file-input"
-          className="inline-flex cursor-pointer items-center justify-center rounded-md bg-sky-600 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-sky-700"
+          className="btn btn-primary cursor-pointer text-meta"
         >
-          {uploading ? "导入中..." : "选择文件"}
+          {uploading ? "导入中…" : "选择文件"}
         </label>
       </div>
 
-      {error && (
-        <div className="mb-4 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400">
-          {error}
-        </div>
-      )}
+      {error && <Alert variant="error">{error}</Alert>}
 
       {results.length > 0 && (
-        <div className="rounded-2xl border border-pink-100 bg-white p-4 dark:border-purple-800/30 dark:bg-purple-950/30">
-          <h3 className="mb-3 text-sm font-semibold text-purple-900 dark:text-purple-100">
-            导入结果
-          </h3>
-          <div className="space-y-1 text-sm">
+        <div className="panel p-4">
+          <h3 className="mb-3 text-ui font-semibold text-ink">导入结果</h3>
+          <div className="space-y-1 text-meta">
             {results.map((r, i) => (
               <div
                 key={i}
-                className={`flex items-center justify-between rounded-lg px-3 py-2 ${
-                  r.success
-                    ? "bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300"
-                    : "bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400"
+                className={`flex items-center justify-between rounded-sm px-3 py-2 ${
+                  r.success ? "bg-success-soft text-success" : "bg-danger-soft text-danger"
                 }`}
               >
-                <span>
-                  {r.success ? "✅" : "❌"} {r.title}
-                  {r.source && <span className="ml-1 text-xs opacity-60">(.{r.source})</span>}
+                <span className="min-w-0 truncate">
+                  {r.title}
+                  {r.source && <span className="ml-1 opacity-60">(.{r.source})</span>}
                 </span>
-                <span className="text-xs">
+                <span className="shrink-0 pl-3 text-micro">
                   {r.success && r.id ? (
                     <Link href={`/admin/articles/${r.id}`} className="underline">
                       编辑

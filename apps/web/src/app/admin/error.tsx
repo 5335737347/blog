@@ -18,17 +18,17 @@ export default function AdminError({
   }, [error]);
 
   return (
-    <div role="alert" className="rounded-2xl border border-red-200 bg-red-50/60 p-6 dark:border-red-900/40 dark:bg-red-950/30">
-      <h2 className="mb-2 text-lg font-semibold text-red-700 dark:text-red-300">
+    <div role="alert" className="rounded-sm border border-danger/30 bg-danger-soft p-6">
+      <h2 className="mb-2 text-lg font-semibold text-danger">
         管理页面加载失败
       </h2>
-      <p className="mb-4 text-sm text-red-600 dark:text-red-400">
+      <p className="mb-4 text-meta text-danger">
         页面渲染时发生错误。你可以重试，或从左侧菜单切换到其他管理页面。
       </p>
       <button
         type="button"
         onClick={() => unstable_retry()}
-        className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700"
+        className="rounded-sm bg-danger px-4 py-2 text-meta font-medium text-white transition-colors hover:bg-danger/90"
       >
         重试
       </button>

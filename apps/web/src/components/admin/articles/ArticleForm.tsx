@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, type FormEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
@@ -152,7 +153,10 @@ export default function ArticleForm({
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-6">
       {error && (
-        <div className="rounded-xl bg-red-50 px-4 py-2 text-sm text-red-600 dark:bg-red-900/30 dark:text-red-400">
+        <div
+          role="alert"
+          className="rounded-sm border border-danger/30 bg-danger-soft px-4 py-2.5 text-meta text-danger"
+        >
           {error}
         </div>
       )}
@@ -190,9 +194,7 @@ export default function ArticleForm({
       />
 
       <div>
-        <label className="mb-1 block text-sm font-medium text-purple-800 dark:text-purple-200">
-          内容 *
-        </label>
+        <label className="mb-1 block text-meta font-medium text-ink-2">内容 *</label>
         <ArticleEditor value={content} onChange={setContent} />
       </div>
 
@@ -200,7 +202,7 @@ export default function ArticleForm({
         <div>
           <label
             htmlFor="article-category"
-            className="mb-2 block text-sm font-medium text-purple-800 dark:text-purple-200"
+            className="mb-2 block text-meta font-medium text-ink-2"
           >
             分类
           </label>
@@ -208,7 +210,7 @@ export default function ArticleForm({
             id="article-category"
             value={categoryId}
             onChange={(e) => setCategoryId(e.target.value)}
-            className="w-full rounded-2xl border-2 border-pink-200 bg-white px-4 py-2.5 text-sm text-purple-950 focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-200 dark:border-purple-700 dark:bg-purple-950/50 dark:text-purple-100 dark:focus:border-pink-400 dark:focus:ring-pink-900/30 transition-all"
+            className="h-10 w-full rounded-sm border border-line bg-surface px-3 text-ui text-ink transition-colors focus:border-accent focus:outline-none"
           >
             <option value="">无分类</option>
             {categories.map((c) => (
@@ -217,30 +219,41 @@ export default function ArticleForm({
               </option>
             ))}
           </select>
+          {categories.length === 0 && (
+            <p className="mt-1.5 text-micro text-ink-3">
+              还没有分类，
+              <Link href="/admin/categories" className="text-primary-deep underline">
+                去「分类管理」新建
+              </Link>
+              ；也可以先发布，之后再补。
+            </p>
+          )}
         </div>
 
         <div>
-          <label className="mb-2 block text-sm font-medium text-purple-800 dark:text-purple-200">
-            标签
-          </label>
+          <label className="mb-2 block text-meta font-medium text-ink-2">标签</label>
           <div className="flex flex-wrap gap-2">
-            {tags.map((tag) => (
-              <button
-                key={tag.id}
-                type="button"
-                onClick={() => handleTagToggle(tag.id)}
-                className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
-                  selectedTags.includes(tag.id)
-                    ? "bg-sky-600 text-white"
-                    : "bg-purple-100 text-purple-700 hover:bg-purple-200 dark:bg-purple-800/40 dark:text-purple-300 dark:hover:bg-purple-800/60"
-                }`}
-              >
-                {tag.name}
-              </button>
-            ))}
+            {tags.map((tag) => {
+              const selected = selectedTags.includes(tag.id);
+              return (
+                <button
+                  key={tag.id}
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() => handleTagToggle(tag.id)}
+                  className={`rounded-sm px-3 py-1 text-micro font-medium transition-colors ${
+                    selected
+                      ? "bg-primary-solid text-on-solid"
+                      : "border border-line bg-surface text-ink-2 hover:bg-surface-hover"
+                  }`}
+                >
+                  {tag.name}
+                </button>
+              );
+            })}
             {tags.length === 0 && (
-              <span className="text-sm text-purple-300 dark:text-purple-600">
-                暂无标签
+              <span className="text-meta text-ink-3">
+                暂无标签。正文里的 #标签 保存时会自动创建。
               </span>
             )}
           </div>
@@ -256,12 +269,10 @@ export default function ArticleForm({
             aria-label="切换发布状态"
             className="peer sr-only"
           />
-          <div className="h-6 w-11 rounded-full bg-purple-200 transition-colors peer-checked:bg-sky-600 peer-focus:ring-2 peer-focus:ring-sky-300 dark:bg-purple-700 dark:peer-focus:ring-sky-700" />
-          <div className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform peer-checked:translate-x-5" />
+          <div className="h-6 w-11 rounded-full bg-line-strong transition-colors peer-checked:bg-primary-solid peer-focus-visible:ring-2 peer-focus-visible:ring-accent" />
+          <div className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-surface shadow-sm transition-transform peer-checked:translate-x-5" />
         </label>
-        <span className="text-sm font-medium text-purple-800 dark:text-purple-200">
-          {published ? "已发布" : "草稿"}
-        </span>
+        <span className="text-meta font-medium text-ink-2">{published ? "已发布" : "草稿"}</span>
       </div>
 
       <div className="max-w-xs">
@@ -272,7 +283,7 @@ export default function ArticleForm({
           onChange={(e) => setPublishedAt(e.target.value)}
           disabled={!published}
         />
-        <p className="mt-1 text-xs text-purple-400 dark:text-purple-500">
+        <p className="mt-1 text-micro text-ink-3">
           {published
             ? "留空则使用当前时间。回填旧文章时填写真实日期，归档与排序才会正确。"
             : "草稿没有发布日期，发布时再填写。"}
@@ -281,7 +292,7 @@ export default function ArticleForm({
 
       <div className="flex gap-3">
         <Button type="submit" disabled={saving}>
-          {saving ? "保存中..." : published ? "保存并发布" : "保存草稿"}
+          {saving ? "保存中…" : published ? "保存并发布" : "保存草稿"}
         </Button>
         <Button
           type="button"

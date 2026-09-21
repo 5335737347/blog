@@ -1,6 +1,9 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import AdminPageHeader from "@/components/admin/ui/AdminPageHeader";
+import Alert from "@/components/admin/ui/Alert";
+import EmptyState from "@/components/admin/ui/EmptyState";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import { readApiData, readApiError } from "@/lib/api-client";
@@ -18,6 +21,7 @@ export default function MusicAdminPage() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState("");
+  const [messageKind, setMessageKind] = useState<"success" | "error">("error");
   const fileRef = useRef<HTMLInputElement>(null);
 
   // External URL form
@@ -31,7 +35,8 @@ export default function MusicAdminPage() {
       const res = await fetch("/api/music");
       setTracks(await readApiData<Track[]>(res));
     } catch (reason) {
-      setMessage(reason instanceof Error ? `❌ ${reason.message}` : "❌ 加载音乐失败");
+      setMessageKind("error");
+      setMessage(reason instanceof Error ? reason.message : "加载音乐失败");
       setTracks([]);
     } finally {
       setLoading(false);
@@ -39,6 +44,8 @@ export default function MusicAdminPage() {
   }, []);
 
   useEffect(() => {
+    // setTimeout(0)：fetch 首个 await 前会同步 setLoading，直接调用会被
+    // react-hooks/set-state-in-effect 视为级联渲染；延后一拍规避。
     const id = window.setTimeout(() => {
       void fetchTracks();
     }, 0);
@@ -51,20 +58,24 @@ export default function MusicAdminPage() {
     if (!file) return;
 
     setUploading(true);
+    setMessage("");
     try {
       const fd = new FormData();
       fd.append("file", file);
       fd.append("title", file.name.replace(/\.[^.]+$/, ""));
       const res = await fetch("/api/music", { method: "POST", body: fd });
       if (!res.ok) {
-        setMessage(`❌ ${await readApiError(res, "上传失败")}`);
+        setMessageKind("error");
+        setMessage(await readApiError(res, "上传失败"));
         return;
       }
-      setMessage("✅ 上传成功");
+      setMessageKind("success");
+      setMessage("上传成功");
       await fetchTracks();
       if (fileRef.current) fileRef.current.value = "";
     } catch {
-      setMessage("❌ 网络错误，上传失败");
+      setMessageKind("error");
+      setMessage("网络错误，上传失败");
     } finally {
       setUploading(false);
     }
@@ -72,6 +83,7 @@ export default function MusicAdminPage() {
 
   const handleAddUrl = async () => {
     if (!extTitle || !extUrl) return;
+    setMessage("");
     try {
       const res = await fetch("/api/music", {
         method: "POST",
@@ -79,98 +91,123 @@ export default function MusicAdminPage() {
         body: JSON.stringify({ title: extTitle, artist: extArtist || null, url: extUrl }),
       });
       if (!res.ok) {
-        setMessage(`❌ ${await readApiError(res, "添加失败")}`);
+        setMessageKind("error");
+        setMessage(await readApiError(res, "添加失败"));
         return;
       }
-      setMessage("✅ 添加成功");
+      setMessageKind("success");
+      setMessage("添加成功");
       setExtTitle("");
       setExtArtist("");
       setExtUrl("");
       await fetchTracks();
     } catch {
-      setMessage("❌ 网络错误，添加失败");
+      setMessageKind("error");
+      setMessage("网络错误，添加失败");
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("删除这条音乐？")) return;
+  const handleDelete = async (track: Track) => {
+    if (!confirm(`确定删除「${track.title}」？`)) return;
+    setMessage("");
     try {
-      const res = await fetch(`/api/music/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/music/${track.id}`, { method: "DELETE" });
       if (!res.ok) {
-        setMessage(`❌ ${await readApiError(res, "删除失败")}`);
+        setMessageKind("error");
+        setMessage(await readApiError(res, "删除失败"));
         return;
       }
+      setMessageKind("success");
+      setMessage("已删除");
       await fetchTracks();
     } catch {
-      setMessage("❌ 网络错误，删除失败");
+      setMessageKind("error");
+      setMessage("网络错误，删除失败");
     }
   };
-
-  if (loading) return <p className="text-purple-400">加载中...</p>;
 
   return (
     <div>
-      <h2 className="mb-6 text-xl font-semibold text-purple-950 dark:text-purple-50">
-        🎵 音乐管理
-      </h2>
-      {message && (
-        <div className="mb-4 rounded-xl bg-pink-50 px-4 py-2 text-sm text-purple-600 dark:bg-purple-900/20 dark:text-purple-300">
-          {message}
-        </div>
-      )}
+      <AdminPageHeader
+        title="音乐管理"
+        description="前台播放器按上传顺序播放这里的曲目。"
+      />
 
-      <div className="mb-8 grid gap-6 lg:grid-cols-2">
+      {message && <Alert variant={messageKind}>{message}</Alert>}
+
+      <div className="mb-8 grid gap-4 lg:grid-cols-2">
         {/* Upload */}
-        <div className="rounded-2xl border-2 border-dashed border-pink-200 p-6 dark:border-purple-800/50">
-          <h3 className="mb-3 font-semibold text-purple-900 dark:text-purple-100">📤 上传音乐文件</h3>
-          <form onSubmit={handleUpload} className="flex flex-col gap-3">
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".mp3,.wav,.ogg,.webm"
-              aria-label="选择要上传的音乐文件"
-              className="text-sm text-purple-600"
-            />
+        <form
+          onSubmit={handleUpload}
+          className="panel flex flex-col gap-3 border-dashed p-5"
+        >
+          <h3 className="text-ui font-semibold text-ink">上传音乐文件</h3>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".mp3,.wav,.ogg,.webm"
+            aria-label="选择要上传的音乐文件"
+            className="text-meta text-ink-2 file:mr-3 file:rounded-sm file:border-0 file:bg-primary-soft file:px-3 file:py-1.5 file:text-meta file:font-medium file:text-primary-deep"
+          />
+          <div>
             <Button type="submit" disabled={uploading} size="sm">
-              {uploading ? "上传中..." : "上传"}
+              {uploading ? "上传中…" : "上传"}
             </Button>
-            <p className="text-xs text-purple-300 dark:text-purple-600">支持 MP3/WAV/OGG，最大 20MB</p>
-          </form>
-        </div>
+          </div>
+          <p className="text-micro text-ink-3">支持 MP3/WAV/OGG，最大 20MB</p>
+        </form>
 
         {/* External URL */}
-        <div className="rounded-lg border border-purple-200 p-6 dark:border-purple-800/50">
-          <h3 className="mb-3 font-semibold text-purple-900 dark:text-purple-100">添加外链</h3>
-          <div className="flex flex-col gap-2">
-            <Input label="标题" placeholder="标题" value={extTitle} onChange={(e) => setExtTitle(e.target.value)} />
-            <Input label="艺术家" placeholder="艺术家 (可选)" value={extArtist} onChange={(e) => setExtArtist(e.target.value)} />
-            <Input label="音乐 URL" placeholder="音乐 URL" value={extUrl} onChange={(e) => setExtUrl(e.target.value)} />
-            <Button size="sm" onClick={handleAddUrl}>添加</Button>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void handleAddUrl();
+          }}
+          className="panel flex flex-col gap-2 p-5"
+        >
+          <h3 className="mb-1 text-ui font-semibold text-ink">添加外链</h3>
+          <Input label="标题" value={extTitle} onChange={(e) => setExtTitle(e.target.value)} />
+          <Input
+            label="艺术家"
+            placeholder="可选"
+            value={extArtist}
+            onChange={(e) => setExtArtist(e.target.value)}
+          />
+          <Input
+            label="音乐 URL"
+            value={extUrl}
+            onChange={(e) => setExtUrl(e.target.value)}
+          />
+          <div className="mt-1">
+            <Button type="submit" size="sm" disabled={!extTitle || !extUrl}>
+              添加
+            </Button>
           </div>
-        </div>
+        </form>
       </div>
 
       {/* Track list */}
       <div>
-        <h3 className="mb-3 font-semibold text-purple-900 dark:text-purple-100">
-          音楽リスト ({tracks.length})
-        </h3>
-        {tracks.length === 0 ? (
-          <p className="text-purple-300 dark:text-purple-600">暂无音乐</p>
+        <h3 className="mb-3 text-ui font-semibold text-ink">曲目列表（{tracks.length}）</h3>
+        {loading ? (
+          <p className="text-ink-3">加载中…</p>
+        ) : tracks.length === 0 ? (
+          <EmptyState message="暂无音乐" />
         ) : (
           <div className="space-y-2">
-            {tracks.map((t) => (
-              <div
-                key={t.id}
-                className="flex items-center justify-between rounded-xl border border-pink-100 bg-white px-4 py-3 dark:border-purple-800/30 dark:bg-purple-950/30"
-              >
+            {tracks.map((track) => (
+              <div key={track.id} className="panel flex items-center justify-between px-4 py-3">
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-purple-900 dark:text-purple-100">{t.title}</p>
-                  <p className="truncate text-xs text-purple-400">{t.artist || "—"} · {t.url}</p>
+                  <p className="truncate text-meta font-medium text-ink">{track.title}</p>
+                  <p className="truncate text-micro text-ink-3">
+                    {track.artist || "—"} · {track.url}
+                  </p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <audio src={t.url} controls className="h-8 w-40" />
-                  <button onClick={() => handleDelete(t.id)} className="shrink-0 text-xs text-red-400 hover:text-red-600">删除</button>
+                <div className="flex items-center gap-3">
+                  <audio src={track.url} controls className="h-8 w-40" />
+                  <Button size="sm" variant="ghost" onClick={() => handleDelete(track)}>
+                    <span className="text-danger">删除</span>
+                  </Button>
                 </div>
               </div>
             ))}

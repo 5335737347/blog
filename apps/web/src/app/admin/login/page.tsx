@@ -81,15 +81,13 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center">
-      <div className="w-full max-w-sm rounded-lg border border-purple-200 bg-white p-8 shadow-sm dark:border-purple-800/50 dark:bg-purple-950/50">
-        <h1 className="mb-6 text-center text-2xl font-bold text-purple-950 dark:text-purple-50">
-          🔐 管理员登录
-        </h1>
+      <div className="panel w-full max-w-sm p-8">
+        <h1 className="mb-6 text-center text-2xl font-bold text-ink">管理员登录</h1>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           {error && (
             <p
               role="alert"
-              className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-900/30 dark:text-red-400"
+              className="rounded-sm border border-danger/30 bg-danger-soft px-3 py-2 text-meta text-danger"
             >
               {error}
               {lockedFor > 0 && (
@@ -116,7 +114,7 @@ export default function LoginPage() {
             autoComplete="current-password"
           />
           <Button type="submit" disabled={loading} className="w-full">
-            {loading ? "登录中..." : "登录"}
+            {loading ? "登录中…" : "登录"}
           </Button>
         </form>
       </div>

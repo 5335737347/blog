@@ -41,18 +41,16 @@ export default function EditArticlePage() {
   }, [id]);
 
   if (loading) {
-    return <p className="text-purple-400 dark:text-purple-500">加载中...</p>;
+    return <p className="text-ink-3">加载中…</p>;
   }
 
   if (error || !article) {
-    return <p role="alert" className="text-red-600 dark:text-red-300">{error || "文章不存在"}</p>;
+    return <p role="alert" className="text-danger">{error || "文章不存在"}</p>;
   }
 
   return (
     <div>
-      <h2 className="mb-6 text-xl font-semibold text-purple-950 dark:text-purple-50">
-        📝 编辑文章
-      </h2>
+      <h1 className="mb-6 text-xl font-semibold text-ink">编辑文章</h1>
       <div className="max-w-3xl">
         <ArticleForm
           key={article.id}
