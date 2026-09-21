@@ -1161,3 +1161,30 @@ they need a Chromium binary (found via `CHROME_BIN` or the Playwright cache).
   was still running and owned `apps/web/.env.local`; stopped via its own
   `eval2-stack.mjs stop` subcommand, which also removed the file. Screenshots show a
   Next dev-tools "N" bubble — dev-mode overlay only, absent in production builds.
+
+## Shipped 2026-09-21: demo content purged + merged 「资源管理」 admin page (495dd8c)
+
+- Production demo data deleted (backup dev.db.20260921-234744.bak taken first):
+  3 seed posts (hello-world / learning-typescript / my-coding-setup draft), their
+  5 comments, all 4 tags, both categories. Users/settings/media untouched.
+  Live verified: /api/articles total=0, /api/categories empty.
+- 「资源管理」admin page (apps/web/src/app/admin/resources) merges cover-image
+  library + music. Cover management is a RESTORATION: image endpoints were
+  removed when the site moved covers to an external image host; the openapi
+  contract (ImageItem/ImageListResponse/UploadResponse, field `modified`) had
+  been left behind orphaned — the new implementation ADOPTED that old contract
+  instead of minting a second one (initial attempt duplicated ImageListResponse
+  and failed check:openapi).
+- Image service: pure filesystem under MEDIA_ROOT/images, NO database records —
+  articles reference /images/<name> via the cover URL field. MIME+extension
+  allowlist (jpg/png/webp/gif/avif), 10MB cap, traversal-safe delete.
+  Routes: GET/POST/DELETE /api/images (POST/DELETE admin-gated, GET public).
+- /admin/music now redirects to /admin/resources; AdminNav entry renamed;
+  ArticleForm cover field gained a hint pointing at the resource page.
+- The still-open vim recovery note: owner accidentally wiped JWT_SECRET,
+  ADMIN_PASSWORD and KPBLOG_API_KEY when re-creating server .env from the new
+  template; recovered via `:earlier` undo in the still-open vim session
+  (verified JWT_SECRET 64 chars on disk before this deploy).
+- Known leftover: uncommitted-and-reverted docs/README.md row linking
+  learning-guide.md (file never created) briefly broke check:docs; restored to
+  HEAD. If the learning guide materializes, re-add the row.
