@@ -61,24 +61,32 @@ Fastify API 拥有验证码生成、投递、持久化、验证和限流逻辑�
 
 - 事务邮件服务商选用 Resend；无法登录的新 SendGrid 账号不再作为项目依赖。
 - 项目发信域名已完成 DKIM、SPF、专用 return-path MX 和 DMARC 验证。
-- Resend 受限发信 Key 已由所有者保存在仓库外，尚未写入项目或服务器环境。
+- Resend 受限发信 Key 已由所有者保存在仓库外；上线时以 `RESEND_API_KEY` 写入服务器环境。
 - 邮件模板由项目代码管理，不使用服务商托管模板。
-- Resend **同时提供 HTTP API 与 SMTP 接入**。本项目已实现的是 SMTP 客户端，因此把 Key
-  配成 SMTP 凭据即可投递，**不需要先写 HTTP 适配器**：
+- Resend **同时提供 HTTP API 与 SMTP 接入**，且两条路径的凭据校验相互独立。
+  2026-09-21 生产实测：同一把 Key 走 HTTPS API 能正常发信，走 SMTP 中继却被
+  AUTH 535 拒绝。因此当前实现的传输适配器是 **HTTP API，优先于 SMTP**：
+
+  ```bash
+  RESEND_API_KEY="re_..."           # 优先；配了它就不走 SMTP
+  RESEND_FROM="noreply@kpblog.cc"   # 发件域名须已在 Resend 完成验证；留空回退 SMTP_FROM
+  ```
+
+  SMTP 保留为回退路径（仅 `RESEND_API_KEY` 为空时启用），配置方式不变：
 
   ```bash
   SMTP_HOST="smtp.resend.com"
   SMTP_PORT="465"          # 隐式 TLS；587 为 STARTTLS
   SMTP_SECURE="true"
   SMTP_USER="resend"       # Resend 规定为字面量，不是邮箱
-  SMTP_PASSWORD="re_..."   # 就是 API Key
+  SMTP_PASSWORD="..."      # SMTP 凭据；不要填 HTTP API Key（会被 AUTH 535 拒绝）
   SMTP_FROM="noreply@kpblog.cc"   # 必填：USER 不是邮箱，留空会导致 MAIL FROM:<resend>
   ```
 
-  HTTP API 适配器仍可作为后续优化，但它**不是邮箱注册上线的前置条件**。
-- 配好后用 `npm run smtp:check` 验证：它按「配置 → 连接 → 能力 → 传输安全 → 认证 → 发件人」
-  逐级探测，停在失败的那一步并给出可执行的原因，而不是只抛一个三位数状态码。
-  加 `-- --send you@example.com` 会真发一封测试邮件。
+- HTTP 路径用 `/api/auth/verification-code` 向 `delivered@resend.dev`（Resend 官方
+  测试收件地址）真发一封验证码，返回 200 即为投递链路打通；SMTP 回退路径用
+  `npm run smtp:check` 逐级探测（配置 → 连接 → 能力 → 传输安全 → 认证 → 发件人），
+  停在失败的那一步并给出可执行的原因，加 `-- --send you@example.com` 会真发一封测试邮件。
 
 ### 手机号验证码（已移除）
 
@@ -111,10 +119,10 @@ verification service ──> repository-owned template
         └──> email transport adapter ──> Resend
 ```
 
-传输层是可替换的适配器。当前实现的是 SMTP，因此 Resend 走它的 SMTP 端点：用户名固定为
-`resend`，密码就是 API Key——这是 Resend 官方文档规定的用法，不算把 HTTP API Key
-「伪装」成 `SMTP_PASSWORD`。若将来真的增加 HTTP API 适配器，**必须**用显式的提供商变量
-区分两条路径，避免同一份 Key 在两种语义下被混用。更换传输方式时，验证码规则、模板、
+传输层是可替换的适配器。当前实现了两条：HTTP API（`RESEND_API_KEY`，优先）与 SMTP
+（`SMTP_*` 变量，回退）。两条路径用显式的提供商变量区分，同一份 Key 不会在两种语义下
+被混用——2026-09-21 的生产事故（把 HTTP API Key 填进 `SMTP_PASSWORD` 导致 SMTP AUTH 535、
+注册接口 500）正是混用的后果。更换传输方式时，验证码规则、模板、
 限流和 HTTP 契约保持不变。
 
 ## DNS 与企业邮箱共存

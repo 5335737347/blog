@@ -170,18 +170,26 @@ openssl rand -hex 32
 
 ## 邮件注册
 
-注册只支持邮箱验证码通道。邮箱注册使用 `SMTP_HOST`、`SMTP_PORT`、`SMTP_SECURE`、`SMTP_STARTTLS`、`SMTP_USER`、`SMTP_PASSWORD` 和 `SMTP_FROM`。
+注册只支持邮箱验证码通道。邮件投递有两条路径，`RESEND_API_KEY` 优先：
 
-当前 API 实现 SMTP 投递。Resend 与 Turnstile 的准备状态、接入边界与上线要求见
-[注册验证、消息投递与防刷](registration-delivery.md)。不要把 Resend HTTP API Key
-填入 `SMTP_PASSWORD`；新增提供商变量时必须同步更新 `.env.example` 和本文档。
+- **Resend HTTP API（推荐）**：`RESEND_API_KEY` + `RESEND_FROM`（留空回退 `SMTP_FROM`）。
+  同一服务商的 HTTPS 端点，无需在控制台单独开启 SMTP 中继。
+- **SMTP 回退**：仅在 `RESEND_API_KEY` 为空时启用，使用 `SMTP_HOST`、`SMTP_PORT`、
+  `SMTP_SECURE`、`SMTP_STARTTLS`、`SMTP_USER`、`SMTP_PASSWORD` 和 `SMTP_FROM`。
+
+Resend 的准备状态、接入边界与上线要求见
+[注册验证、消息投递与防刷](registration-delivery.md)。HTTP API Key 只填
+`RESEND_API_KEY`，**不要填入 `SMTP_PASSWORD`**——两条路径的凭据校验相互独立，
+2026-09-21 生产环境把 API Key 填进 `SMTP_PASSWORD` 导致 SMTP AUTH 535、注册接口 500。
+新增提供商变量时必须同步更新 `.env.example` 和本文档。
 
 生产环境可以把未启用的变量全部留空；`/api/auth/registration-options` 只应声明真实
 可用的注册方式。不要为了让前端显示选项而填写占位凭据。
 
-配置完成后用 `npm run smtp:check` 验证，它会按「配置 → 连接 → 能力 → 传输安全 → 认证 →
-发件人」逐级探测并翻译失败原因（例如区分「Key 无效」和「发件域名未验证」），
-`-- --send you@example.com` 会真发一封测试邮件。
+SMTP 回退路径用 `npm run smtp:check` 验证，它会按「配置 → 连接 → 能力 → 传输安全 →
+认证 → 发件人」逐级探测并翻译失败原因（例如区分「Key 无效」和「发件域名未验证」），
+`-- --send you@example.com` 会真发一封测试邮件。HTTP 路径用 `/api/auth/verification-code`
+向 `delivered@resend.dev`（Resend 官方测试收件地址）发一封真实验证码，返回 200 即为打通。
 
 ⚠️ **`/api/auth/registration-options` 不能用来验证 SMTP**：只要
 `ALLOW_DEBUG_VERIFICATION_CODE=true`，无论 SMTP 是否配好它都会报告邮箱通道可用。

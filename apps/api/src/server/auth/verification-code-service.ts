@@ -170,7 +170,43 @@ function debugCodeAllowed(): boolean {
   return process.env.ALLOW_DEBUG_VERIFICATION_CODE === "true";
 }
 
-async function sendSmtpMail(to: string, subject: string, text: string) {
+/**
+ * Resend HTTPS API 发送。优先于 SMTP:API Key 与 SMTP 中继是两套独立凭据,
+ * SMTP 需要在 Resend 控制台单独开启,而 API Key 天然可用(实测)。
+ */
+async function sendViaResendApi(
+  apiKey: string,
+  from: string,
+  to: string,
+  subject: string,
+  text: string
+): Promise<string | null> {
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ from, to: [to], subject, text }),
+  });
+  if (!response.ok) {
+    const detail = (await response.text().catch(() => "")).slice(0, 200);
+    throw new Error(`Resend API ${response.status}: ${detail}`);
+  }
+  const payload = (await response.json()) as { id?: string };
+  return payload.id ?? null;
+}
+
+async function sendMail(to: string, subject: string, text: string) {
+  // RESEND_API_KEY 优先:同一家服务商,HTTPS API 无需开启 SMTP 中继。
+  const resendApiKey = process.env.RESEND_API_KEY?.trim();
+  if (resendApiKey) {
+    const from = process.env.RESEND_FROM?.trim() || process.env.SMTP_FROM?.trim();
+    if (!from) throw badRequest("缺少发件人地址（RESEND_FROM 或 SMTP_FROM）");
+    const messageId = await sendViaResendApi(resendApiKey, from, to, subject, text);
+    return { messageId };
+  }
+
   const config = smtpConfig();
   if (!config) {
     if (debugCodeAllowed()) {
@@ -243,7 +279,7 @@ export async function sendVerificationCode(
   // 注意:SMTP 的原始错误(认证被拒、连接未加密等)从这里向上抛,
   // 由 auth 路由层统一翻译成 503;service 层保持语义,smtp.test.ts
   // 依赖这些具体错误(如「未加密」守卫)。
-  const sent = await sendSmtpMail(
+  const sent = await sendMail(
     target,
     copy.subject,
     `${copy.lead}：${code}\n\n验证码 10 分钟内有效。如果不是你本人操作，请忽略这封邮件。`
@@ -315,7 +351,10 @@ export async function assertVerificationCode(
 
 export function getRegistrationCapabilities(): { email: boolean } {
   return {
-    email: smtpConfig() !== null || debugCodeAllowed(),
+    // 只配 RESEND_API_KEY（没有 SMTP 变量）也算邮箱通道可用，
+    // 否则注册页会在明明能发信的部署上隐藏邮箱注册入口。
+    email:
+      Boolean(process.env.RESEND_API_KEY?.trim()) || smtpConfig() !== null || debugCodeAllowed(),
   };
 }
 
@@ -451,9 +490,9 @@ export async function probeSmtpConnection(): Promise<SmtpProbeStep[]> {
 /** 诊断用：真发一封测试邮件，走与生产完全相同的投递路径。 */
 export async function sendTestEmail(to: string): Promise<void> {
   const target = normalizeVerificationTarget(to);
-  await sendSmtpMail(
+  await sendMail(
     target,
-    "SMTP 连通性测试",
-    "收到这封邮件说明本站的 SMTP 投递已经配置成功。\n\n这是一封测试邮件，不需要回复。"
+    "邮件投递连通性测试",
+    "收到这封邮件说明本站的邮件投递已经配置成功。\n\n这是一封测试邮件，不需要回复。"
   );
 }
