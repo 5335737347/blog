@@ -49,6 +49,13 @@ const ADMIN_ONLY: Endpoint[] = [
   { method: "PUT", path: "/api/settings", body: { blog_title: "x" }, label: "修改站点设置" },
   { method: "PUT", path: "/api/profile", body: { name: "x" }, label: "修改个人资料" },
   { method: "POST", path: "/api/import", body: {}, label: "批量导入" },
+  { method: "POST", path: "/api/categories", body: { name: "x" }, label: "新建分类" },
+  { method: "PUT", path: "/api/categories/absent", body: { name: "x" }, label: "修改分类" },
+  { method: "DELETE", path: "/api/categories/absent", label: "删除分类" },
+  { method: "POST", path: "/api/tags", body: { name: "x" }, label: "新建标签" },
+  { method: "PUT", path: "/api/tags/absent", body: { name: "x" }, label: "修改标签" },
+  { method: "DELETE", path: "/api/tags/absent", label: "删除标签" },
+  { method: "POST", path: "/api/tags/absent/merge", body: { targetId: "absent" }, label: "合并标签" },
 ];
 
 async function call(

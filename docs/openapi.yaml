@@ -787,6 +787,9 @@ paths:
     get:
       tags: [Taxonomy]
       summary: List categories
+      description: |
+        Public list. Counts only published posts; empty categories are kept
+        as deliberate navigation placeholders.
       responses:
         "200":
           description: Categories
@@ -794,11 +797,108 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CategoryListResponse"
+    post:
+      tags: [Taxonomy]
+      summary: Create category
+      description: Admin only. The slug defaults to a slugified version of the name.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaxonomyCreateInput"
+      responses:
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "201":
+          description: Category created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CategoryMutationResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/categories/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    put:
+      tags: [Taxonomy]
+      summary: Update category
+      description: |
+        Admin only. Rename only changes the display name; the slug (and therefore
+        the public URL) changes only when a slug field is explicitly supplied.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaxonomyUpdateInput"
+      responses:
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "200":
+          description: Category updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CategoryMutationResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      tags: [Taxonomy]
+      summary: Delete category
+      description: |
+        Admin only. Posts keep their content; their categoryId is set to null
+        by the database foreign key.
+      security:
+        - sessionCookie: []
+      responses:
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "200":
+          description: Category deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
 
   /api/tags:
     get:
       tags: [Taxonomy]
       summary: List tags
+      description: |
+        Public list: only tags with at least one published post, counting
+        published posts. With an authenticated admin session, `all=true`
+        returns every tag (including unused ones) counting all posts
+        including drafts; for everyone else the parameter is ignored.
+      parameters:
+        - name: all
+          in: query
+          required: false
+          schema:
+            type: string
+          description: '"true" with an admin session returns the full admin list.'
       responses:
         "200":
           description: Tags
@@ -806,6 +906,127 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/TagListResponse"
+    post:
+      tags: [Taxonomy]
+      summary: Create tag
+      description: Admin only. The slug defaults to a slugified version of the name.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaxonomyCreateInput"
+      responses:
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "201":
+          description: Tag created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TagMutationResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/tags/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    put:
+      tags: [Taxonomy]
+      summary: Update tag
+      description: |
+        Admin only. Rename only changes the display name; the slug (and therefore
+        the public URL) changes only when a slug field is explicitly supplied.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaxonomyUpdateInput"
+      responses:
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "200":
+          description: Tag updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TagMutationResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      tags: [Taxonomy]
+      summary: Delete tag
+      description: |
+        Admin only. Posts keep their content; their tag links are removed
+        by the cascade on TagOnPost.
+      security:
+        - sessionCookie: []
+      responses:
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "200":
+          description: Tag deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/tags/{id}/merge:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [Taxonomy]
+      summary: Merge tag into another tag
+      description: |
+        Admin only. Moves every post link from the tag identified by {id}
+        (source) to the tag named in the body (target); posts already linked
+        to the target are left untouched, then the source tag is deleted.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaxonomyMergeInput"
+      responses:
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "200":
+          description: Merge completed; returns the target tag with its new count
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TagMutationResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
 
   /api/profile:
     put:
@@ -1826,6 +2047,54 @@ components:
               type: array
               items:
                 $ref: "#/components/schemas/Tag"
+
+    TaxonomyCreateInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          maxLength: 50
+        slug:
+          type: string
+          description: Optional explicit slug; defaults to a slugified version of the name.
+
+    TaxonomyUpdateInput:
+      type: object
+      description: At least one field must be provided.
+      properties:
+        name:
+          type: string
+          maxLength: 50
+        slug:
+          type: string
+          description: |
+            Optional. Supplying it changes the public URL of the tag/category
+            page; omit it to keep existing links working.
+
+    TaxonomyMergeInput:
+      type: object
+      required: [targetId]
+      properties:
+        targetId:
+          type: string
+          description: Id of the tag that absorbs the source tag's post links.
+
+    CategoryMutationResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/Category"
+
+    TagMutationResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/Tag"
 
     SettingsResponse:
       allOf:

@@ -9,7 +9,6 @@ import {
   updateArticle,
 } from "@/server/articles/article-service";
 import { getOptionalAuthSession, requireAdminSession } from "@/server/auth/auth-service";
-import { listCategories, listTags } from "@/server/taxonomy/taxonomy-service";
 import { apiSuccess, assertRequestOrigin, positiveInt, requestBody, sessionToken } from "@/http";
 
 type ArticleParams = { id: string };
@@ -64,9 +63,6 @@ const articleRoutes: FastifyPluginAsync = async (app) => {
   app.get<{ Params: SlugParams }>("/public/articles/:slug", async (request) =>
     apiSuccess(await getPublicArticleBySlug(request.params.slug))
   );
-
-  app.get("/tags", async () => apiSuccess(await listTags()));
-  app.get("/categories", async () => apiSuccess(await listCategories()));
 };
 
 export default articleRoutes;

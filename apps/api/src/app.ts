@@ -17,6 +17,7 @@ import publicRoutes from "@/routes/public";
 import publishingRoutes from "@/routes/publishing";
 import profileRoutes from "@/routes/profile";
 import settingsRoutes from "@/routes/settings";
+import taxonomyRoutes from "@/routes/taxonomy";
 
 /**
  * 请求 ID。
@@ -86,6 +87,7 @@ export function buildApp() {
     await api.register(publishingRoutes);
     await api.register(profileRoutes);
     await api.register(settingsRoutes);
+    await api.register(taxonomyRoutes);
   }, { prefix: "/api" });
 
   app.setErrorHandler((error, _request, reply) => registerErrorHandler(reply, error));
