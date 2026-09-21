@@ -1101,3 +1101,63 @@ they need a Chromium binary (found via `CHROME_BIN` or the Playwright cache).
      banner 「无法连接 API (3312)：fetch failed」 appears in smoke runs but NOT in
      PM2 production logs even though the API is provably listening and runtime
      proxying succeeds — non-fatal, unresolved, worth a look if it ever turns fatal.
+
+## Completed 2026-09-21 admin taxonomy management + admin UI unification
+
+- The owner reported the admin had almost no tag/category management and messy pages.
+  Investigation confirmed: the API had ONLY `GET /api/categories` / `GET /api/tags` —
+  categories could not be created from the admin at all (they came only from import),
+  tags (auto-created from `#标签` in content/imports) had no rename/delete/merge,
+  `GET /api/tags` hides unused tags so the admin could not even see them, and the
+  article list was a flat `limit=50` with no search/filter/pagination (post 51+ invisible).
+- **New admin endpoints** (all `assertRequestOrigin` + `requireAdminSession`, documented
+  in openapi.yaml, in the authorization matrix):
+  `POST/PUT/DELETE /api/categories/:id`, `POST/PUT/DELETE /api/tags/:id`,
+  `POST /api/tags/:id/merge`, plus `GET /api/tags?all=true` (admin-only; ignored for
+  everyone else; returns unused tags and counts drafts). Service:
+  `apps/api/src/server/taxonomy/taxonomy-admin-service.ts`, routes: `routes/taxonomy.ts`
+  (the two public GETs moved there unchanged — path/semantics preserved).
+- **Slug rule**: rename does NOT touch the slug (public URLs `/tags/[tag]`,
+  `/categories/[category]` survive); slug changes only when the request explicitly
+  carries a `slug` field — the UI shows a warning when the slug input is filled.
+- **Delete semantics**: deleting a category keeps posts (FK `ON DELETE SET NULL` nulls
+  categoryId); deleting a tag removes only TagOnPost links (cascade). Merge moves the
+  source tag's post links to the target, dedupes overlaps (composite-PK safe), deletes
+  the source — all inside one transaction. Renaming a tag onto an existing name
+  returns a 400 whose message points at the merge feature.
+- Prisma typing trap (cost a rewrite): `prisma.category | prisma.tag` delegates cannot
+  share generic call sites (union of generic signatures is not callable); pure logic is
+  shared, persistence is written per-model. `findUnique`/`update` need
+  `include: { _count: ... }` to build admin DTOs; `createMany` on SQLite has no
+  `skipDuplicates`.
+- **Admin UI reorganized**: sidebar split into 内容 (文章管理/新建文章/评论审核/导入笔记)
+  and 站点 (分类管理/标签管理/音乐管理/博客设置) — `AdminNav.tsx` is shared by the
+  desktop sidebar and the new mobile drawer (`AdminShell` has a top bar + scrim drawer
+  below `lg`; route changes close it via adjust-state-during-render, NOT a setState-in-effect).
+- **New pages** `/admin/categories` and `/admin/tags` (create/inline-rename/delete;
+  tags page adds client-side filter, unused-tag muting and merge-with-target-select).
+  `/admin` rewritten: debounced search (separate `queryInput` → `query` state so the
+  fetch effect is not keyed to keystrokes), status + category filters, pagination
+  (pageSize 20). Below `md` the article table becomes a card list — the 4-column table
+  clipped 删除 mid-glyph at 390px (visual-judge finding, fixed and re-verified).
+- **Visual unification**: every admin surface (7 pages + ArticleForm + ProfileForm +
+  login + error boundary) now uses the shared design tokens
+  (`bg-surface`/`border-line`/`text-ink*`/`bg-primary-solid`/`bg-success-soft`/…);
+  zero `purple-*`/`pink-*`/`sky-*` classes remain under `app/admin` +
+  `components/admin`. New primitives in `components/admin/ui/`: `AdminPageHeader`,
+  `Alert` (success/error/info), `EmptyState`. The ✅/❌ message-prefix pattern was
+  replaced with explicit message-kind state everywhere.
+- Lint rule worth remembering: `react-hooks/set-state-in-effect` forbids calling a
+  fetch function synchronously inside an effect when it does `setLoading(true)` before
+  its first await — the established workaround (why old pages used
+  `window.setTimeout(…, 0)`) must be kept. `AdminShell` route-change reset uses the
+  render-time compare pattern instead.
+- Suites now 137 tests (`taxonomy-admin.test.ts` adds 9). `check:openapi` counts 40
+  routes. Full `check:ci` + `npm run build` + `npm run smoke` green. Visual acceptance
+  via `.research/tools/admin-vis.mjs` (scratch DB on 3231/3232, seeds 4 categories /
+  12 tags / 24 articles / 6 comments, logs in as admin, CDP-screenshots 13 views into
+  `.research/eval-admin/shots/`) — pass after the mobile table fix.
+- Housekeeping found during setup: a leftover eval stack (ports 3321/3322, fake-smtp)
+  was still running and owned `apps/web/.env.local`; stopped via its own
+  `eval2-stack.mjs stop` subcommand, which also removed the file. Screenshots show a
+  Next dev-tools "N" bubble — dev-mode overlay only, absent in production builds.
