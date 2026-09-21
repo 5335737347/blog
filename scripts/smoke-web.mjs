@@ -400,8 +400,13 @@ if (!tocReady) {
    * 偶发失败（服务器第一次跑 smoke:prod 就是这样挂的，报「当前项=null」，
    * 而交互断言与数据断言全部通过——典型的时序问题，不是功能缺陷）。
    * 轮询窗口给到 ~10 秒，真出问题时仍然会失败，只是不再拿时序赌结果。
+   *
+   * 2026-09-21 第二次假失败：只滚动一次仍不够——滚完后懒加载图片等造成的
+   * 布局位移会把目标标题推出观察带，10 秒轮询也只会一直查一个已经失效的
+   * 滚动位置。改为每轮轮询都重发一次滚动：真实用户的滚动是连续的，
+   * 高亮终会跟上。
    */
-  const scrolled = await evaluate(readerPage.sessionId, `(() => {
+  const scrollSnippet = `(() => {
     const sections = document.querySelectorAll('.reading h2');
     const target = sections[1] || sections[0];
     if (!target) return { found: false, sections: sections.length };
@@ -411,7 +416,8 @@ if (!tocReady) {
     const top = target.getBoundingClientRect().top + window.scrollY - 120;
     window.scrollTo(0, Math.max(0, top));
     return { found: true, sections: sections.length, target: target.textContent.trim().slice(0, 20) };
-  })()`);
+  })()`;
+  let scrolled = await evaluate(readerPage.sessionId, scrollSnippet).catch(() => null);
   let activeToc = null;
   for (let i = 0; i < 40; i += 1) {
     activeToc = await evaluate(readerPage.sessionId, `(() => {
@@ -419,6 +425,7 @@ if (!tocReady) {
       return cur ? cur.textContent.trim().slice(0, 30) : null;
     })()`).catch(() => null);
     if (activeToc) break;
+    scrolled = await evaluate(readerPage.sessionId, scrollSnippet).catch(() => scrolled);
     await new Promise((r) => setTimeout(r, 250));
   }
   check(
@@ -469,14 +476,18 @@ if (!tocReady) {
 // 移动端目录抽屉（窄视口下桌面目录隐藏、浮动按钮出现）
 await send("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: true }, readerPage.sessionId);
 await gotoArticle();
-const drawerState = await evaluate(readerPage.sessionId, `(() => {
-  const btn = [...document.querySelectorAll('button')].find(b => b.getAttribute('aria-controls') === 'toc-drawer');
-  if (!btn) return { found: false };
-  btn.click();
-  return { found: true };
-})()`);
+// 打开抽屉：轮询期间反复补点。页面刚加载完就评估时 React 可能尚未 hydration
+// 完成，第一发 click 会落在没有任何监听的按钮上——2026-09-21 生产冒烟因此
+// 连续两次假失败（{"open":false}，5 秒轮询等不到抽屉）。抽屉出现即停。
 let drawer = { open: false };
+let drawerButtonFound = false;
 for (let i = 0; i < 20; i++) {
+  drawerButtonFound = await evaluate(readerPage.sessionId, `(() => {
+    const btn = [...document.querySelectorAll('button')].find(b => b.getAttribute('aria-controls') === 'toc-drawer');
+    if (!btn) return false;
+    btn.click();
+    return true;
+  })()`).catch(() => false);
   drawer = await evaluate(readerPage.sessionId, `(() => {
     const d = document.getElementById('toc-drawer');
     return d ? { open: true, links: d.querySelectorAll('a').length } : { open: false };
@@ -484,17 +495,27 @@ for (let i = 0; i < 20; i++) {
   if (drawer.open) break;
   await new Promise((r) => setTimeout(r, 250));
 }
-check("移动端可打开目录抽屉", drawerState.found && drawer.open && drawer.links >= 2, JSON.stringify(drawer));
+check("移动端可打开目录抽屉", drawerButtonFound && drawer.open && drawer.links >= 2, JSON.stringify(drawer));
 
-// 抽屉里的链接应能关闭抽屉并跳转
+// 抽屉里的链接应能关闭抽屉并跳转。与打开抽屉同理，点击可能落在
+// hydration 完成之前而丢失：轮询补点，直到抽屉卸载为止。
 const drawerNav = await evaluate(readerPage.sessionId, `(() => {
   const a = document.querySelector('#toc-drawer a');
   if (!a) return { clicked: false };
   a.click();
   return { clicked: true, href: a.getAttribute('href') };
 })()`);
-await new Promise((r) => setTimeout(r, 500));
-const drawerClosed = await evaluate(readerPage.sessionId, `!document.getElementById('toc-drawer')`).catch(() => false);
+let drawerClosed = false;
+for (let i = 0; i < 12; i++) {
+  drawerClosed = await evaluate(readerPage.sessionId, `(() => {
+    if (!document.getElementById('toc-drawer')) return true;
+    const a = document.querySelector('#toc-drawer a');
+    if (a) a.click();
+    return false;
+  })()`).catch(() => false);
+  if (drawerClosed) break;
+  await new Promise((r) => setTimeout(r, 250));
+}
 check("点击目录项后抽屉关闭", drawerNav.clicked && drawerClosed, JSON.stringify({ ...drawerNav, drawerClosed }));
 
 /**
