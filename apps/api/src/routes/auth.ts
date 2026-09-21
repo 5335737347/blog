@@ -22,6 +22,7 @@ import {
   normalizeVerificationTarget,
   sendVerificationCode,
 } from "@/server/auth/verification-code-service";
+import { isServiceError, serviceUnavailable } from "@/server/errors";
 import {
   assertRateLimit,
   assertRateLimitNotExceeded,
@@ -39,6 +40,25 @@ import {
 
 const LOGIN_ACCOUNT_WINDOW_MS = 15 * 60 * 1000;
 const LOGIN_ACCOUNT_MAX_FAILURES = 10;
+
+/**
+ * SMTP 的原始失败(认证被拒、连接未加密、超时)不能原样冒泡——
+ * 未捕获时会变成 500「服务器内部错误」,注册页只剩这句,用户与站长都
+ * 看不出是发信渠道的问题。这里统一翻译成 503;细节留在服务端日志。
+ * ServiceError(400 无效邮箱/未配置 SMTP、429 限流)保持原语义向上抛。
+ */
+async function sendVerificationCodeOrUnavailable(
+  purpose: "register" | "reset",
+  target: unknown
+) {
+  try {
+    return await sendVerificationCode(purpose, target);
+  } catch (error) {
+    if (isServiceError(error)) throw error;
+    console.error("[auth] 验证码邮件发送失败:", error instanceof Error ? error.message : error);
+    throw serviceUnavailable("验证码发送失败，邮件服务暂时不可用，请稍后再试");
+  }
+}
 
 /**
  * 管理员账号的登录锁定（比普通账号严格得多）。
@@ -118,7 +138,7 @@ const authRoutes: FastifyPluginAsync = async (app) => {
     const guard = guardRequest(request);
     await assertRateLimit(`auth:verification-code:ip:${requestIp(guard)}`, 5, 60 * 60 * 1000);
     await assertRateLimit(`auth:verification-code:target:${targetHash}`, 5, 60 * 60 * 1000);
-    return apiSuccess(await sendVerificationCode("register", target));
+    return apiSuccess(await sendVerificationCodeOrUnavailable("register", target));
   });
 
   app.post("/auth/register", async (request, reply) => {
@@ -199,7 +219,14 @@ const authRoutes: FastifyPluginAsync = async (app) => {
     await assertRateLimit(`auth:reset-code:ip:${requestIp(guard)}`, 5, 60 * 60 * 1000);
     await assertRateLimit(`auth:reset-code:target:${targetHash}`, 5, 60 * 60 * 1000);
 
-    return apiSuccess(await requestPasswordReset(body));
+    try {
+      return apiSuccess(await requestPasswordReset(body));
+    } catch (error) {
+      if (isServiceError(error)) throw error;
+      // 与注册验证码同一处理:SMTP 原始失败翻译为 503,避免 500。
+      console.error("[auth] 重置码邮件发送失败:", error instanceof Error ? error.message : error);
+      throw serviceUnavailable("验证码发送失败，邮件服务暂时不可用，请稍后再试");
+    }
   });
 
   app.post("/auth/password/reset", async (request) => {

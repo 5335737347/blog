@@ -240,6 +240,9 @@ export async function sendVerificationCode(
   const code = crypto.randomInt(0, 1_000_000).toString().padStart(6, "0");
   const expiresAt = Date.now() + CODE_TTL_MS;
   const copy = MAIL_COPY[purpose];
+  // 注意:SMTP 的原始错误(认证被拒、连接未加密等)从这里向上抛,
+  // 由 auth 路由层统一翻译成 503;service 层保持语义,smtp.test.ts
+  // 依赖这些具体错误(如「未加密」守卫)。
   const sent = await sendSmtpMail(
     target,
     copy.subject,

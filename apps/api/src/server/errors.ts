@@ -44,3 +44,7 @@ export function notFound(message: string) {
 export function tooManyRequests(message = "请求过于频繁，请稍后再试", retryAfterSeconds?: number) {
   return new ServiceError(message, 429, "TOO_MANY_REQUESTS", retryAfterSeconds);
 }
+
+export function serviceUnavailable(message = "服务暂时不可用，请稍后再试") {
+  return new ServiceError(message, 503, "SERVICE_UNAVAILABLE");
+}
