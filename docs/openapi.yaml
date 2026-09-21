@@ -789,7 +789,16 @@ paths:
       summary: List categories
       description: |
         Public list. Counts only published posts; empty categories are kept
-        as deliberate navigation placeholders.
+        as deliberate navigation placeholders. With an authenticated admin
+        session, `all=true` returns the admin variant counting all posts
+        including drafts; for everyone else the parameter is ignored.
+      parameters:
+        - name: all
+          in: query
+          required: false
+          schema:
+            type: string
+          description: '"true" with an admin session returns the full admin list.'
       responses:
         "200":
           description: Categories

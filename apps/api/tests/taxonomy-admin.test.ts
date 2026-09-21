@@ -203,6 +203,36 @@ test("public tag list stays filtered: unused tags hidden", async () => {
   );
 });
 
+test("category list mirrors tags: all=true counts drafts for admins only", async () => {
+  const { prisma } = await import("../src/lib/prisma");
+  const category = await createCategory("草稿计数分类");
+  await prisma.post.create({
+    data: {
+      slug: "taxonomy-draft-categorized",
+      title: "草稿",
+      content: "x",
+      published: false,
+      categoryId: category.id,
+    },
+  });
+
+  const asAdmin = await callAdmin("GET", "/api/categories?all=true");
+  assert.equal(asAdmin.status, 200);
+  const adminList = asAdmin.json.data as TaxonomyDto[];
+  const adminView = adminList.find((item) => item.id === category.id);
+  assert.ok(adminView, "管理端分类列表必须包含该分类");
+  assert.equal(adminView?.postCount, 1, "all=true 的分类计数应包含草稿");
+
+  const anonymous = await app.inject({
+    method: "GET",
+    url: "/api/categories?all=true",
+  });
+  const publicList = JSON.parse(anonymous.body).data as TaxonomyDto[];
+  const publicView = publicList.find((item) => item.id === category.id);
+  assert.ok(publicView, "公开分类列表保留空分类作为导航占位");
+  assert.equal(publicView?.postCount, 0, "匿名请求忽略 all=true，只计已发布");
+});
+
 test("update tag: rename to an existing name fails with merge hint", async () => {
   await createTag("已有标签");
   const other = await createTag("待改标签");

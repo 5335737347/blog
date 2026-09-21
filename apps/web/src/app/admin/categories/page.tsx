@@ -40,7 +40,7 @@ export default function CategoriesAdminPage() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/categories");
+      const res = await fetch("/api/categories?all=true");
       setCategories(await readApiData<Category[]>(res));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "加载分类失败");
@@ -145,7 +145,7 @@ export default function CategoriesAdminPage() {
     <div>
       <AdminPageHeader
         title="分类管理"
-        description="分类是少量、刻意维护的导航结构；删除分类不会删除文章。"
+        description="分类是少量、刻意维护的导航结构；删除分类不会删除文章。文章数含草稿。"
       />
 
       {error && <Alert variant="error">{error}</Alert>}
