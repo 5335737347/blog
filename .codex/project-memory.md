@@ -1582,3 +1582,14 @@ they need a Chromium binary (found via `CHROME_BIN` or the Playwright cache).
   editor-content waits necessary before editing.
 - Dev and production smoke both green; 169 unit/integration tests, check:ci,
   build and smoke:prod green.
+
+
+## Completed 2026-09-22 (tenth batch): forgot-password browser E2E
+
+- Added full forgot-password browser flow: request debug code, reset password,
+  see the all-devices-signed-out confirmation, then log in with the new password.
+- Together with the previous batches, smoke:prod now covers the main public auth
+  flows (login, register, comment, forgot/reset/relogin) and admin article CRUD
+  (create, edit, list, delete) through the real UI.
+- 169 unit/integration tests, check:ci, build, dev smoke and production smoke all
+  green.

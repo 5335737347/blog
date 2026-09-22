@@ -916,6 +916,74 @@ const registered = await waitFor(
 );
 check("注册成功后自动登录并同步头部账号", registered);
 
+// 忘记密码：发码 → 重置 → 用新密码重新登录。
+await send("Network.clearBrowserCookies", {}, flowPage.sessionId);
+await send("Page.navigate", { url: BASE + "/forgot-password" }, flowPage.sessionId);
+await waitFor(flowPage.sessionId, `!!document.querySelector('input[autocomplete="email"]')`);
+await fill(flowPage.sessionId, 'input[autocomplete="email"]', "smoke-user@example.com");
+await clickByText(flowPage.sessionId, "发送验证码");
+const resetCodeVisible = await waitFor(
+  flowPage.sessionId,
+  `/验证码为 \\d{6}/.test(document.body.innerText)`,
+  10000
+);
+const resetDebugCode = resetCodeVisible
+  ? await evaluate(
+      flowPage.sessionId,
+      `(document.body.innerText.match(/验证码为 (\\d{6})/) || [])[1] || ""`
+    )
+  : "";
+const resetFallback = resetCodeVisible
+  ? ""
+  : await evaluate(
+      flowPage.sessionId,
+      `document.body.innerText.split("\\n").join(" ").slice(0, 180)`
+    );
+check(
+  "忘记密码页可发送并显示调试验证码",
+  resetCodeVisible && /^\d{6}$/.test(resetDebugCode),
+  resetDebugCode || resetFallback
+);
+
+if (resetCodeVisible) {
+  await fill(flowPage.sessionId, 'input[autocomplete="one-time-code"]', resetDebugCode);
+  await evaluate(
+    flowPage.sessionId,
+    `(() => {
+      const inputs = [...document.querySelectorAll('input[autocomplete="new-password"]')];
+      const setValue = (element, value) => {
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+        if (setter) setter.call(element, value);
+        else element.value = value;
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+        element.dispatchEvent(new Event("change", { bubbles: true }));
+      };
+      if (inputs[0]) setValue(inputs[0], "smoke-reset-password");
+      if (inputs[1]) setValue(inputs[1], "smoke-reset-password");
+      return inputs.length >= 2;
+    })()`
+  );
+  await clickByText(flowPage.sessionId, "重置密码");
+  const resetDone = await waitFor(
+    flowPage.sessionId,
+    `document.body.innerText.includes("密码已重置")`,
+    10000
+  );
+  check("忘记密码可完成重置并提示重新登录", resetDone);
+}
+
+await send("Page.navigate", { url: BASE + "/login" }, flowPage.sessionId);
+await waitFor(flowPage.sessionId, `!!document.querySelector('input[autocomplete="username"]')`);
+await fill(flowPage.sessionId, 'input[autocomplete="username"]', "smoke-user");
+await fill(flowPage.sessionId, 'input[autocomplete="current-password"]', "smoke-reset-password");
+await click(flowPage.sessionId, 'form button[type="submit"]');
+const reloginAfterReset = await waitFor(
+  flowPage.sessionId,
+  `location.pathname === "/" && document.body.innerText.includes("冒烟用户")`,
+  15000
+);
+check("重置后的新密码可以登录", reloginAfterReset);
+
 await closePage(flowPage);
 }
 
