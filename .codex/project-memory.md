@@ -1241,3 +1241,27 @@ they need a Chromium binary (found via `CHROME_BIN` or the Playwright cache).
   `.research/tools/admin-vis.{mjs,ts}` stack (seed now copies real wallpapers into
   MEDIA_ROOT/images so thumbnails render offline; paths resolved from import.meta.url —
   cwd-dependent `../web/public` resolution bit twice in one day).
+
+## Completed 2026-09-22 (later): homepage wallpapers admin-managed
+
+- Owner asked why the hero wallpapers (which they supplied) don't show in 资源管理.
+  Root: wallpapers are theme assets — files in `apps/web/public/images/home/` plus a
+  hardcoded list in `apps/web/src/config/home.ts`; unrelated to the article-image
+  library. Owner chose full admin management over read-only display.
+- **HomeWallpaper table** (migration `add_home_wallpaper`): {url UNIQUE, enabled,
+  sortOrder}; files share MEDIA_ROOT/images but are a separate registry from
+  MediaImage (wallpapers are theme resources with their own enable/order semantics,
+  no reference checks). First list call auto-seeds the 8 repo defaults; the seed
+  marker lives in Setting (`home_wallpapers_seeded`) so deleting ALL entries is a
+  legal state and does NOT resurrect defaults.
+- Endpoints (media.ts): GET /api/wallpapers[?all=true] (public=enabled only; admin
+  sees disabled), POST (multipart upload → appended enabled at max sort+1), PUT
+  /:id {enabled}, POST /reorder {ids} (listed ids in order, unlisted trail in
+  relative order), DELETE /:id (rotation entry only — file deliberately kept).
+- Web: `getHomeWallpapers()` fetcher degrades to [] and HeroSection falls back to
+  the HOME_WALLPAPERS constant when empty — the public site never breaks if the API
+  is unreachable. Home revalidate=60 propagates admin changes within a minute.
+  WallpaperManager section in 资源管理 (upload/enable/reorder/remove; screenshots'
+  blank below-fold thumbnails are lazy-load capture artifacts).
+- 155 tests (wallpaper-service.test.ts adds 6, incl. the no-resurrect pin); 49
+  routes contract-clean; smoke + build green.
