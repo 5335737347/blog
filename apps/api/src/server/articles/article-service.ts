@@ -17,6 +17,7 @@ export interface ListArticlesOptions {
   pageSize: number;
   tag?: string | null;
   category?: string | null;
+  project?: string | null;
   query?: string | null;
   published?: string | null;
   isAdmin: boolean;
@@ -32,6 +33,7 @@ export interface ArticleMutationInput {
   /** 可选发布日期（ISO 字符串）。用于回填旧文章，见 parsePublishedAt。 */
   publishedAt?: unknown;
   categoryId?: unknown;
+  projectId?: unknown;
   tagIds?: unknown;
 }
 
@@ -82,6 +84,11 @@ function stringArray(value: unknown): string[] {
   return values;
 }
 
+async function assertProjectReference(projectId: string) {
+  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true } });
+  if (!project) throw badRequest("项目不存在");
+}
+
 async function assertTaxonomyReferences(categoryId: string | null, tagIds: string[]) {
   const [category, tagCount] = await Promise.all([
     categoryId
@@ -113,6 +120,9 @@ function buildArticleWhere(options: ListArticlesOptions): Prisma.PostWhereInput 
   }
   if (options.category) {
     where.category = { slug: options.category };
+  }
+  if (options.project) {
+    where.project = { slug: options.project };
   }
   const query = options.query?.trim();
   if (query) {
@@ -168,6 +178,8 @@ export async function createArticle(input: ArticleMutationInput) {
   const explicitTagIds = stringArray(input.tagIds);
   const categoryId = optionalText(input.categoryId) || null;
   await assertTaxonomyReferences(categoryId, explicitTagIds);
+  const projectId = optionalText(input.projectId) || null;
+  if (projectId) await assertProjectReference(projectId);
 
   const autoTags = extractHashTags(content);
   const allTagIds = [
@@ -190,6 +202,7 @@ export async function createArticle(input: ArticleMutationInput) {
       published,
       publishedAt: published ? (requestedPublishedAt ?? new Date()) : null,
       categoryId,
+      projectId,
       tags: allTagIds.length
         ? { create: allTagIds.map((tagId) => ({ tagId })) }
         : undefined,
@@ -322,6 +335,14 @@ export async function updateArticle(id: string, input: ArticleMutationInput) {
     await assertTaxonomyReferences(categoryId || null, []);
     data.category = categoryId
       ? { connect: { id: categoryId } }
+      : { disconnect: true };
+  }
+
+  if (input.projectId !== undefined) {
+    const projectId = optionalText(input.projectId);
+    if (projectId) await assertProjectReference(projectId);
+    data.project = projectId
+      ? { connect: { id: projectId } }
       : { disconnect: true };
   }
 

@@ -1,5 +1,12 @@
 import type { Prisma } from "@prisma/client";
-import type { ArchiveData, ArchiveYear, ArticleAdjacent, HomePageData } from "@kpblog/contracts";
+import type {
+  ArchiveData,
+  ArchiveProject,
+  ArchiveYear,
+  ArticleAdjacent,
+  HomePageData,
+  ProjectSummary,
+} from "@kpblog/contracts";
 import { prisma } from "@/lib/prisma";
 import { postSummarySelect, toPostSummaryDto } from "@/server/articles/article-dto";
 import {
@@ -81,13 +88,16 @@ export async function getPublicSettings(): Promise<PublicSettingsDto> {
 export async function getArticleIndexPageData(
   page: number,
   pageSize: number,
-  query?: string
+  query?: string,
+  filters?: { category?: string; tag?: string }
 ) {
   return listArticles({
     page,
     pageSize,
     // 关键词搜索(标题/摘要/正文 contains);/articles 列表页的搜索框走这里
     query: query ?? null,
+    category: filters?.category || null,
+    tag: filters?.tag || null,
     isAdmin: false,
   });
 }
@@ -312,10 +322,10 @@ export async function getArticleAdjacentData(slug: string): Promise<ArticleAdjac
 }
 
 /**
- * 归档数据：按年份分组的全部已发布文章。
+ * 归档数据：项目分区 + 未归入项目文章的年份兜底。
  *
- * 归档页只按时间浏览，因此每条只取 slug/title/publishedAt —— 比复用
- * 文章列表接口返回完整摘要轻得多。上限与 sitemap 一致（协议量级），
+ * 与文章列表不同，归档是「目录」视图，每条只取 slug/title/publishedAt ——
+ * 比复用文章列表接口返回完整摘要轻得多。上限与 sitemap 一致（协议量级），
  * 超出时应改为分页而不是无限加载。
  */
 const ARCHIVE_LIMIT = 5_000;
@@ -325,31 +335,92 @@ export async function getArchiveData(): Promise<ArchiveData> {
     where: { published: true },
     orderBy: POST_ORDER_DESC,
     take: ARCHIVE_LIMIT,
-    select: { slug: true, title: true, publishedAt: true },
+    select: {
+      slug: true,
+      title: true,
+      publishedAt: true,
+      project: { select: { id: true, name: true, slug: true, description: true, coverImage: true } },
+    },
   });
 
-  // 按年份归组。年份内保持 POST_ORDER_DESC（新→旧），年份之间也按新→旧。
-  const byYear = new Map<number | null, ArchiveYear>();
+  const entry = (post: (typeof posts)[number]) => ({
+    slug: post.slug,
+    title: post.title,
+    publishedAt: post.publishedAt ? post.publishedAt.toISOString() : null,
+  });
+
+  // 按项目分组：项目内保持 POST_ORDER_DESC（新→旧），项目之间按最新文章倒序。
+  const byProject = new Map<string, ArchiveProject>();
+  const entryByYear = new Map<number | null, ArchiveYear>();
+
   for (const post of posts) {
-    const year = post.publishedAt ? post.publishedAt.getFullYear() : null;
-    let bucket = byYear.get(year);
-    if (!bucket) {
-      bucket = { year, posts: [] };
-      byYear.set(year, bucket);
+    if (post.project) {
+      let bucket = byProject.get(post.project.id);
+      if (!bucket) {
+        const project: ProjectSummary = {
+          id: post.project.id,
+          name: post.project.name,
+          slug: post.project.slug,
+          description: post.project.description,
+          coverImage: post.project.coverImage,
+        };
+        bucket = { project, posts: [] };
+        byProject.set(post.project.id, bucket);
+      }
+      bucket.posts.push(entry(post));
+      continue;
     }
-    bucket.posts.push({
-      slug: post.slug,
-      title: post.title,
-      publishedAt: post.publishedAt ? post.publishedAt.toISOString() : null,
-    });
+
+    // 未归入项目的文章按年份兜底（无日期排最后）。
+    const year = post.publishedAt ? post.publishedAt.getFullYear() : null;
+    let yearBucket = entryByYear.get(year);
+    if (!yearBucket) {
+      yearBucket = { year, posts: [] };
+      entryByYear.set(year, yearBucket);
+    }
+    yearBucket.posts.push(entry(post));
   }
 
-  // null（无日期）排在最后，其余按年份倒序。
-  const years = [...byYear.values()].sort((a, b) => {
-    if (a.year === null) return 1;
-    if (b.year === null) return -1;
-    return b.year - a.year;
-  });
+  const projects = [...byProject.values()].sort((a, b) =>
+    compareNewestFirst(a.posts[0]?.publishedAt ?? null, b.posts[0]?.publishedAt ?? null)
+  );
 
-  return { total: posts.length, years };
+  const years = [...entryByYear.values()].sort((a, b) =>
+    compareNewestFirst(yearKey(a.year), yearKey(b.year))
+  );
+
+  return { total: posts.length, projects, years };
+}
+
+function yearKey(year: number | null) {
+  // null（无日期）参与排序时排最后。
+  return year === null ? null : String(year);
+}
+
+function compareNewestFirst(a: string | null, b: string | null) {
+  if (a === null) return 1;
+  if (b === null) return -1;
+  return b.localeCompare(a);
+}
+
+/** 项目详情页：项目信息 + 该项目已发布文章的分页列表。 */
+export async function getCollectionPageData(
+  projectSlug: string,
+  page: number,
+  pageSize: number
+) {
+  const [project, articles] = await Promise.all([
+    prisma.project.findUnique({
+      where: { slug: projectSlug },
+      select: { id: true, name: true, slug: true, description: true, coverImage: true },
+    }),
+    listArticles({
+      page,
+      pageSize,
+      project: projectSlug,
+      isAdmin: false,
+    }),
+  ]);
+
+  return { project, articles };
 }

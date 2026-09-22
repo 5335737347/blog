@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import {
+  getCollectionPageData,
   getArchiveData,
   getArticleAdjacentData,
   getArticleIndexPageData,
@@ -38,12 +39,24 @@ const publicRoutes: FastifyPluginAsync = async (app) => {
     }))
   );
 
-  app.get<{ Querystring: PageQuery }>("/public/article-index", async (request) =>
-    apiSuccess(await getArticleIndexPageData(
+  app.get<{ Querystring: PageQuery & { category?: string; tag?: string } }>(
+    "/public/article-index",
+    async (request) =>
+      apiSuccess(await getArticleIndexPageData(
+        positiveInt(request.query.page, 1),
+        Math.min(50, positiveInt(request.query.limit, 10)),
+        // 与 admin 列表同一约定:关键词截断到 100 字符,过滤已发布文章
+        request.query.q?.slice(0, 100),
+        // /articles 列表页的分类/标签下拉筛选
+        { category: request.query.category?.slice(0, 100), tag: request.query.tag?.slice(0, 100) }
+      ))
+  );
+
+  app.get<{ Params: ArchiveParams; Querystring: PageQuery }>("/public/collections/:slug", async (request) =>
+    apiSuccess(await getCollectionPageData(
+      request.params.slug,
       positiveInt(request.query.page, 1),
-      Math.min(50, positiveInt(request.query.limit, 10)),
-      // 与 admin 列表同一约定:关键词截断到 100 字符,过滤已发布文章
-      request.query.q?.slice(0, 100)
+      Math.min(50, positiveInt(request.query.limit, 10))
     ))
   );
 

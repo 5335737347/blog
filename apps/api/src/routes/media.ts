@@ -1,8 +1,10 @@
 import type { FastifyPluginAsync } from "fastify";
 import { requireAdminSession } from "@/server/auth/auth-service";
-import type { MusicUrlInput } from "@/server/media/media-service";
+import type { ImageUrlInput, MusicUrlInput } from "@/server/media/media-service";
 import {
+  adoptPostImages,
   createImageFromFile,
+  createImageFromUrl,
   createMusicFromFile,
   createMusicFromUrl,
   deleteImage,
@@ -13,27 +15,14 @@ import {
 import { apiSuccess, assertRequestOrigin, multipartFiles, requestBody, sessionToken } from "@/http";
 
 type IdParams = { id: string };
+type ImageQuery = { kind?: string; force?: string };
 
 /**
- * 媒体路由：音乐与封面图片（后台「资源管理」页共用）。
+ * 媒体路由：音乐与图片。图片是 MediaImage 登记表（本地文件 + 外部图床
+ * 统一入库，kind 区分封面与正文图）；音乐是 Music 表 + 可选本地文件。
+ * 列表端点公开，写操作一律管理员。
  */
 const mediaRoutes: FastifyPluginAsync = async (app) => {
-  app.get("/images", async () => apiSuccess(await listImages()));
-
-  app.post("/images", async (request, reply) => {
-    assertRequestOrigin(request);
-    await requireAdminSession(sessionToken(request));
-    const { files } = await multipartFiles(request);
-    const image = await createImageFromFile({ file: files[0] || null });
-    return reply.status(201).send(apiSuccess(image));
-  });
-
-  app.delete<{ Params: { name: string } }>("/images/:name", async (request) => {
-    assertRequestOrigin(request);
-    await requireAdminSession(sessionToken(request));
-    return apiSuccess(await deleteImage(request.params.name));
-  });
-
   app.get("/music", async () => apiSuccess(await listMusicTracks()));
 
   app.post("/music", async (request, reply) => {
@@ -52,6 +41,36 @@ const mediaRoutes: FastifyPluginAsync = async (app) => {
     assertRequestOrigin(request);
     await requireAdminSession(sessionToken(request));
     return apiSuccess(await deleteMusicTrack(request.params.id));
+  });
+
+  app.get<{ Querystring: ImageQuery }>("/images", async (request) =>
+    apiSuccess(await listImages({ kind: request.query.kind }))
+  );
+
+  // multipart（上传文件，kind 随表单字段）与 JSON（登记外部图床 URL）二选一。
+  app.post("/images", async (request, reply) => {
+    assertRequestOrigin(request);
+    await requireAdminSession(sessionToken(request));
+    const image = request.isMultipart()
+      ? await (async () => {
+          const { files, fields } = await multipartFiles(request);
+          return createImageFromFile({ file: files[0] || null, kind: fields.kind });
+        })()
+      : await createImageFromUrl(requestBody<ImageUrlInput>(request));
+    return reply.status(201).send(apiSuccess(image));
+  });
+
+  app.delete<{ Params: IdParams; Querystring: ImageQuery }>("/images/:id", async (request) => {
+    assertRequestOrigin(request);
+    await requireAdminSession(sessionToken(request));
+    return apiSuccess(await deleteImage(request.params.id, { force: request.query.force === "true" }));
+  });
+
+  // 一键收编：扫描全部文章的 coverImage 与正文图片 URL，登记入库（幂等）。
+  app.post("/images/adopt", async (request) => {
+    assertRequestOrigin(request);
+    await requireAdminSession(sessionToken(request));
+    return apiSuccess(await adoptPostImages());
   });
 };
 

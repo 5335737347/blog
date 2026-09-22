@@ -113,8 +113,28 @@ export interface ArchiveYear {
   posts: ArchivePostSummary[];
 }
 
+/**
+ * 项目合集摘要。归档页按它分组；分类是内容题材，项目是写作期间的工作单元。
+ */
+export interface ProjectSummary {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  coverImage: string | null;
+}
+
+/** 归档页的一个项目分区：项目信息 + 该项目下按时间倒序的已发布文章。 */
+export interface ArchiveProject {
+  project: ProjectSummary;
+  posts: ArchivePostSummary[];
+}
+
 export interface ArchiveData {
   total: number;
+  /** 归入项目的文章，按项目最新文章时间倒序。 */
+  projects: ArchiveProject[];
+  /** 未归入任何项目的文章，按年份分组兜底（无日期排最后）。 */
   years: ArchiveYear[];
 }
 

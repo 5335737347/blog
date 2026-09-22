@@ -12,6 +12,7 @@ import { registerCompression } from "@/server/compression";
 import authRoutes from "@/routes/auth";
 import articleRoutes from "@/routes/articles";
 import commentRoutes from "@/routes/comments";
+import collectionRoutes from "@/routes/collections";
 import mediaRoutes from "@/routes/media";
 import publicRoutes from "@/routes/public";
 import publishingRoutes from "@/routes/publishing";
@@ -82,6 +83,7 @@ export function buildApp() {
     await api.register(authRoutes);
     await api.register(articleRoutes);
     await api.register(commentRoutes);
+    await api.register(collectionRoutes);
     await api.register(mediaRoutes);
     await api.register(publicRoutes);
     await api.register(publishingRoutes);

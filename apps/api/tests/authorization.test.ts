@@ -56,6 +56,10 @@ const ADMIN_ONLY: Endpoint[] = [
   { method: "PUT", path: "/api/tags/absent", body: { name: "x" }, label: "修改标签" },
   { method: "DELETE", path: "/api/tags/absent", label: "删除标签" },
   { method: "POST", path: "/api/tags/absent/merge", body: { targetId: "absent" }, label: "合并标签" },
+  { method: "POST", path: "/api/images/adopt", label: "收编文章图片" },
+  { method: "POST", path: "/api/collections", body: { name: "x" }, label: "新建项目" },
+  { method: "PUT", path: "/api/collections/absent", body: { name: "x" }, label: "修改项目" },
+  { method: "DELETE", path: "/api/collections/absent", label: "删除项目" },
 ];
 
 async function call(

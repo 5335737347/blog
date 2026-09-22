@@ -30,7 +30,7 @@ async function seed(slug: string, publishedAt: Date | null, published = true) {
 }
 
 test("archive is empty before anything is published", async () => {
-  assert.deepEqual(await getArchiveData(), { total: 0, years: [] });
+  assert.deepEqual(await getArchiveData(), { total: 0, projects: [], years: [] });
 });
 
 test("archive groups published posts by year, newest year first", async () => {

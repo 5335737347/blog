@@ -25,6 +25,8 @@ tags:
   - name: Comments
   - name: Taxonomy
   - name: Media
+  - name: Collections
+    description: Project collections grouping posts into series.
   - name: Settings
   - name: Publishing
   - name: Public
@@ -136,6 +138,16 @@ paths:
           description: >-
             Keyword filter over title, excerpt and content of published
             articles. The API truncates the value to 100 characters.
+        - name: category
+          in: query
+          schema:
+            type: string
+          description: Category slug filter (the /articles page filter dropdown).
+        - name: tag
+          in: query
+          schema:
+            type: string
+          description: Tag slug filter (the /articles page filter dropdown).
       responses:
         "200":
           description: Paginated published articles
@@ -221,6 +233,28 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Envelope"
+
+  /api/public/collections/{slug}:
+    parameters:
+      - name: slug
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Public]
+      summary: Get a project collection page payload
+      description: Server-rendered /collections/[collection] page data — the project summary plus a paginated list of its published posts.
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Project page data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollectionPageResponse"
 
   /api/public/rss-data:
     get:
@@ -1037,6 +1071,117 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/collections:
+    get:
+      tags: [Collections]
+      summary: List project collections
+      description: |
+        Public list: every project kept as a navigation placeholder, counting
+        only published posts. With an authenticated admin session, `all=true`
+        returns the admin variant counting all posts including drafts; for
+        everyone else the parameter is ignored.
+      parameters:
+        - name: all
+          in: query
+          required: false
+          schema:
+            type: string
+          description: '"true" with an admin session returns the full admin list.'
+      responses:
+        "200":
+          description: Project collections
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectListResponse"
+    post:
+      tags: [Collections]
+      summary: Create project collection
+      description: Admin only. The slug defaults to a slugified version of the name.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectInput"
+      responses:
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "201":
+          description: Project created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectMutationResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/collections/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    put:
+      tags: [Collections]
+      summary: Update project collection
+      description: |
+        Admin only. Rename only changes the display name; the slug (and
+        therefore the public URL) changes only when a slug field is
+        explicitly supplied. Set coverImage to null to clear it.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectInput"
+      responses:
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "200":
+          description: Project updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectMutationResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    delete:
+      tags: [Collections]
+      summary: Delete project collection
+      description: |
+        Admin only. Posts keep their content; their projectId is set to null
+        by the database foreign key, so they fall back to the year groups on
+        /archive.
+      security:
+        - sessionCookie: []
+      responses:
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "200":
+          description: Project deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /api/profile:
     put:
       tags: [Profile]
@@ -1170,17 +1315,34 @@ paths:
   /api/images:
     get:
       tags: [Media]
-      summary: List uploaded cover images
+      summary: List registered images
+      description: |
+        Public. Every registered entry — locally uploaded files and external
+        (image-host) URLs alike. kind selects one bucket (cover or article);
+        omit it for both.
+      parameters:
+        - name: kind
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [cover, article]
+          description: Filter by image kind; omitted means all kinds.
       responses:
         "200":
-          description: Cover images
+          description: Registered images
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ImageListResponse"
     post:
       tags: [Media]
-      summary: Upload a cover image (JPG/PNG/WebP/GIF/AVIF, max 10MB)
+      summary: Upload an image file or register an external image URL
+      description: >-
+        Admin only. Multipart uploads store the file under the local image
+        library; JSON registers an external http(s) URL (e.g. a GitHub image
+        host) without downloading it. Both create a MediaImage entry whose
+        url must be unique.
       security:
         - sessionCookie: []
       requestBody:
@@ -1189,15 +1351,18 @@ paths:
           multipart/form-data:
             schema:
               $ref: "#/components/schemas/ImageUploadInput"
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImageUrlRegisterInput"
       responses:
         "403":
           $ref: "#/components/responses/Forbidden"
         "201":
-          description: Cover image uploaded
+          description: Image registered
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/UploadResponse"
+                $ref: "#/components/schemas/ImageResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -1205,23 +1370,31 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
-  /api/images/{name}:
+  /api/images/{id}:
     parameters:
-      - name: name
-        in: path
-        required: true
-        schema:
-          type: string
+      - $ref: "#/components/parameters/Id"
     delete:
       tags: [Media]
-      summary: Delete an uploaded cover image
+      summary: Delete a registered image
+      description: |
+        Admin only. Refuses with 409 while posts still reference the URL
+        (covers match Post.coverImage exactly; article images match the body
+        markdown). Supplying force=true deletes anyway, leaving the dangling
+        references in place — posts are never modified.
       security:
         - sessionCookie: []
+      parameters:
+        - name: force
+          in: query
+          required: false
+          schema:
+            type: string
+          description: '"true" deletes even while references remain.'
       responses:
         "403":
           $ref: "#/components/responses/Forbidden"
         "200":
-          description: Cover image deleted
+          description: Image deleted
           content:
             application/json:
               schema:
@@ -1232,6 +1405,36 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          description: Still referenced by posts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiFailure"
+
+  /api/images/adopt:
+    post:
+      tags: [Media]
+      summary: Adopt image URLs already used by posts into the library
+      description: |
+        Admin only. Scans every post: coverImage values become cover entries,
+        markdown body image URLs become article entries. Idempotent — URLs
+        already registered are skipped, so a repeated run reports zero.
+      security:
+        - sessionCookie: []
+      responses:
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "200":
+          description: Adoption result (newly registered counts)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImageAdoptResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
 
   /api/import:
     post:
@@ -1833,6 +2036,13 @@ components:
           type:
             - string
             - "null"
+        projectId:
+          type:
+            - string
+            - "null"
+          description: >-
+            Optional project collection (Post.projectId). Omit to keep the
+            existing value; send null to remove the post from its project.
         tagIds:
           type: array
           items:
@@ -1870,6 +2080,13 @@ components:
           type:
             - string
             - "null"
+        projectId:
+          type:
+            - string
+            - "null"
+          description: >-
+            Optional project collection (Post.projectId). Omit to keep the
+            existing value; send null to remove the post from its project.
         tagIds:
           type: array
           items:
@@ -2171,6 +2388,66 @@ components:
             data:
               $ref: "#/components/schemas/Tag"
 
+    Project:
+      type: object
+      required: [id, name, slug, description, coverImage, createdAt, postCount]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+        coverImage:
+          type:
+            - string
+            - "null"
+        createdAt:
+          type: string
+          format: date-time
+        postCount:
+          type: integer
+          description: Admin list counts all posts including drafts; public list counts published only.
+
+    ProjectInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          maxLength: 50
+        slug:
+          type: string
+          description: Optional explicit slug; defaults to a slugified version of the name.
+        description:
+          type: string
+          maxLength: 500
+        coverImage:
+          type:
+            - string
+            - "null"
+          description: Optional project cover URL; null clears it.
+
+    ProjectListResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/Project"
+
+    ProjectMutationResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/Project"
+
     SettingsResponse:
       allOf:
         - $ref: "#/components/schemas/Envelope"
@@ -2192,40 +2469,118 @@ components:
         blog_description:
           type: string
 
-    UploadResponse:
+    CollectionPageResponse:
       allOf:
         - $ref: "#/components/schemas/Envelope"
         - type: object
           properties:
             data:
               type: object
-              required: [url]
+              required: [project, articles]
               properties:
-                url:
-                  type: string
-                  example: /images/example.webp
+                project:
+                  type:
+                    - object
+                    - "null"
+                  properties:
+                    id:
+                      type: string
+                    name:
+                      type: string
+                    slug:
+                      type: string
+                    description:
+                      type: string
+                    coverImage:
+                      type:
+                        - string
+                        - "null"
+                articles:
+                  $ref: "#/components/schemas/ArticleListPayload"
+
+    ArticleListPayload:
+      type: object
+      required: [items, total, page, pageSize, totalPages]
+      properties:
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        totalPages:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PostSummary"
 
     ImageUploadInput:
       type: object
-      required: [file]
+      required: [file, kind]
       properties:
         file:
           type: string
           format: binary
+        kind:
+          type: string
+          enum: [cover, article]
+
+    ImageUrlRegisterInput:
+      type: object
+      required: [url, kind]
+      properties:
+        url:
+          type: string
+          maxLength: 2048
+          description: http(s) image URL from an external image host.
+        kind:
+          type: string
+          enum: [cover, article]
+        name:
+          type: string
+          description: Optional display name; defaults to the URL's last segment.
 
     ImageItem:
       type: object
-      required: [name, url, size, modified]
+      required: [id, kind, name, url, createdAt]
       properties:
+        id:
+          type: string
+        kind:
+          type: string
+          enum: [cover, article]
         name:
           type: string
         url:
           type: string
-        size:
-          type: integer
-        modified:
+        createdAt:
           type: string
           format: date-time
+
+    ImageResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/ImageItem"
+
+    ImageAdoptResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [covers, articles]
+              properties:
+                covers:
+                  type: integer
+                  description: Newly registered cover entries.
+                articles:
+                  type: integer
+                  description: Newly registered article-image entries.
 
     ImageListResponse:
       allOf:

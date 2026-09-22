@@ -30,6 +30,7 @@ export const postDetailSelect = {
   updatedAt: true,
   categoryId: true,
   category: { select: { name: true, slug: true } },
+  projectId: true,
   tags: {
     select: { tag: { select: { id: true, name: true, slug: true } } },
   },

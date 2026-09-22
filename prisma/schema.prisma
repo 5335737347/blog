@@ -39,12 +39,19 @@ model Post {
 
   categoryId String?
   category   Category?   @relation(fields: [categoryId], references: [id])
+
+  // 可空：项目合集是可选的组织维度，未归入任何项目的文章在归档页按年份兜底。
+  projectId String?
+  project   Project?  @relation(fields: [projectId], references: [id])
+
   tags       TagOnPost[]
   comments   Comment[]
 
   @@index([published, publishedAt])
   // 分类页与标签页按 categoryId 过滤；没有这个索引时查询只能先按 published 扫描。
   @@index([categoryId])
+  // 归档页按项目分组时同样需要按 projectId 过滤。
+  @@index([projectId])
 }
 
 model Category {
@@ -52,6 +59,21 @@ model Category {
   name  String @unique
   slug  String @unique
   posts Post[]
+}
+
+/// 项目合集：把同一项目/系列的文章组织在一起，归档页按它分组展示。
+///
+/// 与 Category 的分工：分类是内容题材（技术/生活），项目是写作期间的
+/// 工作单元（如「博客引擎重构」），一篇只属于零个或一个项目。
+/// description 展示在归档与项目页的分区头部；coverImage 预留给项目页头图。
+model Project {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  slug        String   @unique
+  description String   @default("")
+  coverImage  String?
+  createdAt   DateTime @default(now())
+  posts       Post[]
 }
 
 model Tag {
@@ -106,6 +128,22 @@ model Music {
   artist    String?
   url       String
   createdAt DateTime @default(now())
+}
+
+/// 已登记的图片资源。kind 区分封面（cover）与文章正文用图（article）。
+///
+/// url 既可以是上传到 MEDIA_ROOT/images 的本地路径（/images/<file>），也可以是
+/// 外部图床（GitHub 等）的 http(s) 地址——数据库行为权威，与 Music 的设计一致。
+/// 文章的 coverImage 字段与正文 markdown 继续直接存 URL 字符串；删除登记
+/// 不改动文章内容，引用检查只负责提醒，force 才允许制造悬空引用。
+model MediaImage {
+  id        String   @id @default(cuid())
+  kind      String
+  name      String
+  url       String   @unique
+  createdAt DateTime @default(now())
+
+  @@index([kind, createdAt])
 }
 
 model Setting {
