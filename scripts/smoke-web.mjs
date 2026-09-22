@@ -283,6 +283,29 @@ async function clickByText(sessionId, text) {
   );
 }
 
+async function fillByLabel(sessionId, labelText, value) {
+  return evaluate(
+    sessionId,
+    `(() => {
+      const label = [...document.querySelectorAll("label")].find((item) =>
+        (item.textContent || "").includes(${JSON.stringify(labelText)})
+      );
+      if (!label || !label.htmlFor) return false;
+      const element = document.getElementById(label.htmlFor);
+      if (!element) return false;
+      const proto = element instanceof HTMLTextAreaElement
+        ? HTMLTextAreaElement.prototype
+        : HTMLInputElement.prototype;
+      const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
+      if (setter) setter.call(element, ${JSON.stringify(value)});
+      else element.value = ${JSON.stringify(value)};
+      element.dispatchEvent(new Event("input", { bubbles: true }));
+      element.dispatchEvent(new Event("change", { bubbles: true }));
+      return true;
+    })()`
+  );
+}
+
 /* ---------- 检查 ---------- */
 const failures = [];
 const check = (name, pass, detail = "") => {
@@ -697,6 +720,135 @@ const adminLoggedIn = await waitFor(
   15000
 );
 check("管理员登录后按 redirect 进入后台目标页", adminLoggedIn);
+
+// 后台文章表单：创建草稿 → 详情页 → 修改标题 → 后台列表可见。
+if (adminLoggedIn) {
+  const createdTitle = "冒烟后台文章";
+  const updatedTitle = "冒烟后台文章（已更新）";
+  await send("Page.navigate", { url: BASE + "/admin/articles/new" }, flowPage.sessionId);
+  await waitFor(flowPage.sessionId, `!!document.getElementById("标题-*")`, 10000);
+  await waitFor(flowPage.sessionId, `!!(document.querySelector("textarea.w-md-editor-text-input") || document.querySelector("[data-color-mode] textarea"))`, 10000);
+  await fillByLabel(flowPage.sessionId, "标题", createdTitle);
+  await evaluate(
+    flowPage.sessionId,
+    `(() => {
+      const element = document.querySelector("textarea.w-md-editor-text-input") || document.querySelector("[data-color-mode] textarea");
+      if (!element) return false;
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+      if (setter) setter.call(element, "# 后台冒烟正文\\n\\n用于验证后台文章表单。");
+      else element.value = "# 后台冒烟正文\\n\\n用于验证后台文章表单。";
+      element.dispatchEvent(new Event("input", { bubbles: true }));
+      element.dispatchEvent(new Event("change", { bubbles: true }));
+      return true;
+    })()`
+  );
+  await clickByText(flowPage.sessionId, "保存草稿");
+  const created = await waitFor(
+    flowPage.sessionId,
+    `(() => {
+      const parts = location.pathname.split("/").filter(Boolean);
+      const onDetail = parts.length === 3 && parts[0] === "admin" && parts[1] === "articles" && parts[2] !== "new";
+      return onDetail && ((document.getElementById("标题-*") || {}).value || "").includes("冒烟后台文章");
+    })()`,
+    15000
+  );
+  const createDebug = created
+    ? ""
+    : await evaluate(
+        flowPage.sessionId,
+        `(() => {
+          const title = document.getElementById("标题-*");
+          const editor = document.querySelector("textarea.w-md-editor-text-input") ||
+            document.querySelector("[data-color-mode] textarea");
+          return JSON.stringify({
+            pathname: location.pathname,
+            titleValue: title ? title.value : null,
+            contentValue: editor ? editor.value.slice(0, 40) : null,
+            alert: (document.querySelector('[role="alert"]') || {}).textContent || null,
+            text: document.body.innerText.split("\\n").join(" ").slice(0, 180),
+          });
+        })()`
+      );
+  check("后台可创建草稿并跳转详情页", created, createDebug);
+
+  if (created) {
+    // 整页重载一次，确保详情页的客户端组件已经水合，避免点击保存时
+    // 事件处理器还没挂上（生产构建下比 dev 更容易撞到时序）。
+    await send("Page.reload", {}, flowPage.sessionId);
+    await waitFor(
+      flowPage.sessionId,
+      `!!(document.querySelector("textarea.w-md-editor-text-input") || document.querySelector("[data-color-mode] textarea"))`,
+      10000
+    );
+    // 等正文从 API 回填进编辑器再保存；否则会触发“标题和内容不能为空”。
+    await waitFor(
+      flowPage.sessionId,
+      `((document.querySelector("textarea.w-md-editor-text-input") || document.querySelector("[data-color-mode] textarea") || {}).value || "").length > 5`,
+      10000
+    );
+    await fillByLabel(flowPage.sessionId, "标题", updatedTitle);
+    await clickByText(flowPage.sessionId, "保存草稿");
+    const updated = await waitFor(
+      flowPage.sessionId,
+      `((document.getElementById("标题-*") || {}).value || "").includes("冒烟后台文章（已更新）")`,
+      10000
+    );
+    const updateDebug = await evaluate(
+      flowPage.sessionId,
+      `(() => JSON.stringify({
+        title: (document.getElementById("标题-*") || {}).value || null,
+        alert: (document.querySelector('[role="alert"]') || {}).textContent || null,
+        buttons: [...document.querySelectorAll("button")].map((item) => item.textContent?.trim()).slice(0, 12),
+      }))()`
+    );
+    check("后台可修改草稿标题", updated && !/保存失败|错误|失败/.test(updateDebug), updateDebug);
+
+    if (updated) {
+      await send("Page.navigate", { url: BASE + "/admin" }, flowPage.sessionId);
+      const listed = await waitFor(
+        flowPage.sessionId,
+        `document.body.innerText.includes("冒烟后台文章（已更新）")`,
+        20000
+      );
+      const listDebug = listed
+        ? ""
+        : await evaluate(
+            flowPage.sessionId,
+            `document.body.innerText.split("\\n").join(" ").slice(0, 220)`
+          );
+      check("后台文章列表可见新建/修改后的草稿", listed, listDebug);
+
+      if (listed) {
+        const deleteClicked = await evaluate(
+          flowPage.sessionId,
+          `(() => {
+            window.confirm = () => true;
+            const row = [...document.querySelectorAll("tr")].find((item) =>
+              (item.textContent || "").includes("冒烟后台文章（已更新）")
+            );
+            if (!row) return false;
+            const button = [...row.querySelectorAll("button")].find((item) =>
+              (item.textContent || "").includes("删除")
+            );
+            if (!button) return false;
+            button.click();
+            return true;
+          })()`
+        );
+        const deleted = deleteClicked
+          ? await waitFor(
+              flowPage.sessionId,
+              `![...document.querySelectorAll("tr")].some((item) =>
+                (item.textContent || "").includes("冒烟后台文章（已更新）")
+              )`,
+              10000
+            )
+          : false;
+        check("后台可通过列表删除草稿", deleted);
+      }
+    }
+  }
+}
 
 await send("Network.clearBrowserCookies", {}, flowPage.sessionId);
 await send("Page.navigate", { url: BASE + "/admin" }, flowPage.sessionId);

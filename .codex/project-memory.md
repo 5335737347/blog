@@ -1568,3 +1568,17 @@ they need a Chromium binary (found via `CHROME_BIN` or the Playwright cache).
   disposable smoke instance.
 - 169 unit/integration tests, check:ci, build, smoke and smoke:prod green; dev smoke
   now has 6 authenticated/form assertions.
+
+
+## Completed 2026-09-22 (ninth batch): admin article CRUD browser E2E
+
+- `smoke-web.mjs` now drives admin article create -> detail -> edit title -> list
+  -> delete entirely through the UI, with MDEditor content filling and the real
+  form submit path. This closes the remaining “后台 CRUD 表单无浏览器断言” gap;
+  forgot-password is the only major auth form still API-only.
+- The test initially exposed timing pitfalls: `/admin/articles/new` also starts
+  with `/admin/articles/`, so the “redirected to detail” assertion must exclude
+  the literal `new` segment; and production hydration timing makes reload-plus
+  editor-content waits necessary before editing.
+- Dev and production smoke both green; 169 unit/integration tests, check:ci,
+  build and smoke:prod green.
