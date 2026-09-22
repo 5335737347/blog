@@ -1282,3 +1282,18 @@ they need a Chromium binary (found via `CHROME_BIN` or the Playwright cache).
   fail `tsc` — delete those dirs before blaming source code. And line-surgery on
   openapi.yaml corrupted it once; `git checkout` + content-anchored edits, then
   `check:openapi` (its duplicate-key detector caught the leftover tail).
+
+## Deployed 2026-09-22: 文章+项目架构 (7e9d7e1) + a benign build-time 404 worth knowing
+
+- `npm run update` green end to end: 150/150 tests, 49-route contract, no pending
+  migrations (wallpaper migration had landed with the previous update), smoke asserts
+  /projects and the new nav (文章 项目).
+- **Benign build-time degrade, now seen in the wild**: during the update, web is built
+  BEFORE the API reloads, so the still-running OLD API returns 404 for the brand-new
+  `/api/public/collections` endpoint. The /projects ISR page prerendered with its
+  degraded fallback ("[public-api] ... 已降级为默认内容" in build output) and then
+  self-healed within its revalidate=300 window once the new API went live. This is the
+  documented degrade-and-recover contract, not a bug — expect the same log line any
+  time a release adds a NEW public endpoint consumed by an ISR page. If the stale
+  content bothers anyone, `pm2 reload blog-api` before build or an immediate second
+  update run would avoid it; not worth changing the update order for.
