@@ -23,9 +23,19 @@ export async function generateMetadata({
   const query = q?.trim() || "";
 
   if (query || category || tag) {
-    // 搜索结果页有无限个 URL 形态,不允许索引,但允许顺着结果继续抓取
+    // 搜索/筛选结果页有无限个 URL 形态,不允许索引,但允许顺着结果继续抓取。
+    // 只有分类/标签筛选（无关键词）时用真实名称做标题，避免「」空引号。
+    let filterLabel = "";
+    if (!query) {
+      const [categories, tags] = await Promise.all([getPublicCategories(), getPublicTags()]);
+      const categoryName = categories.find((item) => item.slug === category)?.name;
+      const tagName = tags.find((item) => item.slug === tag)?.name;
+      if (categoryName && tagName) filterLabel = `${categoryName} · #${tagName} `;
+      else if (categoryName) filterLabel = `「${categoryName}」分类 `;
+      else if (tagName) filterLabel = `#${tagName} 标签 `;
+    }
     return {
-      title: `「${query}」的搜索结果`,
+      title: query ? `「${query}」的搜索结果` : `${filterLabel}筛选结果`,
       robots: { index: false, follow: true },
     };
   }

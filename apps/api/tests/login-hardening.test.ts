@@ -50,11 +50,15 @@ after(async () => {
 });
 
 async function login(password: string) {
+  return loginAs("lockout-admin", password);
+}
+
+async function loginAs(identifier: string, password: string) {
   const response = await authApp.inject({
     method: "POST",
     url: "/api/auth/login",
     headers: { origin: ORIGIN, "content-type": "application/json" },
-    payload: { identifier: "lockout-admin", password },
+    payload: { identifier, password },
   });
   return { status: response.statusCode, body: response.json() };
 }
@@ -340,3 +344,81 @@ test("regular accounts keep the looser failure limit", async () => {
   }
   assert.equal((await attempt("plain-user-password")).statusCode, 200, "普通账号 3 次失败后仍可登录");
 });
+
+test("username and email of one admin share a single failure budget", async () => {
+  const { prisma } = await import("../src/lib/prisma");
+  await prisma.user.create({
+    data: {
+      username: "dual-admin",
+      email: "dual-admin@example.com",
+      password: await bcrypt.hash("correct-horse-battery", 10),
+      role: "ADMIN",
+    },
+  });
+
+  // 用用户名把 3 次失败预算耗尽。
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    const res = await loginAs("dual-admin", "wrong-password");
+    assert.equal(res.status, 401, `第 ${attempt} 次应为 401`);
+  }
+
+  // 换用邮箱（另一个标识符、同一个账户）必须直接进冷却——
+  // 修复前两个标识符各有一份预算，管理员实际可被猜 6 次。
+  const viaEmail = await loginAs("DUAL-Admin@Example.com", "wrong-password");
+  assert.equal(viaEmail.status, 429, "同一账户的邮箱变体不得获得新的失败预算");
+  assert.equal(viaEmail.body.error?.code, "TOO_MANY_REQUESTS");
+});
+
+test("password change is rate limited per IP", async () => {
+  const { prisma } = await import("../src/lib/prisma");
+  const { SignJWT } = await import("jose");
+  const { getJwtSecret } = await import("../src/lib/env");
+
+  const user = await prisma.user.create({
+    data: {
+      username: "pw-change-user",
+      password: await bcrypt.hash("original-pw-123456", 10),
+      role: "USER",
+    },
+  });
+
+  // 直接签发令牌：同文件前面的用例已耗尽共享 IP 的登录配额（20 次/15 分钟），
+  // 这里被测对象是改密限流，不该依赖登录路由的剩余额度。
+  let cookie = `session=${await new SignJWT({
+    userId: user.id,
+    username: user.username,
+    role: user.role,
+    tokenVersion: user.tokenVersion,
+  })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime("7d")
+    .sign(new TextEncoder().encode(getJwtSecret()))}`;
+
+  const change = (sessionCookie: string, currentPassword: string, newPassword: string) =>
+    authApp.inject({
+      method: "PUT",
+      url: "/api/auth/password",
+      headers: {
+        origin: ORIGIN,
+        "content-type": "application/json",
+        cookie: sessionCookie,
+      },
+      payload: { currentPassword, newPassword },
+    });
+
+  // 每次改密都会吊销旧令牌并下发新 cookie，旧密码也随之失效：
+  // 会话与密码都必须链式使用最新值，保证每次尝试的凭据本身是正确的。
+  let currentPassword = "original-pw-123456";
+  for (let attempt = 1; attempt <= 10; attempt += 1) {
+    const nextPassword = `new-pw-${attempt}-${Date.now()}`;
+    const res = await change(cookie, currentPassword, nextPassword);
+    assert.equal(res.statusCode, 200, `第 ${attempt} 次改密应为 200`);
+    const next = res.headers["set-cookie"];
+    cookie = Array.isArray(next) ? next[0] : (next ?? cookie);
+    currentPassword = nextPassword;
+  }
+  const limited = await change(cookie, currentPassword, "one-more-password-123");
+  assert.equal(limited.statusCode, 429, "超过限额后即使凭据正确也应 429");
+});
+

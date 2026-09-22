@@ -271,12 +271,13 @@ async function main() {
   // 「当前产物」使用。真实案例：服务器上残留的 `dist/lib/phone.js` 还在
   // import 早已不存在的依赖，于是 `smoke:prod` 直接以模块找不到失败，
   // 报错指向一个本次上线根本没改的模块。
-  if (!args.has("--skip-check")) {
-    for (const stale of ["apps/web/.next/types", "apps/web/.next/dev/types", "apps/api/dist"]) {
-      if (existsSync(stale)) {
-        rmSync(stale, { recursive: true, force: true });
-        console.log(`Removed stale build output: ${stale}`);
-      }
+  // 清理不随 --skip-check 跳过：跳过校验的恢复路径恰恰是最可能带着
+  // 陈旧产物运行的场景（真实事故：残留 dist/lib/phone.js 让 smoke:prod
+  // 找不到模块）。删除过期目录本身开销极小、无副作用。
+  for (const stale of ["apps/web/.next/types", "apps/web/.next/dev/types", "apps/api/dist"]) {
+    if (existsSync(stale)) {
+      rmSync(stale, { recursive: true, force: true });
+      console.log(`Removed stale build output: ${stale}`);
     }
   }
 

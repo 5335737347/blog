@@ -34,10 +34,14 @@ async function main() {
   const adminPassword =
     configuredAdminPassword || crypto.randomBytes(18).toString("base64url");
   const hashedPassword = await bcrypt.hash(adminPassword, 10);
+  // 管理员邮箱是「忘记密码」重置流程的查找键：不填则管理员忘记密码时
+  // 只能靠破坏性重置。生产已有账户可用 SQL 补设。
+  const adminEmail = process.env.ADMIN_EMAIL?.trim() || null;
   const admin = await prisma.user.create({
     data: {
       username: adminUsername,
       password: hashedPassword,
+      email: adminEmail,
     },
   });
   await prisma.$executeRaw`
@@ -45,7 +49,7 @@ async function main() {
     SET "displayName" = ${adminDisplayName}, "role" = 'ADMIN'
     WHERE "id" = ${admin.id}
   `;
-  console.log(`  ✓ Admin user created: ${adminUsername}`);
+  console.log(`  ✓ Admin user created: ${adminUsername}${adminEmail ? ` <${adminEmail}>` : "（未设邮箱，忘记密码将无法自助重置）"}`);
   if (!configuredAdminPassword) {
     console.log(`  ⚠ Temporary admin password: ${adminPassword}`);
     console.log("    Set ADMIN_PASSWORD before seeding to choose your own password.");

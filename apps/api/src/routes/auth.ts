@@ -103,28 +103,31 @@ function loginIdentifier(body: unknown): string | null {
   return normalized || null;
 }
 
-function loginAccountKey(body: unknown): string | null {
-  const normalized = loginIdentifier(body);
-  if (!normalized) return null;
-  const hash = crypto.createHash("sha256").update(`login:${normalized}`).digest("hex");
-  return `auth:login:account:${hash}`;
-}
-
 /**
- * 这次登录尝试的目标账号是不是管理员。
+ * 把登录尝试解析到目标账户：桶键用解析出的 userId，而不是提交的标识符。
  *
- * 命中即用严格阈值。查询本身是参数化的、只读的，且登录流程随后必然要查这个用户
- *（成功时用于校验密码），因此不引入额外往返的语义变化。
+ * 之前按标识符哈希做键：同一账号的用户名和邮箱各有一个桶，攻击者换着
+ * 提交就把管理员 3 次的爆破预算翻成 6 次。现在唯一命中的账户共享同一份
+ * 失败预算（含邮箱大小写变体）；未注册或歧义标识符退回标识符桶，
+ * 防止未知账户被无限制探测。查询与 targetsAdmin 时代的语义一致：
+ * 参数化、只读，登录流程随后必然要查这个用户。
  */
-async function targetsAdminAccount(body: unknown): Promise<boolean> {
+async function resolveLoginTarget(body: unknown): Promise<{ key: string | null; isAdmin: boolean }> {
   const identifier = loginIdentifier(body);
-  if (!identifier) return false;
-  const rows = await prisma.$queryRaw<{ role: string }[]>`
-    SELECT "role" FROM "User"
-    WHERE "username" = ${identifier} OR "email" = ${identifier}
+  if (!identifier) return { key: null, isAdmin: false };
+  const emailIdentifier = identifier.includes("@") ? identifier.toLowerCase() : null;
+  const rows = await prisma.$queryRaw<{ id: string; role: string }[]>`
+    SELECT "id", "role" FROM "User"
+    WHERE "username" = ${identifier}
+       OR "email" = ${identifier}
+       OR ("email" IS NOT NULL AND ${emailIdentifier} IS NOT NULL AND "email" = ${emailIdentifier})
     LIMIT 2
   `;
-  return rows.length === 1 && rows[0].role === "ADMIN";
+  if (rows.length === 1) {
+    return { key: `auth:login:account:${rows[0].id}`, isAdmin: rows[0].role === "ADMIN" };
+  }
+  const hash = crypto.createHash("sha256").update(`login:${identifier}`).digest("hex");
+  return { key: `auth:login:account:${hash}`, isAdmin: false };
 }
 
 const authRoutes: FastifyPluginAsync = async (app) => {
@@ -165,8 +168,7 @@ const authRoutes: FastifyPluginAsync = async (app) => {
     // 且拒绝发生在 bcrypt 之前）。普通账号沿用「15 分钟 10 次」。
     // 只统计失败次数，成功即清零。
     const body = requestBody<unknown>(request);
-    const accountKey = loginAccountKey(body);
-    const adminTarget = accountKey ? await targetsAdminAccount(body) : false;
+    const { key: accountKey, isAdmin: adminTarget } = await resolveLoginTarget(body);
     // 允许的失败次数 = 尝试次数；判定阈值比它多 1，这样第 N 次失败仍返回 401。
     const allowedFailures = adminTarget ? ADMIN_LOGIN_MAX_ATTEMPTS : LOGIN_ACCOUNT_MAX_FAILURES;
     const failureWindowMs = adminTarget ? adminLockoutWindowMs() : LOGIN_ACCOUNT_WINDOW_MS;
@@ -239,6 +241,9 @@ const authRoutes: FastifyPluginAsync = async (app) => {
 
   app.put("/auth/password", async (request, reply) => {
     assertRequestOrigin(request);
+    // 改密要用旧密码做 bcrypt 验证：没有限流时，被盗会话可以无限次暴力
+    // 猜测旧密码。按 IP 限到 10 次/小时（正常人不该频繁改密）。
+    await assertRateLimit(`auth:password-change:${requestIp(guardRequest(request))}`, 10, 60 * 60 * 1000);
     const result = await changeOwnPassword(sessionToken(request), requestBody<unknown>(request));
 
     // 改密会吊销全部旧令牌；这里把新令牌写回当前设备，避免用户被自己踢下线。
