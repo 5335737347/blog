@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import HeroSection from "@/components/public/home/HeroSection";
 import HomeContent from "@/components/public/home/HomeContent";
 import { getHomePageData, getHomeWallpapers, getProfile, getPublicSettings } from "@/lib/api/public-api";
+import { getOpenGraphImageUrl } from "@/lib/env";
 import { getSiteUrl } from "@/lib/env";
 import { pageAlternates } from "@/lib/metadata";
 
@@ -17,9 +18,18 @@ export const revalidate = 60;
 export async function generateMetadata(): Promise<Metadata> {
   const siteUrl = getSiteUrl();
   const url = siteUrl ? `${siteUrl}/` : undefined;
+  const settings = await getPublicSettings();
+  // openGraph 是整体替换（浅合并）：只写 url 会把根布局的 og:title/
+  // description/image 全部清掉，这里必须带完整字段。
   return {
     alternates: pageAlternates("/"),
-    openGraph: { url },
+    openGraph: {
+      title: settings.blogTitle,
+      description: settings.blogDescription,
+      type: "website",
+      url,
+      images: [getOpenGraphImageUrl()],
+    },
   };
 }
 

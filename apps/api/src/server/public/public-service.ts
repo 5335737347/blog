@@ -30,6 +30,7 @@ const rssPostSelect = {
   title: true,
   excerpt: true,
   content: true,
+  coverImage: true,
   publishedAt: true,
   tags: {
     select: { tag: { select: { name: true } } },
@@ -54,8 +55,14 @@ export interface RssPostDto {
   title: string;
   excerpt: string | null;
   content: string;
+  coverImage: string | null;
   publishedAt: Date | null;
   tags: { name: string }[];
+}
+
+export interface SitemapProjectDto {
+  slug: string;
+  lastModified: Date | null;
 }
 
 export interface SitemapPostDto {
@@ -185,8 +192,9 @@ export async function getSitemapData(): Promise<{
   posts: SitemapPostDto[];
   tags: SitemapTagDto[];
   categories: SitemapTagDto[];
+  projects: SitemapProjectDto[];
 }> {
-  const [posts, tags, categories] = await Promise.all([
+  const [posts, tags, categories, projects] = await Promise.all([
     prisma.post.findMany({
       where: { published: true },
       orderBy: POST_ORDER_DESC,
@@ -205,9 +213,26 @@ export async function getSitemapData(): Promise<{
       take: SITEMAP_URL_LIMIT,
       select: { slug: true },
     }),
+    prisma.project.findMany({
+      where: { posts: { some: { published: true } } },
+      orderBy: { slug: "asc" },
+      take: SITEMAP_URL_LIMIT,
+      select: { slug: true, posts: { where: { published: true }, select: { updatedAt: true } } },
+    }),
   ]);
 
-  return { posts, tags, categories };
+  return {
+    posts,
+    tags,
+    categories,
+    projects: projects.map((project) => ({
+      slug: project.slug,
+      lastModified: project.posts.reduce<Date | null>(
+        (latest, post) => (latest === null || post.updatedAt > latest ? post.updatedAt : latest),
+        null
+      ),
+    })),
+  };
 }
 
 export async function getHomePageData(): Promise<HomePageData> {

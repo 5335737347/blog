@@ -184,16 +184,30 @@ export async function registerUser(input: unknown) {
     throw badRequest("邮箱格式不正确");
   }
 
-  const existing = await prisma.$queryRaw<{ id: string }[]>`
-    SELECT "id" FROM "User"
-    WHERE "username" = ${username} OR "email" = ${username}
-       OR "username" = ${email} OR "email" = ${email}
-    LIMIT 1
+  // 防枚举收敛：用户名占用是常规 UX 提示，可以在验证码之前告知（大小写
+  // 不敏感，见下一个检查）；邮箱是否存在则在验证码校验之后才判定——
+  // 想探测邮箱必须先消耗一个限流验证码，与重置流程的反枚举口径对齐。
+  const usernameTaken = await prisma.$queryRaw<{ id: string }[]>`
+    SELECT "id" FROM "User" WHERE LOWER("username") = LOWER(${username}) LIMIT 1
   `;
-  if (existing.length > 0) {
-    throw badRequest("用户名或邮箱已被使用");
+  if (usernameTaken.length > 0) {
+    throw badRequest("用户名已被使用");
   }
   await assertVerificationCode("register", email, body.verificationCode);
+
+  // 跨字段同样要查：邮箱输入可能撞别人的用户名（反之亦然），插入层的
+  // 唯一约束是兜底，这里的预检给出可读的错误信息。
+  const emailTaken = await prisma.$queryRaw<{ id: string }[]>`
+    SELECT "id" FROM "User"
+    WHERE LOWER("email") = LOWER(${email})
+       OR LOWER("username") = LOWER(${username})
+       OR LOWER("username") = LOWER(${email})
+       OR "email" IS NOT NULL AND LOWER("email") = LOWER(${username})
+    LIMIT 1
+  `;
+  if (emailTaken.length > 0) {
+    throw badRequest("邮箱已被使用");
+  }
 
   const user = {
     id: crypto.randomUUID(),
@@ -238,7 +252,8 @@ export async function loginUser(input: unknown) {
   const users = await prisma.$queryRaw<AuthUserRow[]>`
     SELECT "id", "username", "password", "displayName", "role", "tokenVersion"
     FROM "User"
-    WHERE "username" = ${identifier} OR "email" = ${identifier}
+    WHERE "username" = ${identifier} COLLATE NOCASE
+       OR "email" = ${identifier}
     LIMIT 2
   `;
   const user = users.length === 1 ? users[0] : null;

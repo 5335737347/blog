@@ -13,15 +13,17 @@ interface TagPageProps {
   searchParams: Promise<{ page?: string }>;
 }
 
-export async function generateMetadata({ params }: TagPageProps): Promise<Metadata> {
+export async function generateMetadata({ params, searchParams }: TagPageProps): Promise<Metadata> {
   const { tag: tagSlug } = await params;
+  const { page: pageParam } = await searchParams;
+  const page = Math.max(1, Number.parseInt(pageParam || "1", 10) || 1);
   const { tag } = await getTagArchivePageData(tagSlug, 1, 1);
   if (!tag) return { title: "标签不存在" };
 
   return {
     title: `#${tag.name}`,
     description: `浏览带有 ${tag.name} 标签的博客文章`,
-    alternates: pageAlternates(`/tags/${tag.slug}`),
+    alternates: pageAlternates(`/tags/${tag.slug}`, page > 1 ? `page=${page}` : undefined),
   };
 }
 

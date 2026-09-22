@@ -13,13 +13,21 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   let posts: Awaited<ReturnType<typeof getSitemapData>>["posts"] = [];
   let tags: Awaited<ReturnType<typeof getSitemapData>>["tags"] = [];
   let categories: Awaited<ReturnType<typeof getSitemapData>>["categories"] = [];
+  let projects: Awaited<ReturnType<typeof getSitemapData>>["projects"] = [];
   try {
-    ({ posts, tags, categories } = await getSitemapData());
+    ({ posts, tags, categories, projects } = await getSitemapData());
   } catch (error) {
     // 只打印一行：构建期会并行预渲染，完整错误对象会在日志里刷出多份堆栈。
     const reason = error instanceof Error ? error.message : String(error);
     console.warn(`[sitemap] 无法获取内容数据（${reason}），退化为仅静态页面。`);
   }
+
+  const projectUrls: MetadataRoute.Sitemap = projects.map((project) => ({
+    url: `${siteUrl}/collections/${project.slug}`,
+    lastModified: project.lastModified ? new Date(project.lastModified) : undefined,
+    changeFrequency: "weekly" as const,
+    priority: 0.6,
+  }));
 
   const postUrls: MetadataRoute.Sitemap = posts.map((post) => ({
     url: `${siteUrl}/articles/${post.slug}`,
@@ -55,6 +63,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.4,
     })),
     ...postUrls,
+    ...projectUrls,
     ...tagUrls,
     ...categoryUrls,
   ];

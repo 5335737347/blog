@@ -90,6 +90,10 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: repositoryRoot,
   },
+  async redirects() {
+    // /archive 在「文章 + 项目」信息架构改造中移除；旧链接 301 到 /projects。
+    return [{ source: "/archive", destination: "/projects", permanent: true }];
+  },
   // 不向客户端暴露框架版本。
   poweredByHeader: false,
   allowedDevOrigins: allowedDevOrigins(),

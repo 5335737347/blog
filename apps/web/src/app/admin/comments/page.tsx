@@ -68,13 +68,15 @@ export default function CommentsAdminPage() {
   const [scope, setScope] = useState<ScopeFilter>("all");
   const [comments, setComments] = useState<AdminComment[]>([]);
   const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [messageKind, setMessageKind] = useState<"success" | "error">("error");
 
   const fetchComments = useCallback(async () => {
     setLoading(true);
-    const params = new URLSearchParams({ limit: "50" });
+    const params = new URLSearchParams({ limit: "50", page: String(page) });
     const approved = filterParam(filter);
     if (approved) params.set("approved", approved);
     if (scope !== "all") params.set("scope", scope);
@@ -84,6 +86,7 @@ export default function CommentsAdminPage() {
       const data = await readApiData<CommentListData>(res);
       setComments(data.items);
       setTotal(data.total);
+      setTotalPages(Math.max(1, data.totalPages));
     } catch {
       setMessageKind("error");
       setMessage("网络错误，加载评论失败");
@@ -91,7 +94,17 @@ export default function CommentsAdminPage() {
     } finally {
       setLoading(false);
     }
-  }, [filter, scope]);
+  }, [filter, scope, page]);
+
+  // 切换筛选回到第一页，避免停留在超出结果的页码上。
+  const changeScope = (next: ScopeFilter) => {
+    setScope(next);
+    setPage(1);
+  };
+  const changeFilter = (next: CommentFilter) => {
+    setFilter(next);
+    setPage(1);
+  };
 
   useEffect(() => {
     // setTimeout(0)：fetch 首个 await 前会同步 setLoading，直接调用会被
@@ -160,7 +173,7 @@ export default function CommentsAdminPage() {
                 <button
                   key={item.value}
                   type="button"
-                  onClick={() => setScope(item.value)}
+                  onClick={() => changeScope(item.value)}
                   className={`rounded-xs px-3 py-1.5 text-meta transition-colors ${
                     scope === item.value
                       ? "bg-primary-soft font-medium text-primary-deep"
@@ -180,7 +193,7 @@ export default function CommentsAdminPage() {
                 <button
                   key={item.value}
                   type="button"
-                  onClick={() => setFilter(item.value)}
+                  onClick={() => changeFilter(item.value)}
                   className={`rounded-xs px-3 py-1.5 text-meta transition-colors ${
                     filter === item.value
                       ? "bg-primary-soft font-medium text-primary-deep"
@@ -202,6 +215,7 @@ export default function CommentsAdminPage() {
       ) : comments.length === 0 ? (
         <EmptyState message="暂无评论" />
       ) : (
+        <>
         <div className="space-y-3">
           {comments.map((comment) => (
             <div key={comment.id} className="panel p-4">
@@ -263,6 +277,36 @@ export default function CommentsAdminPage() {
             </div>
           ))}
         </div>
+
+        {totalPages > 1 && (
+          <nav
+            aria-label="评论分页"
+            className="mt-4 flex items-center justify-between text-meta text-ink-3"
+          >
+            <span>
+              第 {page} / {totalPages} 页，共 {total} 条
+            </span>
+            <div className="flex gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={page <= 1}
+                onClick={() => setPage((current) => Math.max(1, current - 1))}
+              >
+                上一页
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={page >= totalPages}
+                onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+              >
+                下一页
+              </Button>
+            </div>
+          </nav>
+        )}
+        </>
       )}
     </div>
   );

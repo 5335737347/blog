@@ -19,10 +19,13 @@ import { getSiteUrl } from "@/lib/env";
  * 用绝对 URL：canonical 会被 metadataBase 解析，`types` 不保证会被解析，
  * 两种情况混在一起容易产生相对当前路径的意外结果，统一绝对地址最稳。
  */
-export function pageAlternates(canonicalPath: string) {
+export function pageAlternates(canonicalPath: string, query?: string) {
   const siteUrl = getSiteUrl();
+  // query 用于分页页面的自指 canonical（?page=2 指向自身而非第一页）：
+  // 搜索/筛选等 noindex 页面不需要传。
+  const suffix = query ? `?${query}` : "";
   return {
-    canonical: `${siteUrl}${canonicalPath}`,
+    canonical: `${siteUrl}${canonicalPath}${suffix}`,
     types: { "application/rss+xml": `${siteUrl}/rss.xml` },
   };
 }

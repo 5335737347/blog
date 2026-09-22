@@ -293,7 +293,7 @@ export default function ArticleForm({
               <Link href="/admin/collections" className="text-primary-deep underline">
                 去「项目管理」新建
               </Link>
-              ；归档页会把未归入项目的文章按年份分组。
+              ；未归入项目的文章只在「文章」页可见。
             </p>
           )}
         </div>

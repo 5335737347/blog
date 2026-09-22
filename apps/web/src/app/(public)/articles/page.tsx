@@ -19,8 +19,9 @@ export async function generateMetadata({
 }: ArticleIndexPageProps): Promise<Metadata> {
   const siteUrl = getSiteUrl();
   const url = siteUrl ? `${siteUrl}/articles` : undefined;
-  const { q, category, tag } = await searchParams;
+  const { q, category, tag, page: pageParam } = await searchParams;
   const query = q?.trim() || "";
+  const page = Math.max(1, Number.parseInt(pageParam || "1", 10) || 1);
 
   if (query || category || tag) {
     // 搜索/筛选结果页有无限个 URL 形态,不允许索引,但允许顺着结果继续抓取。
@@ -43,7 +44,7 @@ export async function generateMetadata({
   return {
     title: "文章",
     description: "浏览全部博客文章",
-    alternates: pageAlternates("/articles"),
+    alternates: pageAlternates("/articles", page > 1 ? `page=${page}` : undefined),
     openGraph: {
       title: "文章",
       description: "浏览全部博客文章",

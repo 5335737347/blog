@@ -2,6 +2,7 @@
 import {
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -181,6 +182,18 @@ function backupSqlite() {
   mkdirSync(backupDir, { recursive: true });
   run("node", ["apps/api/scripts/backup-sqlite.mjs", backupPath]);
   console.log(`Backed up database: ${backupPath}`);
+
+  // 与 scripts/backup.mjs 的 BACKUP_KEEP 同一口径：只保留最新 10 份。
+  // 每次更新都产生一份备份，不清理会无限增长（单机磁盘的主要慢性消耗）。
+  const keep = Number.parseInt(process.env.BACKUP_KEEP || "10", 10) || 10;
+  const existing = readdirSync(backupDir)
+    .filter((name) => name.startsWith(path.basename(dbPath)) && name.endsWith(".bak"))
+    .sort()
+    .reverse();
+  for (const stale of existing.slice(keep)) {
+    rmSync(path.join(backupDir, stale), { force: true });
+    console.log(`Pruned old backup: ${stale}`);
+  }
 }
 
 function internalApiHealthUrl() {

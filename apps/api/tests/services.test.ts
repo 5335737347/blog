@@ -443,11 +443,16 @@ test("rejects registration without a valid email", async () => {
 test("rejects login identifiers that collide across account fields", async () => {
   const { prisma } = await import("../src/lib/prisma");
   const { loginUser, registerUser } = await import("../src/server/auth/auth-service");
+  const { sendVerificationCode } = await import(
+    "../src/server/auth/verification-code-service"
+  );
 
   await prisma.user.create({
     data: { username: "legacy-owner@example.com", password: "unused" },
   });
 
+  // 反枚举收敛（2026-09-22）：跨字段冲突在验证码校验之后才判定——
+  // 错误验证码只报验证码错误，不暴露「邮箱已被使用」。
   await assert.rejects(
     () => registerUser({
       username: "new-reader",
@@ -455,8 +460,26 @@ test("rejects login identifiers that collide across account fields", async () =>
       verificationCode: "000000",
       password: "valid-password",
     }),
-    { status: 400, message: "用户名或邮箱已被使用" }
+    (error: { message?: string }) =>
+      /验证码/.test(error.message ?? "") && !/已被使用/.test(error.message ?? "")
   );
+
+  // 消耗正确验证码后，跨字段冲突仍然拒绝（唯一约束兜底 + 预检双保险）。
+  process.env.ALLOW_DEBUG_VERIFICATION_CODE = "true";
+  try {
+    const code = await sendVerificationCode("register", "legacy-owner@example.com");
+    await assert.rejects(
+      () => registerUser({
+        username: "new-reader",
+        email: "legacy-owner@example.com",
+        verificationCode: code.debugCode,
+        password: "valid-password",
+      }),
+      { status: 400, message: "邮箱已被使用" }
+    );
+  } finally {
+    delete process.env.ALLOW_DEBUG_VERIFICATION_CODE;
+  }
 
   await prisma.user.create({
     data: {

@@ -1323,3 +1323,63 @@ they need a Chromium binary (found via `CHROME_BIN` or the Playwright cache).
   first-`});` heuristics cut multi-line tests mid-body; use content-anchored deletions.
 - 155 tests (publishing 11, auto-excerpt 6), check + build + smoke green. Docs
   (content-workflow.md) updated with project frontmatter, upsert semantics, cover pool.
+
+## Completed 2026-09-22 (night): P0 security/ops fixes from the full audit
+
+- Four-domain deep audit (auth/comments/rendering+SEO/ops via parallel explorers) produced
+  a prioritized report; batch 1 (P0) implemented in one commit:
+  1. **Login lockout is now keyed by RESOLVED USER ID**, not the submitted identifier
+     (resolveLoginTarget in routes/auth.ts). Previously username+email of one admin had
+     two independent 3-attempt buckets (6 guesses/window). Unregistered/ambiguous
+     identifiers fall back to an identifier-hash bucket. Email case variants now also
+     match (loginUser lowercases @-identifiers; targetsAdminAccount didn't — mixed-case
+     admin email used to bypass the strict threshold).
+  2. **PUT /api/auth/password is rate limited** (10/h per IP) — it bcrypt-verifies the
+     current password and was the only credential endpoint with no limiter.
+  3. **seed.ts gains ADMIN_EMAIL** (.env.example registered): the reset flow looks users
+     up by email; the admin row had none, so a forgotten admin password had no
+     self-service path and the only recovery was a destructive reseed. PRODUCTION ACTION
+     REQUIRED for existing installs: set the admin email via SQL
+     (`UPDATE "User" SET "email"='you@example.com' WHERE username='admin';`).
+  4. **update.mjs stale-output cleanup no longer skipped by --skip-check** — recovery
+     paths are exactly where stale artifacts bite (the dist/lib/phone.js incident).
+  5. **/articles filtered-page title** uses the real category/tag names (was `「」的搜索结果`
+     when filtering without a query).
+- Test-writing lessons (cost real time): Fastify `inject()` responses expose
+  **statusCode**, not `.status`; password-change tests must chain BOTH the new cookie
+  AND the new password (each change revokes old tokens and invalidates the old
+  password); `Date.now()` inside a helper vs caller produces different values — compute
+  once, pass it. Prefer atomic full-test rewrites over layered sed patches after the
+  first failed patch.
+- 157 tests (login-hardening 11 incl. username/email shared-budget + password-change
+  rate limit), check + build + smoke green. Remaining audit batches (P1) are listed in
+  the report delivered in conversation, not yet scheduled.
+
+## Completed 2026-09-22 (late): P1 batch from the full audit
+
+- Rendering/SEO: /archive → /projects 301 redirect (next.config); stale "归档页按年份
+  分组" copy removed from admin pages/ArticleForm; sitemap now includes
+  /collections/[slug] (SitemapProjectDto with lastModified = max post updatedAt);
+  RSS items carry coverImage (absolute-ized); TOC extraction strips fenced code
+  (no more ghost anchors from # lines inside code); OG_IMAGE_URL falls back to
+  /images/home/wallpaper-01.webp (webp og support is good on major platforms; a
+  dedicated 1200×630 PNG can be set via env); home page openGraph is now complete
+  (the bare {url} was wiping layout OG via shallow merge — og:title/desc/image are
+  restored, fetched from settings); paginated pages self-canonicalize (?page=N via
+  pageAlternates(canonicalPath, query) — generateMetadata of tags/categories/
+  collections now also consumes searchParams).
+- Auth: registration enumeration tightened — username-taken still reported upfront
+  (common UX), but EMAIL existence is only revealed AFTER consuming a verification
+  code (matches the reset flow's anti-enumeration stance); username uniqueness is
+  now case-insensitive (LOWER comparisons at registration, COLLATE NOCASE in
+  loginUser and resolveLoginTarget — "Admin" can't impersonate "admin", case
+  variants can log in). services.test.ts colliding-identifier test updated to the
+  new semantics (bogus code → 验证码错误; valid code → 邮箱已被使用).
+- Comments: admin moderation list gained pagination (page state, prev/next, resets
+  to page 1 on filter change — backend already supported it).
+- Ops: update.mjs prunes update-created DB backups keeping newest 10 (BACKUP_KEEP
+  honored) — previously unbounded growth.
+- Process lesson REPEATED THE HARD WAY: str.replace with a non-matching pattern
+  silently no-ops — always assert before writing; and slicing a test file for
+  insertion truncated it once (git checkout + insert-before-anchor). 159 tests,
+  check + build green.

@@ -158,7 +158,7 @@ export default function CollectionsAdminPage() {
     <div>
       <AdminPageHeader
         title="项目管理"
-        description="项目是写作期间的工作单元，归档页按它分组展示；删除项目不会删除文章。"
+        description="项目是写作期间的工作单元，项目页汇集其下全部文章；删除项目不会删除文章。"
       />
 
       {error && <Alert variant="error">{error}</Alert>}
@@ -193,7 +193,7 @@ export default function CollectionsAdminPage() {
             rows={2}
             value={newDescription}
             onChange={(e) => setNewDescription(e.target.value)}
-            placeholder="展示在归档页与项目页的分区头部"
+            placeholder="展示在项目页头部"
           />
         </div>
       </form>
@@ -201,7 +201,7 @@ export default function CollectionsAdminPage() {
       {loading ? (
         <p className="text-ink-3">加载中…</p>
       ) : projects.length === 0 ? (
-        <EmptyState message="还没有项目。文章可以不归入任何项目（归档页按年份兜底），也可以之后再到这里补充。" />
+        <EmptyState message="还没有项目。在文章编辑表单里把文章归入项目后，它会出现在「项目」页的卡片里。" />
       ) : (
         <div className="space-y-3">
           {projects.map((project) => {

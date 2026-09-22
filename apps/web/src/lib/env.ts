@@ -61,5 +61,8 @@ export function getSiteUrl(): string {
 }
 
 export function getOpenGraphImageUrl(): string {
-  return cleanEnvValue(process.env.OG_IMAGE_URL);
+  // 未配置时回退到内置壁纸：og:image 缺失会让社交平台卡片既无图又降级为
+  // 无图摘要。壁纸是 webp——主流平台已支持；要更稳的兼容性可用 env 指向
+  // 一张专用的 1200×630 PNG。
+  return cleanEnvValue(process.env.OG_IMAGE_URL) || "/images/home/wallpaper-01.webp";
 }

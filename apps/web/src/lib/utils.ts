@@ -81,7 +81,10 @@ function cleanHeadingText(raw: string): string {
 export function extractHeadings(content: string): { level: number; text: string; id: string }[] {
   const headings: { level: number; text: string; id: string }[] = [];
   const slugger = new GithubSlugger();
-  for (const line of content.split("\n")) {
+  // 代码块里的 # 行不是标题：剥离 fenced code 再提取，否则 TOC 会出现
+  // 指向不存在锚点的幽灵条目（rehype-slug 不会为代码块内容生成 id）。
+  const prose = content.replace(/^```[^\n]*\n[\s\S]*?^```/gm, "").replace(/^~~~[^\n]*\n[\s\S]*?^~~~/gm, "");
+  for (const line of prose.split("\n")) {
     const m = line.match(/^(#{1,4})\s+(.+)$/);
     if (!m) continue;
     const depth = m[1].length;

@@ -46,6 +46,57 @@ async function createAccount(username: string, password = "original-pw-123456") 
   return { email, password, token: registered.token };
 }
 
+test("email existence is only revealed after consuming a verification code", async () => {
+  await createAccount("enum-target");
+
+  // 错误验证码 + 已注册邮箱 → 报验证码错误，而不是暴露邮箱已注册。
+  await assert.rejects(
+    () =>
+      registerUser({
+        username: "enum-probe-user",
+        email: "enum-target@example.com",
+        password: "probe-pw-123456",
+        verificationCode: "000000",
+      }),
+    (error: { message?: string }) =>
+      /验证码/.test(error.message ?? "") && !/已被使用/.test(error.message ?? "")
+  );
+
+  // 消耗了正确验证码之后才提示占用（此时探测已付出限流代价）。
+  const code = await sendVerificationCode("register", "enum-target@example.com");
+  await assert.rejects(
+    () =>
+      registerUser({
+        username: "enum-probe-user",
+        email: "enum-target@example.com",
+        password: "probe-pw-123456",
+        verificationCode: code.debugCode,
+      }),
+    (error: { message?: string }) => /已被使用/.test(error.message ?? "")
+  );
+});
+
+test("username uniqueness is case-insensitive; login matches case-insensitively", async () => {
+  const account = await createAccount("MiXeDcase");
+
+  // 大小写变体注册被拒（与已存在用户名仅大小写不同）。
+  const code = await sendVerificationCode("register", "mixedcase-alt@example.com");
+  await assert.rejects(
+    () =>
+      registerUser({
+        username: "mixedcase",
+        email: "mixedcase-alt@example.com",
+        password: "another-pw-12345",
+        verificationCode: code.debugCode,
+      }),
+    (error: { message?: string }) => /已被使用/.test(error.message ?? "")
+  );
+
+  // 登录时大小写不敏感：小写变体也能命中唯一账户，会话回填原始用户名。
+  const login = await loginUser({ identifier: "mixedcase", password: account.password });
+  assert.equal(login.data.user.username, "MiXeDcase");
+});
+
 test("password reset does not reveal whether an email is registered", async () => {
   await createAccount("enum-known");
 

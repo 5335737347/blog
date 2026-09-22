@@ -13,15 +13,17 @@ interface CategoryPageProps {
   searchParams: Promise<{ page?: string }>;
 }
 
-export async function generateMetadata({ params }: CategoryPageProps): Promise<Metadata> {
+export async function generateMetadata({ params, searchParams }: CategoryPageProps): Promise<Metadata> {
   const { category: categorySlug } = await params;
+  const { page: pageParam } = await searchParams;
+  const page = Math.max(1, Number.parseInt(pageParam || "1", 10) || 1);
   const { category } = await getCategoryArchivePageData(categorySlug, 1, 1);
   if (!category) return { title: "分类不存在" };
 
   return {
     title: `${category.name} 分类`,
     description: `浏览 ${category.name} 分类下的博客文章`,
-    alternates: pageAlternates(`/categories/${category.slug}`),
+    alternates: pageAlternates(`/categories/${category.slug}`, page > 1 ? `page=${page}` : undefined),
   };
 }
 

@@ -13,15 +13,17 @@ interface CollectionPageProps {
   searchParams: Promise<{ page?: string }>;
 }
 
-export async function generateMetadata({ params }: CollectionPageProps): Promise<Metadata> {
+export async function generateMetadata({ params, searchParams }: CollectionPageProps): Promise<Metadata> {
   const { collection: projectSlug } = await params;
+  const { page: pageParam } = await searchParams;
+  const page = Math.max(1, Number.parseInt(pageParam || "1", 10) || 1);
   const { project } = await getCollectionPageData(projectSlug, 1, 1);
   if (!project) return { title: "项目不存在" };
 
   return {
     title: `项目：${project.name}`,
     description: project.description || `浏览项目「${project.name}」下的全部文章`,
-    alternates: pageAlternates(`/collections/${project.slug}`),
+    alternates: pageAlternates(`/collections/${project.slug}`, page > 1 ? `page=${page}` : undefined),
   };
 }
 

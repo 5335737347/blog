@@ -118,7 +118,7 @@ async function resolveLoginTarget(body: unknown): Promise<{ key: string | null; 
   const emailIdentifier = identifier.includes("@") ? identifier.toLowerCase() : null;
   const rows = await prisma.$queryRaw<{ id: string; role: string }[]>`
     SELECT "id", "role" FROM "User"
-    WHERE "username" = ${identifier}
+    WHERE "username" = ${identifier} COLLATE NOCASE
        OR "email" = ${identifier}
        OR ("email" IS NOT NULL AND ${emailIdentifier} IS NOT NULL AND "email" = ${emailIdentifier})
     LIMIT 2

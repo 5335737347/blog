@@ -50,6 +50,13 @@ export async function GET() {
       link: url,
       description: post.excerpt || "",
       content: post.content,
+      // 有封面的文章带 image：支持的阅读器会渲染成附件/头图。
+      // 相对路径补全为绝对地址，RSS 规范要求绝对 URL。
+      image: post.coverImage
+        ? post.coverImage.startsWith("http")
+          ? post.coverImage
+          : `${siteUrl}${post.coverImage}`
+        : undefined,
       date: post.publishedAt ? new Date(post.publishedAt) : new Date(),
       category: post.tags.map((tag) => ({ name: tag.name })),
     });

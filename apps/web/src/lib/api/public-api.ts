@@ -54,6 +54,7 @@ export interface RssPostDto {
   title: string;
   excerpt: string | null;
   content: string;
+  coverImage: string | null;
   publishedAt: string | null;
   tags: { name: string }[];
 }
@@ -62,6 +63,7 @@ export interface SitemapDataDto {
   posts: { slug: string; updatedAt: string }[];
   tags: { slug: string }[];
   categories: { slug: string }[];
+  projects: { slug: string; lastModified: string | null }[];
 }
 
 function apiBaseUrl() {
