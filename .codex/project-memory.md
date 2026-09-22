@@ -1297,3 +1297,29 @@ they need a Chromium binary (found via `CHROME_BIN` or the Playwright cache).
   time a release adds a NEW public endpoint consumed by an ISR page. If the stale
   content bothers anyone, `pm2 reload blog-api` before build or an immediate second
   update run would avoid it; not worth changing the update order for.
+
+## Completed 2026-09-22 (evening): Obsidian publish pipeline fixes (audit follow-up)
+
+- Audit of the Obsidian→publish→display→project flow (owner: images are on a GitHub
+  image host already, so external-URL rendering + adopt cover that case; covers are
+  what's missing). Four fixes implemented:
+  1. **publish upsert**: `publishMarkdown` now UPDATES the existing post on the same
+     slug (`updateExisting: true`), response gains `updated: boolean`. Update rules:
+     content-derived fields (title/content/excerpt/tags) follow the note; structural
+     fields (category/project/cover) only change when explicitly provided; published
+     state & date preserved when absent; slug NEVER changes. `importFiles` keeps the
+     409-conflict behavior (protects published content from bulk overwrites).
+  2. **frontmatter `project:`** (+ PublishInput.project): resolved by name then slug;
+     NOT auto-created — unknown project = 400 (projects are curated; typos must fail
+     loudly, unlike categories which auto-create by design).
+  3. **extractHashTags strips fenced code + inline code** before matching —
+     #include/#define/#!/bin/bash no longer become tags. Applied inside the function
+     so the admin article flow benefits too.
+  4. **random default cover**: new posts without coverImage get a random pick from
+     DEFAULT_COVER_POOL (the 8 repo wallpapers — zero new assets); republish never
+     re-randomizes (explicitCover ?? existing.coverImage); explicit covers always win.
+- Editorial lesson from this session: appending a test by splicing `s[:s.index('\ntest(')]`
+  destroyed the file's existing tests — restore from git, then APPEND. And replace-by-
+  first-`});` heuristics cut multi-line tests mid-body; use content-anchored deletions.
+- 155 tests (publishing 11, auto-excerpt 6), check + build + smoke green. Docs
+  (content-workflow.md) updated with project frontmatter, upsert semantics, cover pool.

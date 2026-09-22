@@ -6,6 +6,7 @@ export interface MarkdownFrontmatter {
   excerpt?: string;
   coverImage?: string;
   category?: string;
+  project?: string;
   tags: string[];
   published?: boolean;
   date?: string;
@@ -138,6 +139,7 @@ export function parseMarkdownDocument(raw: string, filename = "untitled.md"): Pa
     excerpt: asString(rawFrontmatter.excerpt),
     coverImage: asString(rawFrontmatter.coverImage) || asString(rawFrontmatter.cover_image),
     category: asString(rawFrontmatter.category),
+    project: asString(rawFrontmatter.project) || asString(rawFrontmatter.project_name),
     tags: asStringArray(rawFrontmatter.tags),
     published: asBoolean(rawFrontmatter.published),
     date: asString(rawFrontmatter.date),

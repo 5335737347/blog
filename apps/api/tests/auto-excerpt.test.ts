@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { autoExcerpt } from "../src/lib/utils";
+import { autoExcerpt, extractHashTags } from "../src/lib/utils";
 
 /**
  * 摘要派生的回归测试。
@@ -47,4 +47,24 @@ test("autoExcerpt truncates long content with an ellipsis", () => {
   const excerpt = autoExcerpt("长".repeat(300));
   assert.equal(excerpt.length, 203);
   assert.ok(excerpt.endsWith("..."));
+});
+
+test("extractHashTags strips fenced code and inline code before matching", () => {
+  const content = [
+    "---",
+    "title: x",
+    "---",
+    "",
+    "```c",
+    "#include <stdio.h>",
+    "#define MAX 10",
+    "```",
+    "",
+    "```python",
+    "# 这是注释",
+    "```",
+    "",
+    "正文里的 `#include` 行内代码，和真正的 #手记 标签。",
+  ].join("\n");
+  assert.deepEqual(extractHashTags(content), ["手记"]);
 });

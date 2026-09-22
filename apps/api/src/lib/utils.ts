@@ -80,9 +80,15 @@ export function autoExcerpt(content: string, maxLen = 200): string {
 
 export function extractHashTags(content: string): string[] {
   const tags = new Set<string>();
+  // 代码块与行内代码里的 # 不是标签：#include、#define、#!/bin/bash 会天天
+  // 制造标签噪音。先剥离 fenced code 与行内代码，再按 # 提取。
+  const withoutCode = content
+    .replace(/^```[^\n]*\n[\s\S]*?^```/gm, " ")
+    .replace(/^~~~[^\n]*\n[\s\S]*?^~~~/gm, " ")
+    .replace(/`[^`\n]*`/g, " ");
   const re = /#[\p{L}\p{N}一-鿿][\p{L}\p{N}一-鿿_-]{0,28}/gu;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(content)) !== null) {
+  while ((m = re.exec(withoutCode)) !== null) {
     const tag = m[0].slice(1).toLowerCase();
     if (tag.length < 2 || !isNaN(Number(tag))) continue;
     if (/^[0-9a-f]{3,8}$/.test(tag)) continue;

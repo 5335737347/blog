@@ -53,17 +53,110 @@ test("c++ and c collapse without crashing", async () => {
   assert.equal(post?.tags.length, 1);
 });
 
-test("duplicate slug reports a conflict instead of a server error", async () => {
-  await publishMarkdown({ title: "重复 slug", content: "第一次", slug: "dup-slug" });
+test("republishing the same slug updates the post (Obsidian edit-and-republish)", async () => {
+  const first = await publishMarkdown({
+    title: "重复 slug",
+    content: "第一次",
+    slug: "dup-slug",
+  });
+  assert.equal(first.updated, false);
+
+  const second = await publishMarkdown({
+    title: "重复 slug（已更新）",
+    content: "第二次的正文内容",
+    slug: "dup-slug",
+  });
+  assert.equal(second.updated, true, "同 slug 再次发布应走覆盖更新");
+  assert.equal(second.post.id, first.post.id, "更新不得改变文章 id");
+  assert.equal(second.post.slug, "dup-slug", "更新不得改变 slug");
+
+  const { prisma } = await import("../src/lib/prisma");
+  const post = await prisma.post.findUnique({ where: { slug: "dup-slug" } });
+  assert.equal(post?.content, "第二次的正文内容");
+  assert.equal(post?.title, "重复 slug（已更新）");
+  assert.match(post?.excerpt ?? "", /第二次/, "内容变了摘要应跟随更新");
+});
+
+test("import still refuses duplicate slugs (protects published content)", async () => {
+  const note = (name: string, content: string) =>
+    new File([content], name, { type: "text/markdown" });
+
+  const first = await importFiles([note("import-dup.md", "# 导入重复\n\n第一篇正文")]);
+  assert.equal(first.imported, 1);
+
+  const second = await importFiles([note("import-dup.md", "# 导入重复\n\n第二篇正文")]);
+  assert.equal(second.imported, 0);
+  assert.equal(second.results[0]?.success, false);
+  assert.match(second.results[0]?.error ?? "", /已存在/);
+});
+
+test("publish assigns a random built-in cover when the note has none", async () => {
+  const result = await publishMarkdown({ title: "随机封面文章", content: "正文" });
+  const { prisma } = await import("../src/lib/prisma");
+  const post = await prisma.post.findUnique({ where: { id: result.post.id } });
+  assert.match(
+    post?.coverImage ?? "",
+    /^\/images\/home\/wallpaper-0[1-8]\.webp$/,
+    "未提供封面时应从内置封面池随机初始化"
+  );
+
+  const explicit = await publishMarkdown({
+    title: "显式封面文章",
+    content: "正文",
+    coverImage: "https://cdn.example.com/my-cover.webp",
+  });
+  const explicitPost = await prisma.post.findUnique({ where: { id: explicit.post.id } });
+  assert.equal(explicitPost?.coverImage, "https://cdn.example.com/my-cover.webp");
+
+  // 覆盖更新时笔记没写封面 → 保留文章已有封面，不重新随机。
+  const republish = await publishMarkdown({
+    title: "随机封面文章",
+    content: "更新后的正文",
+    slug: undefined,
+  });
+  void republish;
+  const { prisma: p2 } = await import("../src/lib/prisma");
+  const afterUpdate = await p2.post.findUnique({ where: { id: result.post.id } });
+  assert.equal(afterUpdate?.coverImage, post?.coverImage, "更新不应重新随机封面");
+});
+
+test("frontmatter project assigns the post; unknown project rejected with 400", async () => {
+  const { prisma } = await import("../src/lib/prisma");
+  await prisma.project.create({ data: { name: "旅行计划", slug: "travel" } });
+
+  const ok = await publishMarkdown({
+    title: "项目内笔记",
+    content: "---\nproject: 旅行计划\n---\n正文",
+  });
+  const post = await prisma.post.findUnique({ where: { id: ok.post.id } });
+  assert.ok(post?.projectId, "frontmatter project 应解析为项目关联");
 
   await assert.rejects(
-    () => publishMarkdown({ title: "重复 slug", content: "第二次", slug: "dup-slug" }),
-    (error: { status?: number; code?: string }) => {
-      assert.equal(error.status, 409, "应为 409 冲突而不是 500");
-      assert.equal(error.code, "CONFLICT");
-      return true;
-    }
+    () => publishMarkdown({ title: "未知项目2", content: "正文", project: "不存在的项目" }),
+    { status: 400 }
   );
+});
+
+test("code fences never become tags; body hashtags still do", async () => {
+  const result = await publishMarkdown({
+    title: "代码标签噪音",
+    content: [
+      "```c",
+      "#include <stdio.h>",
+      "#define MAX 10",
+      "```",
+      "正文提到 `#include` 行内代码，以及真实的 #随笔 标签。",
+    ].join("\n"),
+  });
+
+  const { prisma } = await import("../src/lib/prisma");
+  const post = await prisma.post.findUnique({
+    where: { id: result.post.id },
+    include: { tags: { include: { tag: true } } },
+  });
+  const names = (post?.tags ?? []).map((t) => t.tag.name);
+  assert.ok(!names.includes("include"), "代码块里的 #include 不得成为标签");
+  assert.ok(names.includes("随笔"), "正文真实标签正常提取");
 });
 
 test("publishMarkdown rejects empty content and applies frontmatter", async () => {
