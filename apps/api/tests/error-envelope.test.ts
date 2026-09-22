@@ -73,6 +73,13 @@ test("GET cache policy separates public data from session-dependent responses", 
   });
   assert.match(String(sessionResponse.headers["cache-control"]), /private, no-store/);
   assert.match(String(sessionResponse.headers["vary"]), /Cookie/);
+
+  const errorResponse = await app.inject({
+    method: "GET",
+    url: "/api/comments?postId=missing",
+  });
+  assert.equal(errorResponse.statusCode, 404);
+  assert.match(String(errorResponse.headers["cache-control"]), /no-store/);
 });
 
 test("unknown routes use the same JSON failure envelope", async () => {

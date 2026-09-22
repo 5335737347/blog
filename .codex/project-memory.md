@@ -1530,3 +1530,15 @@ they need a Chromium binary (found via `CHROME_BIN` or the Playwright cache).
 - `ImagePickerModal` gains a visible close button, initial focus, Tab trap and
   focus restoration, matching the article lightbox behavior.
 - 168 tests, check:ci, build, smoke and smoke:prod green.
+
+
+## Completed 2026-09-22 (sixth batch): cache safety and taxonomy noise
+
+- API cache hook no longer marks 4xx/5xx responses as publicly cacheable;
+  a database blip must not be amplified by browser/CDN for 60 seconds.
+- `extractHashTags()` now strips markdown link URLs, bare URLs and reference
+  definitions before matching, so URL fragments like `#anchor` no longer become
+  tags; hashtags in link text are still preserved.
+- `ImagePickerModal` focus trap ignores hidden/disabled elements, so Tab cannot
+  land on the hidden file input.
+- 169 tests, check:ci, build, smoke and smoke:prod green.

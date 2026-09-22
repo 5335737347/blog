@@ -99,6 +99,9 @@ export function buildApp(options: BuildAppOptions = {}) {
     if (hasSessionCookie || request.url.startsWith("/api/auth/")) {
       reply.header("cache-control", "private, no-store");
       reply.header("vary", appendVary(reply.getHeader("vary"), "Cookie"));
+    } else if (reply.statusCode >= 400) {
+      // 不要把 4xx/5xx 公开缓存：一次数据库抖动可能被 CDN/浏览器放大成整分钟故障。
+      reply.header("cache-control", "no-store");
     } else {
       reply.header("cache-control", "public, max-age=0, s-maxage=60, stale-while-revalidate=300");
     }

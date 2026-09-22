@@ -63,9 +63,11 @@ export default function ImagePickerModal({ kind, open, onClose, onPick }: ImageP
         return;
       }
       if (event.key !== "Tab" || !panelRef.current) return;
-      const focusable = panelRef.current.querySelectorAll<HTMLElement>(
-        'button, input, select, textarea, a[href], [tabindex]:not([tabindex="-1"])'
-      );
+      const focusable = [
+        ...panelRef.current.querySelectorAll<HTMLElement>(
+          'button, input, select, textarea, a[href], [tabindex]:not([tabindex="-1"])'
+        ),
+      ].filter((element) => !element.hasAttribute("disabled") && element.offsetParent !== null);
       if (focusable.length === 0) return;
       const first = focusable[0];
       const last = focusable[focusable.length - 1];

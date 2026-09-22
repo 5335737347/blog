@@ -68,3 +68,12 @@ test("extractHashTags strips fenced code and inline code before matching", () =>
   ].join("\n");
   assert.deepEqual(extractHashTags(content), ["手记"]);
 });
+
+test("extractHashTags ignores URL fragments but keeps hashtags in link text", () => {
+  const content = [
+    "参考 [MDN 锚点](https://developer.mozilla.org/zh-CN/docs/Web/HTML#section)。",
+    "裸链 https://example.com/page#anchor 也不应产生标签。",
+    "真正的标签在链接文字里：[#技术](https://example.com/tag) 与 #随笔。",
+  ].join("\n");
+  assert.deepEqual(extractHashTags(content), ["技术", "随笔"]);
+});

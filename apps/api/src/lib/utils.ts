@@ -97,15 +97,20 @@ export function autoExcerpt(content: string, maxLen = 200): string {
 
 export function extractHashTags(content: string): string[] {
   const tags = new Set<string>();
-  // 代码块与行内代码里的 # 不是标签：#include、#define、#!/bin/bash 会天天
-  // 制造标签噪音。先剥离 fenced code 与行内代码，再按 # 提取。
-  const withoutCode = content
+  // 代码块、行内代码、链接 URL 里的 # 不是标签：#include、#define、
+  // https://example.com/#anchor 会天天制造标签噪音。先剥离这些结构再提取；
+  // 链接文字保留，所以 [#技术](url) 仍会被识别成「技术」。
+  const withoutNoise = content
     .replace(/^```[^\n]*\n[\s\S]*?^```/gm, " ")
     .replace(/^~~~[^\n]*\n[\s\S]*?^~~~/gm, " ")
-    .replace(/`[^`\n]*`/g, " ");
+    .replace(/`[^`\n]*`/g, " ")
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/^\s*\[[^\]]+\]:\s+\S+.*$/gm, " ")
+    .replace(/https?:\/\/\S+/gi, " ");
   const re = /#[\p{L}\p{N}一-鿿][\p{L}\p{N}一-鿿_-]{0,28}/gu;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(withoutCode)) !== null) {
+  while ((m = re.exec(withoutNoise)) !== null) {
     const tag = m[0].slice(1).toLowerCase();
     if (tag.length < 2 || !isNaN(Number(tag))) continue;
     if (/^[0-9a-f]{3,8}$/.test(tag)) continue;
