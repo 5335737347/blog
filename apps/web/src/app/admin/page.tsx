@@ -7,29 +7,14 @@ import Alert from "@/components/admin/ui/Alert";
 import EmptyState from "@/components/admin/ui/EmptyState";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
+import type { PaginatedResult, PostSummary } from "@kpblog/contracts";
 import { formatDate } from "@/lib/utils";
 import { readApiData, readApiError } from "@/lib/api-client";
 
 type StatusFilter = "all" | "published" | "draft";
 
-interface ArticleItem {
-  id: string;
-  slug: string;
-  title: string;
-  published: boolean;
-  publishedAt: string | null;
-  updatedAt: string;
-  category: { name: string; slug: string } | null;
-  tags: { name: string; slug: string }[];
-}
-
-interface ArticleListData {
-  items: ArticleItem[];
-  total: number;
-  page: number;
-  pageSize: number;
-  totalPages: number;
-}
+type ArticleItem = PostSummary;
+type ArticleListData = PaginatedResult<PostSummary>;
 
 const PAGE_SIZE = 20;
 

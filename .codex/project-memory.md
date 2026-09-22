@@ -1496,3 +1496,17 @@ they need a Chromium binary (found via `CHROME_BIN` or the Playwright cache).
 - Category and project `generateMetadata` now read from the already-cached public
   taxonomy/project lists instead of issuing a second single-item archive request.
 - 165 tests, check:ci, build, smoke and smoke:prod green.
+
+
+## Completed 2026-09-22 (fourth batch): contracts completion and final flow polish
+
+- `PostSummary` now declares the `published` field that the API already returned;
+  `PostDetail` no longer redeclares it.
+- Contracts gained `ProjectAdminDto` and `AdminCommentDto`; admin dashboard,
+  categories, tags, collections and comment moderation pages now consume shared
+  types instead of local interfaces.
+- API DTO functions for admin taxonomy/project/comments are annotated with the
+  contract types, so contract drift on those shapes fails typecheck.
+- Added the previous Web perf batch (comment lazy loading, pagination prefetch
+  off) to the committed history; 165 tests, check:ci, build, smoke and smoke:prod
+  remain green.

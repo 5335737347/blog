@@ -6,6 +6,7 @@ import AdminPageHeader from "@/components/admin/ui/AdminPageHeader";
 import Alert from "@/components/admin/ui/Alert";
 import EmptyState from "@/components/admin/ui/EmptyState";
 import Button from "@/components/ui/Button";
+import type { AdminCommentDto, PaginatedResult } from "@kpblog/contracts";
 import { readApiData, readApiError } from "@/lib/api-client";
 import { formatDate } from "@/lib/utils";
 
@@ -26,36 +27,8 @@ const filters: { value: CommentFilter; label: string }[] = [
   { value: "all", label: "全部" },
 ];
 
-interface AdminComment {
-  id: string;
-  author: string;
-  email: string | null;
-  content: string;
-  approved: boolean;
-  createdAt: string;
-  /** 留言板留言的 postId 为 null。 */
-  postId: string | null;
-  parentId: string | null;
-  /** "guestbook" 表示来自留言板。 */
-  scope: "post" | "guestbook";
-  post: {
-    id: string;
-    title: string;
-    slug: string;
-  } | null;
-  parent: {
-    id: string;
-    author: string;
-  } | null;
-}
-
-interface CommentListData {
-  items: AdminComment[];
-  total: number;
-  page: number;
-  pageSize: number;
-  totalPages: number;
-}
+type AdminComment = AdminCommentDto;
+type CommentListData = PaginatedResult<AdminCommentDto>;
 
 function filterParam(filter: CommentFilter) {
   if (filter === "pending") return "pending";

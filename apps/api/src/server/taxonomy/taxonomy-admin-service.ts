@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { slugify } from "@/lib/utils";
 import { badRequest, notFound } from "@/server/errors";
 import type { Prisma } from "@prisma/client";
+import type { TaxonomyWithCount } from "@kpblog/contracts";
 
 /**
  * 分类与标签的后台管理操作。
@@ -37,11 +38,11 @@ const categoryAdminSelect = {
 type TagAdminRecord = Prisma.TagGetPayload<{ select: typeof tagAdminSelect }>;
 type CategoryAdminRecord = Prisma.CategoryGetPayload<{ select: typeof categoryAdminSelect }>;
 
-function toTagAdminDto(tag: TagAdminRecord) {
+function toTagAdminDto(tag: TagAdminRecord): TaxonomyWithCount {
   return { id: tag.id, name: tag.name, slug: tag.slug, postCount: tag._count.posts };
 }
 
-function toCategoryAdminDto(category: CategoryAdminRecord) {
+function toCategoryAdminDto(category: CategoryAdminRecord): TaxonomyWithCount {
   return {
     id: category.id,
     name: category.name,

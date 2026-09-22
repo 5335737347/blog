@@ -6,14 +6,10 @@ import Alert from "@/components/admin/ui/Alert";
 import EmptyState from "@/components/admin/ui/EmptyState";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
+import type { TaxonomyWithCount } from "@kpblog/contracts";
 import { readApiData, readApiError } from "@/lib/api-client";
 
-interface Category {
-  id: string;
-  name: string;
-  slug: string;
-  postCount: number;
-}
+type Category = TaxonomyWithCount;
 
 /**
  * 分类管理：新建、重命名、删除。

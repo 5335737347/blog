@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import type { AdminCommentDto } from "@kpblog/contracts";
 
 export const publicCommentSelect = {
   id: true,
@@ -61,7 +62,7 @@ export function toPublicCommentDto(comment: PublicCommentRecord) {
   };
 }
 
-export function toAdminCommentDto(comment: AdminCommentRecord) {
+export function toAdminCommentDto(comment: AdminCommentRecord): AdminCommentDto {
   return {
     ...comment,
     createdAt: comment.createdAt.toISOString(),
@@ -71,4 +72,3 @@ export function toAdminCommentDto(comment: AdminCommentRecord) {
 }
 
 export type PublicCommentDto = ReturnType<typeof toPublicCommentDto>;
-export type AdminCommentDto = ReturnType<typeof toAdminCommentDto>;

@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { isSafeImageReference, slugify } from "@/lib/utils";
 import { badRequest, notFound } from "@/server/errors";
 import type { Prisma } from "@prisma/client";
+import type { ProjectAdminDto } from "@kpblog/contracts";
 
 /**
  * 项目合集的后台管理操作（结构与分类管理同构，多了 description/coverImage）。
@@ -23,7 +24,7 @@ const projectSelect = {
 
 type ProjectRecord = Prisma.ProjectGetPayload<{ select: typeof projectSelect }>;
 
-export function toProjectDto(project: ProjectRecord) {
+export function toProjectDto(project: ProjectRecord): ProjectAdminDto {
   return {
     id: project.id,
     name: project.name,

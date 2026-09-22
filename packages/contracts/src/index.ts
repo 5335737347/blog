@@ -92,6 +92,7 @@ export interface PostSummary {
   title: string;
   excerpt: string | null;
   coverImage: string | null;
+  published: boolean;
   publishedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -101,7 +102,6 @@ export interface PostSummary {
 
 export interface PostDetail extends PostSummary {
   content: string;
-  published: boolean;
 }
 
 /**
@@ -184,6 +184,17 @@ export interface ProjectCardData {
   latestPublishedAt: string | null;
 }
 
+/** 管理端项目列表：含草稿计数与创建时间。 */
+export interface ProjectAdminDto {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  coverImage: string | null;
+  createdAt: string;
+  postCount: number;
+}
+
 export interface ProjectsPageData {
   projects: ProjectCardData[];
 }
@@ -209,4 +220,19 @@ export interface ProfileDto {
   email: string;
   now: string;
   socialLinks: ProfileSocialLink[];
+}
+
+/** 管理端评论审核行。 */
+export interface AdminCommentDto {
+  id: string;
+  author: string;
+  email: string | null;
+  content: string;
+  approved: boolean;
+  createdAt: string;
+  postId: string | null;
+  parentId: string | null;
+  scope: "post" | "guestbook";
+  post: { id: string; title: string; slug: string } | null;
+  parent: { id: string; author: string } | null;
 }

@@ -6,15 +6,10 @@ import Alert from "@/components/admin/ui/Alert";
 import EmptyState from "@/components/admin/ui/EmptyState";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
+import type { TaxonomyWithCount } from "@kpblog/contracts";
 import { readApiData, readApiError } from "@/lib/api-client";
 
-interface Tag {
-  id: string;
-  name: string;
-  slug: string;
-  /** 管理端口径：含草稿在内的全部关联文章数。 */
-  postCount: number;
-}
+type Tag = TaxonomyWithCount;
 
 /**
  * 标签管理：全量列表（含 0 篇文章的未使用标签）、新建、重命名、删除、合并。

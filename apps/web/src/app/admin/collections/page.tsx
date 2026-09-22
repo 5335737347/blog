@@ -8,16 +8,10 @@ import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Textarea from "@/components/ui/Textarea";
 import ImagePickerModal from "@/components/admin/resources/ImagePickerModal";
+import type { ProjectAdminDto } from "@kpblog/contracts";
 import { readApiData, readApiError } from "@/lib/api-client";
 
-interface Project {
-  id: string;
-  name: string;
-  slug: string;
-  description: string;
-  coverImage: string | null;
-  postCount: number;
-}
+type Project = ProjectAdminDto;
 
 /**
  * 项目合集管理：新建、重命名、简介与封面、删除。
