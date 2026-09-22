@@ -280,8 +280,17 @@ export function getRssFeedData() {
   return getApiData<{ posts: RssPostDto[]; settings: PublicSettingsDto }>("/api/public/rss-data");
 }
 
-export function getSitemapData() {
-  return getApiData<SitemapDataDto>("/api/public/sitemap-data");
+export async function getSitemapData(): Promise<SitemapDataDto> {
+  const data = await getApiData<SitemapDataDto>("/api/public/sitemap-data");
+  // 归一化兜底：更新脚本「先构建 Web、后重启 API」，构建时旧 API 的
+  // sitemap 响应没有 projects 字段（200 + 旧形状），undefined.map 会让
+  // ISR 预渲染直接崩溃。新字段一律在这里补默认值。
+  return {
+    posts: data.posts ?? [],
+    tags: data.tags ?? [],
+    categories: data.categories ?? [],
+    projects: data.projects ?? [],
+  };
 }
 
 export async function getRegistrationCapabilities(): Promise<RegistrationCapabilities> {
