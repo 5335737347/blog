@@ -1,11 +1,9 @@
 import type { Prisma } from "@prisma/client";
 import type {
-  ArchiveData,
-  ArchiveProject,
-  ArchiveYear,
   ArticleAdjacent,
   HomePageData,
-  ProjectSummary,
+  ProjectCardData,
+  ProjectsPageData,
 } from "@kpblog/contracts";
 import { prisma } from "@/lib/prisma";
 import { postSummarySelect, toPostSummaryDto } from "@/server/articles/article-dto";
@@ -322,85 +320,48 @@ export async function getArticleAdjacentData(slug: string): Promise<ArticleAdjac
 }
 
 /**
- * 归档数据：项目分区 + 未归入项目文章的年份兜底。
+ * 项目页数据：每个项目的已发布文章数与最近更新时间，按最近更新倒序。
  *
- * 与文章列表不同，归档是「目录」视图，每条只取 slug/title/publishedAt ——
- * 比复用文章列表接口返回完整摘要轻得多。上限与 sitemap 一致（协议量级），
- * 超出时应改为分页而不是无限加载。
+ * 与归档时代不同：未归入项目的文章不再在这里兜底——/articles 本身就是
+ * 全部文章的索引（时间倒序 + 搜索/筛选），项目页只负责「项目」这个维度。
  */
-const ARCHIVE_LIMIT = 5_000;
-
-export async function getArchiveData(): Promise<ArchiveData> {
-  const posts = await prisma.post.findMany({
-    where: { published: true },
-    orderBy: POST_ORDER_DESC,
-    take: ARCHIVE_LIMIT,
+export async function getProjectsPageData(): Promise<ProjectsPageData> {
+  const projects = await prisma.project.findMany({
     select: {
+      id: true,
+      name: true,
       slug: true,
-      title: true,
-      publishedAt: true,
-      project: { select: { id: true, name: true, slug: true, description: true, coverImage: true } },
+      description: true,
+      coverImage: true,
+      posts: {
+        where: { published: true },
+        select: { publishedAt: true },
+        orderBy: { publishedAt: "desc" },
+      },
     },
+    orderBy: { name: "asc" },
   });
 
-  const entry = (post: (typeof posts)[number]) => ({
-    slug: post.slug,
-    title: post.title,
-    publishedAt: post.publishedAt ? post.publishedAt.toISOString() : null,
+  const cards: ProjectCardData[] = projects.map((project) => {
+    const latest = project.posts[0]?.publishedAt ?? null;
+    return {
+      id: project.id,
+      name: project.name,
+      slug: project.slug,
+      description: project.description,
+      coverImage: project.coverImage,
+      postCount: project.posts.length,
+      latestPublishedAt: latest ? latest.toISOString() : null,
+    };
   });
 
-  // 按项目分组：项目内保持 POST_ORDER_DESC（新→旧），项目之间按最新文章倒序。
-  const byProject = new Map<string, ArchiveProject>();
-  const entryByYear = new Map<number | null, ArchiveYear>();
+  cards.sort((a, b) => {
+    if (!a.latestPublishedAt) return 1;
+    if (!b.latestPublishedAt) return -1;
+    return b.latestPublishedAt.localeCompare(a.latestPublishedAt);
+  });
 
-  for (const post of posts) {
-    if (post.project) {
-      let bucket = byProject.get(post.project.id);
-      if (!bucket) {
-        const project: ProjectSummary = {
-          id: post.project.id,
-          name: post.project.name,
-          slug: post.project.slug,
-          description: post.project.description,
-          coverImage: post.project.coverImage,
-        };
-        bucket = { project, posts: [] };
-        byProject.set(post.project.id, bucket);
-      }
-      bucket.posts.push(entry(post));
-      continue;
-    }
-
-    // 未归入项目的文章按年份兜底（无日期排最后）。
-    const year = post.publishedAt ? post.publishedAt.getFullYear() : null;
-    let yearBucket = entryByYear.get(year);
-    if (!yearBucket) {
-      yearBucket = { year, posts: [] };
-      entryByYear.set(year, yearBucket);
-    }
-    yearBucket.posts.push(entry(post));
-  }
-
-  const projects = [...byProject.values()].sort((a, b) =>
-    compareNewestFirst(a.posts[0]?.publishedAt ?? null, b.posts[0]?.publishedAt ?? null)
-  );
-
-  const years = [...entryByYear.values()].sort((a, b) =>
-    compareNewestFirst(yearKey(a.year), yearKey(b.year))
-  );
-
-  return { total: posts.length, projects, years };
-}
-
-function yearKey(year: number | null) {
-  // null（无日期）参与排序时排最后。
-  return year === null ? null : String(year);
-}
-
-function compareNewestFirst(a: string | null, b: string | null) {
-  if (a === null) return 1;
-  if (b === null) return -1;
-  return b.localeCompare(a);
+  return { projects: cards };
 }
 
 /** 项目详情页：项目信息 + 该项目已发布文章的分页列表。 */

@@ -12,7 +12,7 @@ import { KunFishIcon, MenuIcon, CloseIcon, SearchIcon } from "./SiteIcons";
 
 const NAV = [
   { href: "/articles", label: "文章" },
-  { href: "/archive", label: "归档" },
+  { href: "/projects", label: "项目" },
   { href: "/about", label: "个人介绍" },
   { href: "/now", label: "近况" },
   { href: "/messages", label: "留言" },

@@ -1,8 +1,8 @@
 import "server-only";
 import { cache } from "react";
 import type {
+  ProjectsPageData,
   ApiResponse,
-  ArchiveData,
   ArticleAdjacent,
   HomePageData,
   PaginatedResult,
@@ -36,7 +36,7 @@ export interface ContentLayoutDataDto {
   settings: PublicSettingsDto;
 }
 
-/** 标签/分类归档接口的返回形状（与 contracts 的 ArchiveData 无关，勿混淆）。 */
+/** 标签/分类列表页接口的返回形状。 */
 interface TaxonomyArchiveListing {
   articles: PaginatedResult<PostSummary>;
 }
@@ -251,13 +251,13 @@ export const getProfile = cache(async (): Promise<ProfileDto> => {
   }
 });
 
-/** 归档页（/archive）：按年份分组的全部已发布文章。 */
-export const getArchiveData = cache(async (): Promise<ArchiveData> => {
+/** 项目页（/projects）：项目卡片（已发布计数 + 最近更新），按最近更新倒序。 */
+export const getProjectsData = cache(async (): Promise<ProjectsPageData> => {
   try {
-    return await getApiData<ArchiveData>("/api/public/archive");
+    return await getApiData<ProjectsPageData>("/api/public/collections");
   } catch (error) {
-    warnDegradedOnce("/api/public/archive", error);
-    return { total: 0, projects: [], years: [] };
+    warnDegradedOnce("/api/public/collections", error);
+    return { projects: [] };
   }
 });
 

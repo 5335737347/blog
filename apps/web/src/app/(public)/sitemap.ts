@@ -49,7 +49,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "daily",
       priority: 1,
     },
-    ...["articles", "archive", "about", "messages", "now"].map((path) => ({
+    ...["articles", "projects", "about", "messages", "now"].map((path) => ({
       url: `${siteUrl}/${path}`,
       changeFrequency: "monthly" as const,
       priority: 0.4,

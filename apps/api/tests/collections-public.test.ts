@@ -3,11 +3,12 @@ import { after, before, test } from "node:test";
 import type { FastifyInstance } from "fastify";
 
 /**
- * 项目合集的公开数据面：/api/public/collections/:slug 与归档的项目分组。
+ * 项目合集的公开数据面：/api/public/collections（项目卡片列表）与
+ * /api/public/collections/:slug（项目页数据）。
  *
- * 归档页从「按年份」改为「按项目分区 + 未归入项目按年份兜底」，这里钉住
- * 服务端的分组与排序行为：项目内新→旧、项目之间按最新文章倒序、未归入
- * 项目的年份兜底排在整个列表之后。
+ * 信息架构决策：/articles 是全部文章的索引（时间倒序 + 搜索/筛选），
+ * /projects 只负责「项目」维度——已发布计数、最近更新、按最近更新倒序；
+ * 未归入项目的文章不出现在项目数据里。
  */
 let app: FastifyInstance;
 
@@ -63,46 +64,30 @@ after(async () => {
   await prisma.$disconnect();
 });
 
-interface ArchiveResponse {
-  total: number;
+interface ProjectsListResponse {
   projects: {
-    project: { slug: string; description: string };
-    posts: { slug: string; publishedAt: string | null }[];
+    slug: string;
+    description: string;
+    postCount: number;
+    latestPublishedAt: string | null;
   }[];
-  years: { year: number | null; posts: { slug: string }[] }[];
 }
 
-test("archive groups by project then falls back to years for ungrouped posts", async () => {
-  const response = await app.inject({ method: "GET", url: "/api/public/archive" });
+test("projects list: counts published only, ordered by latest update", async () => {
+  const response = await app.inject({ method: "GET", url: "/api/public/collections" });
   assert.equal(response.statusCode, 200);
-  const data = response.json().data as ArchiveResponse;
+  const data = response.json().data as ProjectsListResponse;
 
-  // 草稿不计入总数（5 篇已发布）。
-  assert.equal(data.total, 5);
-
-  // 项目之间按最新文章倒序：travel（2026-08）在 engine（2026-03）之前。
+  // travel 最新一篇 2026-08 → 排在 engine（2026-03）之前。
   assert.deepEqual(
-    data.projects.map((entry) => entry.project.slug),
+    data.projects.map((entry) => entry.slug),
     ["travel", "engine"]
   );
 
   const engine = data.projects[1];
-  assert.equal(engine.project.description, "把地基换一遍");
-  assert.deepEqual(
-    engine.posts.map((post) => post.slug),
-    ["engine-new", "engine-old"],
-    "项目内按时间倒序，草稿不出现"
-  );
-
-  // 未归入项目的年份兜底：2026 在 2025 之前，年份内新→旧。
-  assert.deepEqual(
-    data.years.map((group) => group.year),
-    [2026, 2025]
-  );
-  assert.deepEqual(
-    data.years[0].posts.map((post) => post.slug),
-    ["loose-2026"]
-  );
+  assert.equal(engine.description, "把地基换一遍");
+  assert.equal(engine.postCount, 2, "草稿不计入");
+  assert.equal(engine.latestPublishedAt, "2026-03-01T00:00:00.000Z");
 });
 
 test("collection page returns project meta with paginated published posts", async () => {

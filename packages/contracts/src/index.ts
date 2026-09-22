@@ -100,42 +100,22 @@ export interface HomePageData {
   tags: TaxonomyWithCount[];
 }
 
-/** 归档页里的一条文章摘要（只保留按时间浏览所需的最小字段）。 */
-export interface ArchivePostSummary {
-  slug: string;
-  title: string;
-  publishedAt: string | null;
-}
-
-/** 归档按年份分组。年份为 null 表示该文章没有 publishedAt（历史数据）。 */
-export interface ArchiveYear {
-  year: number | null;
-  posts: ArchivePostSummary[];
-}
-
 /**
- * 项目合集摘要。归档页按它分组；分类是内容题材，项目是写作期间的工作单元。
+ * 项目页（/projects）的一个项目卡片。
+ * postCount 只计已发布文章；latestPublishedAt 用于「按最近更新排序」。
  */
-export interface ProjectSummary {
+export interface ProjectCardData {
   id: string;
   name: string;
   slug: string;
   description: string;
   coverImage: string | null;
+  postCount: number;
+  latestPublishedAt: string | null;
 }
 
-/** 归档页的一个项目分区：项目信息 + 该项目下按时间倒序的已发布文章。 */
-export interface ArchiveProject {
-  project: ProjectSummary;
-  posts: ArchivePostSummary[];
-}
-
-export interface ArchiveData {
-  total: number;
-  /** 归入项目的文章，按项目最新文章时间倒序。 */
-  projects: ArchiveProject[];
-  /** 未归入任何项目的文章，按年份分组兜底（无日期排最后）。 */
-  years: ArchiveYear[];
+export interface ProjectsPageData {
+  projects: ProjectCardData[];
 }
 
 /** 社交链接（个人介绍页与页脚共用）。 */

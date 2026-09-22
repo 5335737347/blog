@@ -35,7 +35,7 @@ const SEEDED_TITLE = "冒烟测试文章";
 const PAGES = [
   "/",
   "/articles",
-  "/archive",
+  "/projects",
   ...(SEEDED ? ["/articles/smoke-post"] : []),
   "/about",
   "/now",

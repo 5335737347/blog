@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import {
   getCollectionPageData,
-  getArchiveData,
+  getProjectsPageData,
   getArticleAdjacentData,
   getArticleIndexPageData,
   getCategoryArchivePageData,
@@ -81,7 +81,7 @@ const publicRoutes: FastifyPluginAsync = async (app) => {
 
   app.get("/public/home", async () => apiSuccess(await getHomePageData()));
 
-  app.get("/public/archive", async () => apiSuccess(await getArchiveData()));
+  app.get("/public/collections", async () => apiSuccess(await getProjectsPageData()));
 
   app.get<{ Params: ArchiveParams }>("/public/articles/:slug/adjacent", async (request) =>
     apiSuccess(await getArticleAdjacentData(request.params.slug))

@@ -95,22 +95,21 @@ paths:
               schema:
                 $ref: "#/components/schemas/Envelope"
 
-  /api/public/archive:
+  /api/public/collections:
     get:
       tags: [Public]
-      summary: Get every published post grouped by year
+      summary: Get the projects page payload
       description: >-
-        Backs /archive. Each entry carries only slug, title and publishedAt — the
-        archive browses by time, so it does not need full summaries. Posts that
-        have no publishedAt land in a trailing bucket with year = null.
+        Backs /projects. One card per project: published-post count and the
+        latest publishedAt, sorted by most recent update. Ungrouped posts are
+        not part of this payload — /articles is the index for everything.
       responses:
         "200":
-          description: Archive data
+          description: Projects page data
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ArchiveResponse"
-
+                $ref: "#/components/schemas/ProjectsPageResponse"
   /api/public/home:
     get:
       tags: [Public]
@@ -2985,32 +2984,7 @@ components:
         data:
           $ref: "#/components/schemas/Profile"
 
-    ArchivePostSummary:
-      type: object
-      required: [slug, title]
-      properties:
-        slug:
-          type: string
-        title:
-          type: string
-        publishedAt:
-          type: string
-          nullable: true
-
-    ArchiveYear:
-      type: object
-      required: [year, posts]
-      properties:
-        year:
-          type: integer
-          nullable: true
-          description: null groups posts that have no publishedAt.
-        posts:
-          type: array
-          items:
-            $ref: "#/components/schemas/ArchivePostSummary"
-
-    ArchiveResponse:
+    ProjectsPageResponse:
       type: object
       required: [success, data]
       properties:
@@ -3019,11 +2993,30 @@ components:
           const: true
         data:
           type: object
-          required: [total, years]
+          required: [projects]
           properties:
-            total:
-              type: integer
-            years:
+            projects:
               type: array
               items:
-                $ref: "#/components/schemas/ArchiveYear"
+                type: object
+                required: [id, name, slug, description, coverImage, postCount, latestPublishedAt]
+                properties:
+                  id:
+                    type: string
+                  name:
+                    type: string
+                  slug:
+                    type: string
+                  description:
+                    type: string
+                  coverImage:
+                    type:
+                      - string
+                      - "null"
+                  postCount:
+                    type: integer
+                    description: Published posts only.
+                  latestPublishedAt:
+                    type:
+                      - string
+                      - "null"
