@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import HeroSection from "@/components/public/home/HeroSection";
 import HomeContent from "@/components/public/home/HomeContent";
-import { getHomePageData, getProfile, getPublicSettings } from "@/lib/api/public-api";
+import { getHomePageData, getHomeWallpapers, getProfile, getPublicSettings } from "@/lib/api/public-api";
 import { getSiteUrl } from "@/lib/env";
 import { pageAlternates } from "@/lib/metadata";
 
@@ -24,10 +24,11 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function HomePage() {
-  const [settings, home, profile] = await Promise.all([
+  const [settings, home, profile, wallpapers] = await Promise.all([
     getPublicSettings(),
     getHomePageData(),
     getProfile(),
+    getHomeWallpapers(),
   ]);
 
   return (
@@ -35,6 +36,7 @@ export default async function HomePage() {
       <HeroSection
         blogTitle={settings.blogTitle}
         blogDescription={settings.blogDescription}
+        wallpapers={wallpapers.map((item) => item.url)}
       />
       <HomeContent
         recentPosts={home.recentPosts}

@@ -1,6 +1,7 @@
 import AdminPageHeader from "@/components/admin/ui/AdminPageHeader";
 import AdoptImagesButton from "@/components/admin/resources/AdoptImagesButton";
 import ImageLibrarySection from "@/components/admin/resources/ImageLibrarySection";
+import WallpaperManager from "@/components/admin/resources/WallpaperManager";
 import MusicManager from "@/components/admin/resources/MusicManager";
 
 /**
@@ -14,7 +15,7 @@ export default function ResourcesAdminPage() {
     <div className="space-y-10">
       <AdminPageHeader
         title="资源管理"
-        description="管理站点的封面图片、文章正文图片与背景音乐；地址复制后可粘贴到文章里。"
+        description="管理站点的封面图片、文章正文图片、首页壁纸与背景音乐。"
         actions={<AdoptImagesButton />}
       />
       <ImageLibrarySection
@@ -29,6 +30,7 @@ export default function ResourcesAdminPage() {
         description="文章正文里使用的图片。编辑器工具栏的「上传图片 / 从图库选择」写入的就是这里。"
         emptyText="还没有文章图片。可在编辑器里直接上传，或在这里登记外部图床地址。"
       />
+      <WallpaperManager />
       <MusicManager />
     </div>
   );

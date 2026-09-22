@@ -9,19 +9,30 @@ import { ChevronRightIcon } from "@/components/public/layout/SiteIcons";
 interface HeroSectionProps {
   blogTitle: string;
   blogDescription: string;
+  /** 后台配置的轮换列表；为空（API 不可达/未配置）时回退到仓库默认壁纸。 */
+  wallpapers?: string[];
 }
 
 /**
  * 首页沉浸首屏：整屏壁纸 + 站名 + 搜索。
  * 装饰（壁纸、遮罩、入场动画、渐变文字）只允许出现在这里。
  */
-export default function HeroSection({ blogTitle, blogDescription }: HeroSectionProps) {
+export default function HeroSection({
+  blogTitle,
+  blogDescription,
+  wallpapers: wallpaperProp,
+}: HeroSectionProps) {
+  // 后台未配置（API 不可达/列表为空）时回退到仓库默认壁纸。
+  const rotationWallpapers =
+    wallpaperProp && wallpaperProp.length > 0 ? wallpaperProp : HOME_WALLPAPERS;
   const [wallpaperIndex, setWallpaperIndex] = useState(0);
 
   useEffect(() => {
     // 按时间戳对齐轮换，多标签页之间保持一致
     const updateWallpaper = () => {
-      setWallpaperIndex(Math.floor(Date.now() / HOME_WALLPAPER_INTERVAL_MS) % HOME_WALLPAPERS.length);
+      setWallpaperIndex(
+        Math.floor(Date.now() / HOME_WALLPAPER_INTERVAL_MS) % rotationWallpapers.length,
+      );
     };
     const initialUpdateId = window.setTimeout(updateWallpaper, 0);
     const untilNextChange = HOME_WALLPAPER_INTERVAL_MS - (Date.now() % HOME_WALLPAPER_INTERVAL_MS);
@@ -35,9 +46,10 @@ export default function HeroSection({ blogTitle, blogDescription }: HeroSectionP
       window.clearTimeout(timeoutId);
       if (intervalId !== undefined) window.clearInterval(intervalId);
     };
-  }, []);
+    // rotationWallpapers 由 props/常量派生：列表长度变化（后台增删壁纸）后重算轮换。
+  }, [rotationWallpapers.length]);
 
-  const wallpaper = HOME_WALLPAPERS[wallpaperIndex] ?? HOME_WALLPAPERS[0];
+  const wallpaper = rotationWallpapers[wallpaperIndex] ?? rotationWallpapers[0];
 
   return (
     <section

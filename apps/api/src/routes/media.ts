@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
-import { requireAdminSession } from "@/server/auth/auth-service";
+import { getOptionalAuthSession, requireAdminSession } from "@/server/auth/auth-service";
 import type { ImageUrlInput, MusicUrlInput } from "@/server/media/media-service";
 import {
   adoptPostImages,
@@ -12,10 +12,18 @@ import {
   listImages,
   listMusicTracks,
 } from "@/server/media/media-service";
+import {
+  createWallpaperFromFile,
+  deleteWallpaper,
+  listWallpapers,
+  reorderWallpapers,
+  updateWallpaper,
+} from "@/server/media/wallpaper-service";
 import { apiSuccess, assertRequestOrigin, multipartFiles, requestBody, sessionToken } from "@/http";
 
 type IdParams = { id: string };
 type ImageQuery = { kind?: string; force?: string };
+type WallpaperQuery = { all?: string };
 
 /**
  * 媒体路由：音乐与图片。图片是 MediaImage 登记表（本地文件 + 外部图床
@@ -71,6 +79,38 @@ const mediaRoutes: FastifyPluginAsync = async (app) => {
     assertRequestOrigin(request);
     await requireAdminSession(sessionToken(request));
     return apiSuccess(await adoptPostImages());
+  });
+
+  // ====== 首页壁纸轮换 ======
+  app.get<{ Querystring: WallpaperQuery }>("/wallpapers", async (request) => {
+    const user = await getOptionalAuthSession(sessionToken(request));
+    const all = user?.role === "ADMIN" && request.query.all === "true";
+    return apiSuccess(await listWallpapers({ all }));
+  });
+
+  app.post("/wallpapers", async (request, reply) => {
+    assertRequestOrigin(request);
+    await requireAdminSession(sessionToken(request));
+    const { files } = await multipartFiles(request);
+    return reply.status(201).send(apiSuccess(await createWallpaperFromFile({ file: files[0] || null })));
+  });
+
+  app.put<{ Params: IdParams }>("/wallpapers/:id", async (request) => {
+    assertRequestOrigin(request);
+    await requireAdminSession(sessionToken(request));
+    return apiSuccess(await updateWallpaper(request.params.id, requestBody(request)));
+  });
+
+  app.post("/wallpapers/reorder", async (request) => {
+    assertRequestOrigin(request);
+    await requireAdminSession(sessionToken(request));
+    return apiSuccess(await reorderWallpapers(requestBody(request)));
+  });
+
+  app.delete<{ Params: IdParams }>("/wallpapers/:id", async (request) => {
+    assertRequestOrigin(request);
+    await requireAdminSession(sessionToken(request));
+    return apiSuccess(await deleteWallpaper(request.params.id));
   });
 };
 

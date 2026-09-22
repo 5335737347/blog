@@ -130,6 +130,22 @@ model Music {
   createdAt DateTime @default(now())
 }
 
+/// 首页壁纸轮换列表。文件落在 MEDIA_ROOT/images（与图片库同一静态目录），
+/// 但登记独立于 MediaImage：壁纸是主题资源，有自己的启用状态与顺序，
+/// 也不参与封面/正文图的引用检查。url 唯一防止同一文件重复入列。
+///
+/// 首次访问时由服务自动播种仓库自带的 8 张默认壁纸（播种标记写入
+/// Setting 表，此后删除全部条目不会再触发重新播种）。
+model HomeWallpaper {
+  id        String   @id @default(cuid())
+  url       String   @unique
+  enabled   Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([enabled, sortOrder])
+}
+
 /// 已登记的图片资源。kind 区分封面（cover）与文章正文用图（article）。
 ///
 /// url 既可以是上传到 MEDIA_ROOT/images 的本地路径（/images/<file>），也可以是

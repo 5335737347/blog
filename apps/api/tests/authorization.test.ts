@@ -60,6 +60,10 @@ const ADMIN_ONLY: Endpoint[] = [
   { method: "POST", path: "/api/collections", body: { name: "x" }, label: "新建项目" },
   { method: "PUT", path: "/api/collections/absent", body: { name: "x" }, label: "修改项目" },
   { method: "DELETE", path: "/api/collections/absent", label: "删除项目" },
+  { method: "POST", path: "/api/wallpapers", label: "上传壁纸" },
+  { method: "PUT", path: "/api/wallpapers/absent", body: { enabled: true }, label: "修改壁纸" },
+  { method: "POST", path: "/api/wallpapers/reorder", body: { ids: [] }, label: "壁纸排序" },
+  { method: "DELETE", path: "/api/wallpapers/absent", label: "移出壁纸" },
 ];
 
 async function call(

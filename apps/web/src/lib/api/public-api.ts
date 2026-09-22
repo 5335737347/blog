@@ -149,6 +149,25 @@ export function getCollectionPageData(projectSlug: string, page: number, pageSiz
   return getApiData<CollectionArchiveData>(`/api/public/collections/${encodeURIComponent(projectSlug)}?page=${page}&limit=${pageSize}`);
 }
 
+export interface HomeWallpaperDto {
+  id: string;
+  url: string;
+  enabled: boolean;
+  sortOrder: number;
+}
+
+/**
+ * 首页壁纸轮换（仅启用项，按轮换顺序）。可降级：拿不到时首页回退到
+ * 代码里的默认壁纸列表。
+ */
+export const getHomeWallpapers = cache(async (): Promise<HomeWallpaperDto[]> => {
+  try {
+    return await getApiData<HomeWallpaperDto[]>("/api/wallpapers");
+  } catch {
+    return [];
+  }
+});
+
 /** /articles 列表页的筛选下拉数据。可降级：分类/标签拿不到时筛选框隐藏。 */
 export const getPublicCategories = cache(async (): Promise<TaxonomyDto[]> => {
   try {

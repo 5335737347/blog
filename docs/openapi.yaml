@@ -1436,6 +1436,133 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/wallpapers:
+    get:
+      tags: [Media]
+      summary: List homepage wallpapers
+      description: |
+        Public list returns only enabled wallpapers in rotation order. With an
+        authenticated admin session, `all=true` returns every entry including
+        disabled ones. First access auto-seeds the repository's default
+        wallpapers.
+      parameters:
+        - name: all
+          in: query
+          required: false
+          schema:
+            type: string
+          description: '"true" with an admin session includes disabled entries.'
+      responses:
+        "200":
+          description: Wallpapers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WallpaperListResponse"
+    post:
+      tags: [Media]
+      summary: Upload a homepage wallpaper (JPG/PNG/WebP/GIF/AVIF, max 10MB)
+      description: Admin only. Appends the wallpaper to the end of the rotation, enabled.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/WallpaperUploadInput"
+      responses:
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "201":
+          description: Wallpaper added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WallpaperResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/wallpapers/{id}:
+    parameters:
+      - $ref: "#/components/parameters/Id"
+    put:
+      tags: [Media]
+      summary: Enable or disable a wallpaper
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WallpaperUpdateInput"
+      responses:
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "200":
+          description: Wallpaper updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WallpaperResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Media]
+      summary: Remove a wallpaper from the rotation
+      description: Admin only. Removes the rotation entry only; the underlying file is kept.
+      security:
+        - sessionCookie: []
+      responses:
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "200":
+          description: Wallpaper removed from rotation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/wallpapers/reorder:
+    post:
+      tags: [Media]
+      summary: Reorder homepage wallpapers
+      description: Admin only. Ids are assigned rotation order in the order given; unlisted entries keep their relative order at the end.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WallpaperReorderInput"
+      responses:
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "200":
+          description: Reordered (full admin list)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WallpaperListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
   /api/import:
     post:
       tags: [Publishing]
@@ -2514,6 +2641,65 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PostSummary"
+
+    WallpaperItem:
+      type: object
+      required: [id, url, enabled, sortOrder, createdAt]
+      properties:
+        id:
+          type: string
+        url:
+          type: string
+        enabled:
+          type: boolean
+        sortOrder:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    WallpaperListResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: "#/components/schemas/WallpaperItem"
+
+    WallpaperResponse:
+      allOf:
+        - $ref: "#/components/schemas/Envelope"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/WallpaperItem"
+
+    WallpaperUploadInput:
+      type: object
+      required: [file]
+      properties:
+        file:
+          type: string
+          format: binary
+
+    WallpaperUpdateInput:
+      type: object
+      required: [enabled]
+      properties:
+        enabled:
+          type: boolean
+
+    WallpaperReorderInput:
+      type: object
+      required: [ids]
+      properties:
+        ids:
+          type: array
+          items:
+            type: string
+          description: Wallpaper ids in the desired rotation order.
 
     ImageUploadInput:
       type: object
