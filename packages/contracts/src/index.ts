@@ -16,9 +16,10 @@ export interface ApiFailure {
 export type ApiResponse<T> = ApiSuccess<T> | ApiFailure;
 
 export interface HealthResponse {
-  service: "kpblog-api";
-  status: "ok";
+  status: "ok" | "degraded";
   version: string;
+  uptimeSeconds: number;
+  checks: { database: "ok" | "error" };
 }
 
 export interface TaxonomySummary {
@@ -74,11 +75,6 @@ export interface PaginatedResult<T> {
   page: number;
   pageSize: number;
   totalPages: number;
-}
-
-export interface BlogSettings {
-  blog_title: string;
-  blog_description: string;
 }
 
 export interface TaxonomyWithCount {

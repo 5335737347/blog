@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { existsSync, readFileSync } from "node:fs";
 import { networkInterfaces } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -30,6 +31,72 @@ function relativeDistDir(value: string): string {
   const appDir = path.dirname(fileURLToPath(import.meta.url));
   // path.relative 会给出 ../ 开头的相对路径，Next 支持这种写法。
   return path.relative(appDir, value) || value;
+}
+
+function apiInternalUrl(): string {
+  return (process.env.API_INTERNAL_URL || "http://127.0.0.1:3002").replace(/\/$/, "");
+}
+
+/** 当前配置使用的构建目录（与 nextConfig.distDir 保持一致）。 */
+function configuredDistDir(): string {
+  return process.env.NEXT_DIST_DIR
+    ? relativeDistDir(process.env.NEXT_DIST_DIR)
+    : ".next";
+}
+
+/**
+ * 防止 `API_INTERNAL_URL` 的构建期/运行期分叉。
+ *
+ * Next 把 rewrites() 的结果固化进 `.next/routes-manifest.json`：`next start`
+ * 时即使进程环境里的 API_INTERNAL_URL 变了，浏览器 `/api/*` 仍会去构建时的
+ * 地址；而服务端 SSR 又是运行时读 process.env。只改环境变量重启 Web 会产生
+ * “SSR 连新 API、浏览器连旧 API”的 split-brain。
+ *
+ * 这里在生产启动时对比 manifest 与当前环境，不一致就直接拒绝启动并给出修复
+ * 指令。`next build`/`next dev` 不检查；没有 manifest 时交给 Next 自己报错。
+ */
+function assertRewriteTargetMatchesRuntimeEnv() {
+  if (process.env.NEXT_PHASE === "phase-production-build") return;
+  if (process.env.NODE_ENV !== "production") return;
+
+  const manifestPath = path.join(
+    path.dirname(fileURLToPath(import.meta.url)),
+    configuredDistDir(),
+    "routes-manifest.json"
+  );
+  if (!existsSync(manifestPath)) return;
+
+  let destination: string | undefined;
+  try {
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
+      rewrites?: {
+        beforeFiles?: { source?: string; destination?: string }[];
+        afterFiles?: { source?: string; destination?: string }[];
+        fallback?: { source?: string; destination?: string }[];
+      };
+    };
+    const routes = [
+      ...(manifest.rewrites?.beforeFiles ?? []),
+      ...(manifest.rewrites?.afterFiles ?? []),
+      ...(manifest.rewrites?.fallback ?? []),
+    ];
+    destination = routes.find((route) => route.source === "/api/:path*")?.destination;
+  } catch {
+    return; // manifest 不可读时由 Next 在启动阶段自行报错
+  }
+  if (!destination) return;
+
+  const expected = `${apiInternalUrl()}/api/:path*`;
+  if (destination !== expected) {
+    throw new Error(
+      "API_INTERNAL_URL 与当前构建产物不一致：\n" +
+        `  构建时 rewrite 目标：${destination}\n` +
+        `  当前环境期望：      ${expected}\n` +
+        "API_INTERNAL_URL 的 rewrites 目标是在 next build 时固化的；" +
+        "修改该变量后必须重新执行 npm run build（或删除 .next 后重建），" +
+        "否则服务端 SSR 与浏览器 /api/* 会指向不同 API。"
+    );
+  }
 }
 
 function siteImagePatterns() {
@@ -86,6 +153,8 @@ function allowedDevOrigins(): string[] {
   return [...hosts];
 }
 
+assertRewriteTargetMatchesRuntimeEnv();
+
 const nextConfig: NextConfig = {
   turbopack: {
     root: repositoryRoot,
@@ -113,8 +182,7 @@ const nextConfig: NextConfig = {
     formats: ["image/avif", "image/webp"],
   },
   async rewrites() {
-    const apiUrl = (process.env.API_INTERNAL_URL || "http://127.0.0.1:3002").replace(/\/$/, "");
-    return [{ source: "/api/:path*", destination: `${apiUrl}/api/:path*` }];
+    return [{ source: "/api/:path*", destination: `${apiInternalUrl()}/api/:path*` }];
   },
   async headers() {
     return [

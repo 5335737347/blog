@@ -83,18 +83,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/CommentListResponse"
 
-  /api/public/layout:
-    get:
-      tags: [Public]
-      summary: Get public layout tags, recent posts, and settings
-      responses:
-        "200":
-          description: Public layout data
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Envelope"
-
   /api/public/collections:
     get:
       tags: [Public]
@@ -1315,10 +1303,13 @@ paths:
     get:
       tags: [Media]
       summary: List registered images
-      description: |
-        Public. Every registered entry — locally uploaded files and external
-        (image-host) URLs alike. kind selects one bucket (cover or article);
-        omit it for both.
+      description: >-
+        Admin only. The image library may contain unpublished article assets,
+        private files, or external URLs with signed query parameters; the public
+        site does not read from it. kind selects one bucket (cover or article);
+        omit it for both. An unknown kind is rejected with 400.
+      security:
+        - sessionCookie: []
       parameters:
         - name: kind
           in: query
@@ -1334,6 +1325,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ImageListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
     post:
       tags: [Media]
       summary: Upload an image file or register an external image URL

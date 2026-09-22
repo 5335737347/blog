@@ -170,6 +170,8 @@ test("image upload validates, registers, and deletes by id", async () => {
   // kind 过滤：cover 列表能看到，article 列表看不到
   assert.ok((await listImages({ kind: "cover" })).some((item) => item.url === image.url));
   assert.equal((await listImages({ kind: "article" })).length, 0);
+  // 非法 kind 不能再被静默忽略成“返回全部”
+  await assert.rejects(() => listImages({ kind: "wallpaper" }), { status: 400 });
 
   const second = await createImageFromFile({
     file: new File([new Uint8Array([1])], "second.gif", { type: "image/gif" }),

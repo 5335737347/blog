@@ -135,7 +135,9 @@ test("article service separates public drafts from admin listings", async () => 
   });
   assert.equal(adminDrafts.items.some((article) => article.id === draft.id), true);
 
-  await updateArticle(draft.id, { published: true });
+  const published = await updateArticle(draft.id, { published: true });
+  assert.equal(published.published, true);
+  assert.notEqual(published.publishedAt, null, "草稿转发布且未显式改日期时应自动写入发布时间");
   publicArticles = await listArticles({ page: 1, pageSize: 10, isAdmin: false });
   assert.equal(
     publicArticles.items.some((article) => article.slug === "draft-article"),

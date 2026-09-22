@@ -1,6 +1,6 @@
 # 鲲鹏の博客 v0.1.0
 
-一个面向长期维护的个人博客 Monorepo。前台采用中性色骨架 + 粉蓝双色点缀的视觉体系（详见[前端设计方案](docs/design-plan.md)）：首页以整屏二次元壁纸、五分钟轮换、动态搜索和最新文章/最近在做/分类标签内容区为核心；文章页是独立的阅读器布局，提供侧栏目录、阅读进度、代码块增强、图片放大、上一篇/下一篇、相关文章与结构化数据；移动端使用底部标签栏导航。
+一个面向长期维护的个人博客 Monorepo。前台采用中性色骨架 + 粉蓝双色点缀的视觉体系（详见[前端设计方案](docs/design-plan.md)）：首页以整屏二次元壁纸、五分钟轮换、动态搜索和最新文章/最近在做/分类标签内容区为核心；文章页是独立的阅读器布局，提供侧栏目录、阅读进度、代码块增强、图片放大、上一篇/下一篇、相关文章与结构化数据；移动端使用头部汉堡菜单导航。
 
 线上地址：https://kpblog.cc
 
@@ -97,7 +97,7 @@ NEXT_PUBLIC_SITE_URL="https://你的域名"
 | `npm run dev` | 同时启动 Web 与 API 开发服务 |
 | `npm run dev:web` / `npm run dev:api` | 单独启动一个应用 |
 | `npm run build` | 依次构建 API 与 Web |
-| `npm run start:web` / `npm run start:api` | 单独启动生产应用 |
+| `npm run start:web` / `npm run start:api` | 单独启动生产应用（`start:api` 会自动设置 `NODE_ENV=production`） |
 | `npm run update` | 安全拉取、检查、备份、迁移、构建并重载生产服务 |
 | `npm run check` | lint、类型检查、全部测试、文档与接口契约校验、浏览器冒烟检查 |
 | `npm run check:ci` | 同上但不含浏览器冒烟（服务器更新与 CI 使用；冒烟改在构建后跑 `smoke:prod`） |
@@ -108,12 +108,15 @@ NEXT_PUBLIC_SITE_URL="https://你的域名"
 | `npm run typecheck` | 检查根项目及所有 workspace |
 | `npm test` | 服务测试与 Fastify API 测试 |
 | `npm run db:migrate` | 创建/应用开发迁移 |
-| `npm run db:seed` | 写入种子数据 |
+| `npm run db:seed` | 数据库为空时写入种子数据；非空库需 `-- --reset` + `ALLOW_PRODUCTION_SEED=true` |
 | `npm run db:studio` | 打开 Prisma Studio |
 | `npm run publish:draft -- <file>` | 通过 HTTP API 导入 Markdown 草稿 |
 | `npm run publish:post -- <file>` | 通过 HTTP API 发布 Markdown |
 
 不要在生产环境随意运行 `npm run db:reset`，该命令会重置数据库。
+非空数据库上运行 `npm run db:seed` 现在会被拒绝；如需明确清空重建，必须执行
+`ALLOW_PRODUCTION_SEED=true npm run db:seed -- --reset`。生产环境必须显式设置强
+`ADMIN_PASSWORD`，避免临时密码进入日志。
 
 ## 内容发布
 

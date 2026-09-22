@@ -18,6 +18,10 @@
 
 新增或修改契约后，必须同时检查 API 返回值、Web 调用方、测试和 `docs/openapi.yaml`。
 
+当前包只覆盖核心跨边界 DTO（envelope、文章、评论、资料、项目卡片等）；媒体、
+壁纸、音乐、分类/标签管理等较新的管理端响应尚未全部迁入。未迁移部分以
+`docs/openapi.yaml` 与 API 代码为准，不能假定 Contracts 已描述全部端点。
+
 Contracts 描述可序列化的注册能力与请求/响应形状，但不包含服务商 SDK、环境变量、模板或
 投递实现。相关运行时边界见
 [`docs/registration-delivery.md`](../../docs/registration-delivery.md)。

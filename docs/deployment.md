@@ -50,6 +50,10 @@ npm run start:pm2
 pm2 save
 ```
 
+> `db:seed` 只用于**空库初始化**。数据库非空时脚本会拒绝执行；确认要清空重建时
+> 才使用 `ALLOW_PRODUCTION_SEED=true npm run db:seed -- --reset`。生产环境必须
+> 显式设置不低于 8 字符的 `ADMIN_PASSWORD`，否则 seed 会拒绝生成并打印临时密码。
+
 检查进程：
 
 ```bash

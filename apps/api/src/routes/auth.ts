@@ -112,9 +112,11 @@ function loginIdentifier(body: unknown): string | null {
  * 防止未知账户被无限制探测。查询与 targetsAdmin 时代的语义一致：
  * 参数化、只读，登录流程随后必然要查这个用户。
  */
-async function resolveLoginTarget(body: unknown): Promise<{ key: string | null; isAdmin: boolean }> {
+async function resolveLoginTarget(
+  body: unknown
+): Promise<{ key: string | null; isAdmin: boolean; resolved: boolean }> {
   const identifier = loginIdentifier(body);
-  if (!identifier) return { key: null, isAdmin: false };
+  if (!identifier) return { key: null, isAdmin: false, resolved: false };
   const emailIdentifier = identifier.includes("@") ? identifier.toLowerCase() : null;
   const rows = await prisma.$queryRaw<{ id: string; role: string }[]>`
     SELECT "id", "role" FROM "User"
@@ -124,10 +126,14 @@ async function resolveLoginTarget(body: unknown): Promise<{ key: string | null; 
     LIMIT 2
   `;
   if (rows.length === 1) {
-    return { key: `auth:login:account:${rows[0].id}`, isAdmin: rows[0].role === "ADMIN" };
+    return {
+      key: `auth:login:account:${rows[0].id}`,
+      isAdmin: rows[0].role === "ADMIN",
+      resolved: true,
+    };
   }
   const hash = crypto.createHash("sha256").update(`login:${identifier}`).digest("hex");
-  return { key: `auth:login:account:${hash}`, isAdmin: false };
+  return { key: `auth:login:account:${hash}`, isAdmin: false, resolved: false };
 }
 
 const authRoutes: FastifyPluginAsync = async (app) => {
@@ -164,19 +170,20 @@ const authRoutes: FastifyPluginAsync = async (app) => {
 
     // 账号维度限流：仅有 IP 维度时，攻击者换 IP 就能绕过。
     //
-    // 管理员账号用严格阈值（连续 3 次失败进冷却，冷却期内连正确密码也拒绝，
-    // 且拒绝发生在 bcrypt 之前）。普通账号沿用「15 分钟 10 次」。
-    // 只统计失败次数，成功即清零。
+    // 策略分两档：
+    // - ADMIN：连续 3 次失败冷却 15 分钟，冷却期内正确密码也拒绝。这是
+    //   为保护唯一管理入口而明确接受的可用性取舍；
+    // - USER：失败计数仍会记录（供审计和后续风控使用），但**不作为验密前的
+    //   硬门禁**。否则任何人故意输错 10 次就能把普通用户锁在门外 15 分钟，
+    //   与 docs/registration-delivery.md 的承诺冲突。
     const body = requestBody<unknown>(request);
-    const { key: accountKey, isAdmin: adminTarget } = await resolveLoginTarget(body);
-    // 允许的失败次数 = 尝试次数；判定阈值比它多 1，这样第 N 次失败仍返回 401。
-    const allowedFailures = adminTarget ? ADMIN_LOGIN_MAX_ATTEMPTS : LOGIN_ACCOUNT_MAX_FAILURES;
-    const failureWindowMs = adminTarget ? adminLockoutWindowMs() : LOGIN_ACCOUNT_WINDOW_MS;
+    const { key: accountKey, isAdmin: adminTarget, resolved } = await resolveLoginTarget(body);
 
-    // 名额已用尽 → 直接冷却（不再验密）。判定与「消耗名额」共用同一个计数，
-    // 且消耗是原子的：并发请求不会各自读到旧值而全部放行。
-    if (accountKey) {
-      await assertRateLimitNotExceeded(accountKey, allowedFailures, {
+    // ADMIN 与“未解析到真实账号的标识符”保留硬门禁；已存在的普通账号不硬锁。
+    // 未注册标识符也要限，否则攻击者可以换着拼写无限探测账号是否存在。
+    if (accountKey && (adminTarget || !resolved)) {
+      const hardLimit = adminTarget ? ADMIN_LOGIN_MAX_ATTEMPTS : LOGIN_ACCOUNT_MAX_FAILURES;
+      await assertRateLimitNotExceeded(accountKey, hardLimit, {
         message: adminTarget ? "该管理员账号已被临时锁定，请稍后再试" : undefined,
       });
     }
@@ -186,13 +193,14 @@ const authRoutes: FastifyPluginAsync = async (app) => {
       result = await loginUser(body);
     } catch (error) {
       if (accountKey) {
-        // 只有密码错误（401）才消耗名额；其它错误（400/500）不占用尝试次数，
+        // 只有密码错误（401）才记录失败；其它错误（400/500）不占用尝试次数，
         // 否则每次畸形请求都能把管理员推向锁定。
         if (error instanceof ServiceError && error.status === 401) {
-          // 名额用尽（第 N+1 次及以后）时计数已经超限，下一次请求会在
-          // assertRateLimitNotExceeded 处被直接拒绝、不再验密。
-          // 当前这次尝试本来就该返回 401，所以这里不改变响应。
-          await consumeFailureAllowance(accountKey, failureWindowMs, allowedFailures);
+          await consumeFailureAllowance(
+            accountKey,
+            adminTarget ? adminLockoutWindowMs() : LOGIN_ACCOUNT_WINDOW_MS,
+            adminTarget ? ADMIN_LOGIN_MAX_ATTEMPTS : LOGIN_ACCOUNT_MAX_FAILURES
+          );
         }
       }
       throw error;

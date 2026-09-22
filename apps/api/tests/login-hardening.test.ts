@@ -318,9 +318,12 @@ test("the admin lock is keyed by account, so rotating IPs does not clear it", as
   }
 });
 
-test("regular accounts keep the looser failure limit", async () => {
+test("regular accounts are not hard-locked by their failure counter", async () => {
   const bcrypt = (await import("bcryptjs")).default;
   const { prisma } = await import("../src/lib/prisma");
+
+  // 清掉 IP 桶，避免本文件前面的登录用例把 20 次/15 分钟额度提前耗尽。
+  await prisma.rateLimitBucket.deleteMany({ where: { key: { startsWith: "auth:login:" } } });
 
   await prisma.user.create({
     data: {
@@ -338,11 +341,13 @@ test("regular accounts keep the looser failure limit", async () => {
       payload: { identifier: "plain-user", password },
     });
 
-  // 3 次失败后普通账号**不应**被锁（只有管理员是 3 次；普通账号 10 次）。
-  for (let i = 0; i < 3; i += 1) {
-    assert.equal((await attempt("nope")).statusCode, 401);
+  // 普通账号的失败计数会继续记录，但超过 10 次后仍不能拒绝正确密码。
+  for (let i = 0; i < 12; i += 1) {
+    assert.equal((await attempt("nope")).statusCode, 401, `第 ${i + 1} 次错误密码应为 401`);
   }
-  assert.equal((await attempt("plain-user-password")).statusCode, 200, "普通账号 3 次失败后仍可登录");
+  const success = await attempt("plain-user-password");
+  assert.equal(success.statusCode, 200, "普通账号失败计数达到/超过阈值后，正确密码仍必须可用");
+  assert.equal(success.json().data.user.username, "plain-user");
 });
 
 test("username and email of one admin share a single failure budget", async () => {

@@ -12,7 +12,7 @@ import {
   moderateComment,
 } from "@/server/comments/comment-service";
 import { assertRateLimit, requestIp } from "@/server/request-guard";
-import { apiSuccess, assertRequestOrigin, guardRequest, positiveInt, requestBody, sessionToken } from "@/http";
+import { apiSuccess, assertRequestOrigin, guardRequest, pageNumber, positiveInt, requestBody, sessionToken } from "@/http";
 
 type CommentQuery = {
   postId?: string;
@@ -27,7 +27,7 @@ const commentRoutes: FastifyPluginAsync = async (app) => {
   app.get<{ Querystring: CommentQuery }>("/comments", async (request) => {
     if (request.query.postId) {
       return apiSuccess(await listPublicComments(request.query.postId, {
-        page: positiveInt(request.query.page, 1),
+        page: pageNumber(request.query.page),
         pageSize: Math.min(
           MAX_PUBLIC_COMMENT_PAGE_SIZE,
           positiveInt(request.query.limit, DEFAULT_PUBLIC_COMMENT_PAGE_SIZE)
@@ -38,7 +38,7 @@ const commentRoutes: FastifyPluginAsync = async (app) => {
     return apiSuccess(await listAdminComments({
       approved: request.query.approved,
       scope: request.query.scope,
-      page: positiveInt(request.query.page, 1),
+      page: pageNumber(request.query.page),
       pageSize: Math.min(50, positiveInt(request.query.limit, 50)),
     }));
   });

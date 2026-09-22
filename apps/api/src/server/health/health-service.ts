@@ -1,3 +1,4 @@
+import type { HealthResponse } from "@kpblog/contracts";
 import { prisma } from "@/lib/prisma";
 
 /**
@@ -8,13 +9,6 @@ import { prisma } from "@/lib/prisma";
  * 宁可快速返回 503。
  */
 const DATABASE_PROBE_TIMEOUT_MS = 2_000;
-
-export interface HealthReport {
-  status: "ok" | "degraded";
-  version: string;
-  uptimeSeconds: number;
-  checks: { database: "ok" | "error" };
-}
 
 // 版本号与 apps/api/package.json 保持一致；改版本时两处一起改。
 const API_VERSION = "0.1.0";
@@ -73,7 +67,7 @@ async function probeDatabase(): Promise<boolean> {
   }
 }
 
-export async function checkHealth(): Promise<HealthReport> {
+export async function checkHealth(): Promise<HealthResponse> {
   const databaseOk = await probeDatabase();
   return {
     status: databaseOk ? "ok" : "degraded",

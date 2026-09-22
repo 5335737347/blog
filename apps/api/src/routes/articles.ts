@@ -9,7 +9,7 @@ import {
   updateArticle,
 } from "@/server/articles/article-service";
 import { getOptionalAuthSession, requireAdminSession } from "@/server/auth/auth-service";
-import { apiSuccess, assertRequestOrigin, positiveInt, requestBody, sessionToken } from "@/http";
+import { apiSuccess, assertRequestOrigin, pageNumber, positiveInt, requestBody, sessionToken } from "@/http";
 
 type ArticleParams = { id: string };
 type SlugParams = { slug: string };
@@ -27,7 +27,7 @@ const articleRoutes: FastifyPluginAsync = async (app) => {
     const user = await getOptionalAuthSession(sessionToken(request));
     const query = request.query;
     return apiSuccess(await listArticles({
-      page: positiveInt(query.page, 1),
+      page: pageNumber(query.page),
       pageSize: Math.min(50, positiveInt(query.limit, 10)),
       tag: query.tag,
       category: query.category,

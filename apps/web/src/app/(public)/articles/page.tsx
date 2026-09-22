@@ -7,6 +7,7 @@ import PageShell, { PageHeader } from "@/components/public/layout/PageShell";
 import { getArticleIndexPageData, getPublicCategories, getPublicTags } from "@/lib/api/public-api";
 import { getSiteUrl } from "@/lib/env";
 import { pageAlternates } from "@/lib/metadata";
+import { parsePageParam } from "@/lib/utils";
 
 const PAGE_SIZE = 10;
 
@@ -21,7 +22,7 @@ export async function generateMetadata({
   const url = siteUrl ? `${siteUrl}/articles` : undefined;
   const { q, category, tag, page: pageParam } = await searchParams;
   const query = q?.trim() || "";
-  const page = Math.max(1, Number.parseInt(pageParam || "1", 10) || 1);
+  const page = parsePageParam(pageParam);
 
   if (query || category || tag) {
     // 搜索/筛选结果页有无限个 URL 形态,不允许索引,但允许顺着结果继续抓取。
@@ -56,7 +57,7 @@ export async function generateMetadata({
 
 export default async function ArticleIndexPage({ searchParams }: ArticleIndexPageProps) {
   const { page: pageParam, q: qParam, category: categoryParam, tag: tagParam } = await searchParams;
-  const page = Math.max(1, Number.parseInt(pageParam || "1", 10) || 1);
+  const page = parsePageParam(pageParam);
   const query = qParam?.trim() || "";
   const category = categoryParam?.trim() || "";
   const tag = tagParam?.trim() || "";

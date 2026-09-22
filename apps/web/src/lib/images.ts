@@ -25,7 +25,12 @@ export function shouldSkipImageOptimization(src: string): boolean {
   if (!siteUrl) return true;
 
   try {
-    return new URL(src).hostname !== new URL(siteUrl).hostname;
+    const source = new URL(src);
+    const site = new URL(siteUrl);
+    // remotePatterns 同时约束 protocol 与 hostname；只比 hostname 时，
+    // https 站点上的 http://同域 图片不会被判为“跳过优化”，
+    // 但 Next 白名单里没有该 http 条目，会在运行时报错。
+    return source.protocol !== site.protocol || source.hostname !== site.hostname;
   } catch {
     return true;
   }

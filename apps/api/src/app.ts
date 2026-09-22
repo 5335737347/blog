@@ -5,7 +5,7 @@ import Fastify from "fastify";
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
-import { apiSuccess, registerErrorHandler } from "@/http";
+import { apiFailure, apiSuccess, registerErrorHandler } from "@/http";
 import { isAllowedOrigin } from "@/server/request-guard";
 import { checkHealth } from "@/server/health/health-service";
 import { registerCompression } from "@/server/compression";
@@ -40,12 +40,34 @@ function resolveRequestId(headers: IncomingHttpHeaders): string {
   return crypto.randomUUID();
 }
 
-export function buildApp() {
+export interface BuildAppOptions {
+  /**
+   * 测试专用：在路由注册阶段收集实际路由表，用来断言来源校验/授权矩阵
+   * 没有在新路由加入后过期。生产默认不传。
+   */
+  onRoute?: (route: { method: string | string[]; url: string }) => void;
+}
+
+export function buildApp(options: BuildAppOptions = {}) {
   const app = Fastify({
     logger: process.env.NODE_ENV !== "test",
     trustProxy: process.env.TRUST_PROXY === "true",
+    // Fastify 默认只接受约 1 MiB 的 JSON 请求体，而文章服务允许 100 万字符的
+    // 正文（中文 UTF-8 约 3 字节/字）。此前默认值会让约 35 万中文字符的合法
+    // 文章在进入服务层之前就以 FST_ERR_CTP_BODY_TOO_LARGE 被拒。
+    // 这里显式放宽到 8 MiB，服务层仍按字符数做业务校验。
+    bodyLimit: 8 * 1024 * 1024,
     genReqId: (request) => resolveRequestId(request.headers),
   });
+
+  if (options.onRoute) {
+    app.addHook("onRoute", (route) => {
+      options.onRoute?.({
+        method: route.method as string | string[],
+        url: route.url,
+      });
+    });
+  }
 
   // 响应压缩。必须挂在根实例上：Fastify 的 onSend 在注册时刻捕获钩子链，
   // 通过 register 引入的插件钩子不会应用到之后注册的路由（见 compression.ts 注释）。
@@ -91,6 +113,12 @@ export function buildApp() {
     await api.register(settingsRoutes);
     await api.register(taxonomyRoutes);
   }, { prefix: "/api" });
+
+  // 未匹配路由也走统一失败信封，否则客户端会收到 Fastify 默认的
+  // {"statusCode":404,"error":"Not Found",...}，与 Contracts/OpenAPI 不一致。
+  app.setNotFoundHandler((_request, reply) =>
+    reply.status(404).send(apiFailure("接口不存在", "NOT_FOUND"))
+  );
 
   app.setErrorHandler((error, _request, reply) => registerErrorHandler(reply, error));
   return app;

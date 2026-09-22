@@ -91,18 +91,19 @@ Web Proxy 调用 `/api/auth/me` 提前处理页面跳转，但这只是体验层
 | 留言板留言 | SQLite `Comment`（`postId` 为 `null`） | ✅ `/admin/comments` |
 | 博客标题与描述 | SQLite `Setting` | ✅ `/admin/settings` |
 | 个人资料、近况、社交链接 | SQLite `Profile`（单行表） | ✅ `/admin/settings` |
-| 背景音乐 | 磁盘 + SQLite 索引 | ✅ `/admin/music` |
-| 首页壁纸 | 代码 `apps/web/src/config/home.ts` | ❌ |
+| 背景音乐 | 磁盘 + SQLite `Music` 索引 | ✅ `/admin/resources` |
+| 图片资源库 | SQLite `MediaImage` 登记 + 本地文件或外部 URL | ✅ `/admin/resources` |
+| 首页壁纸 | SQLite `HomeWallpaper` + 本地文件 | ✅ `/admin/resources` |
 
-**图片走外部图床，本站不提供图片上传。** 文章封面、正文配图与头像都是自由文本 URL
-（Markdown 里直接写外链即可）。原先的 `/admin/images` 与 `/api/upload` 只管理
-`apps/web/public/images` 下的本地上传，与外部图床的工作流重复，已移除。
+**图片同时支持本地文件与外部图床 URL。** 文章封面、正文配图与头像仍可直接写 URL；
+`/api/images` 提供登记（`MediaImage`）、上传、外链收编与引用检查，后台在
+`/admin/resources` 统一管理。图库列表是管理端数据，读取需要管理员会话。
 
 **原则：作者会经常修改的内容一律进数据库并配后台入口。**
 
-个人资料曾经放在 `apps/web/src/config/profile.ts`（已删除）——一个代码文件，改一句简介需要
-改代码、重新构建再重启服务，而同一页上的博客标题却能直接改。这种割裂已移除；
-只剩首页壁纸仍留在代码里，因为它属于主题实现而不是内容。 <!-- check-docs:allow-missing-path -->
+个人资料、音乐、图片登记和首页壁纸都已从代码/纯文件系统迁入数据库；首页壁纸管理系统
+首次访问时会播种仓库自带的默认壁纸，之后由后台增删启停。`apps/web/src/config/home.ts`
+只保留“API 不可达时首页回退到仓库默认壁纸”的前端兜底列表。
 
 `Profile` 的 `socialLinks` 存 JSON 字符串而不是拆表：它总是整体读写、条目数量小
 （个位数），拆表只会带来额外的 join 与端点。写入时的结构校验（长度、数量、URL 协议）

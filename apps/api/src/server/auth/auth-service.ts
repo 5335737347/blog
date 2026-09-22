@@ -38,6 +38,15 @@ interface AuthUserRow {
   tokenVersion: number;
 }
 
+/**
+ * 账号不存在或标识符歧义时用于对比的哑哈希。
+ *
+ * 之前登录是 `if (!user || !(await verifyPassword(...)))`：用户不存在时短路，
+ * 响应时间明显短于存在但密码错误的情况，外部可以据此枚举账号。这里先无条件
+ * 做一次 bcrypt 比较，让两条路径的耗时接近。
+ */
+const DUMMY_PASSWORD_HASH = "$2b$10$oyenW.yB04yHsLBNkrkVt..DQo.Acpe/oInCrq7tJ.YsBcN.vOMDa";
+
 function objectInput(input: unknown): Record<string, unknown> {
   return input && typeof input === "object" && !Array.isArray(input)
     ? (input as Record<string, unknown>)
@@ -180,7 +189,7 @@ export async function registerUser(input: unknown) {
     throw badRequest("昵称不能超过 32 个字符");
   }
   assertNewPassword(password);
-  if (!validEmail(email)) {
+  if (email.length > 254 || !validEmail(email)) {
     throw badRequest("邮箱格式不正确");
   }
 
@@ -223,8 +232,16 @@ export async function registerUser(input: unknown) {
       INSERT INTO "User" ("id", "username", "email", "phone", "displayName", "password", "role")
       VALUES (${user.id}, ${username}, ${email}, NULL, ${user.displayName}, ${await hashPassword(password)}, 'USER')
     `;
-  } catch {
-    throw badRequest("用户名或邮箱已被使用");
+  } catch (error) {
+    // 只把真正的唯一约束冲突翻译成 400；磁盘/数据库故障必须继续冒泡成 500，
+    // 否则运维看到的是“用户名已被使用”，真实故障被永久掩盖。
+    const code = (error as { code?: unknown }).code;
+    const message = error instanceof Error ? error.message : "";
+    if (code === "P2002" || /UNIQUE constraint failed/i.test(message)) {
+      throw badRequest("用户名或邮箱已被使用");
+    }
+    console.error("[auth] 创建用户失败:", message || error);
+    throw error;
   }
 
   const session = userSession(user);
@@ -258,7 +275,9 @@ export async function loginUser(input: unknown) {
   `;
   const user = users.length === 1 ? users[0] : null;
 
-  if (!user || !(await verifyPassword(password, user.password))) {
+  // 无论账号是否存在/是否歧义都执行 bcrypt，降低用户名枚举的时间侧信道。
+  const passwordMatches = await verifyPassword(password, user?.password ?? DUMMY_PASSWORD_HASH);
+  if (!user || !passwordMatches) {
     throw unauthorized("用户名或密码错误");
   }
 

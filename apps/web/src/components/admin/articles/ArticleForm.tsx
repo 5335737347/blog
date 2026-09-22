@@ -86,9 +86,11 @@ export default function ArticleForm({
   const [error, setError] = useState("");
 
   useEffect(() => {
+    // 管理端必须拿全量：公开 /api/tags 会隐藏零文章或只有草稿文章的标签，
+    // 否则编辑器里会出现“已有标签选不到、已选标签显示不出来”的问题。
     Promise.all([
-      fetch("/api/tags").then((response) => readApiData<Tag[]>(response)),
-      fetch("/api/categories").then((response) => readApiData<Category[]>(response)),
+      fetch("/api/tags?all=true").then((response) => readApiData<Tag[]>(response)),
+      fetch("/api/categories?all=true").then((response) => readApiData<Category[]>(response)),
       fetch("/api/collections?all=true").then((response) => readApiData<Project[]>(response)),
     ])
       .then(([nextTags, nextCategories, nextProjects]) => {
@@ -126,15 +128,22 @@ export default function ArticleForm({
       return;
     }
 
+    const slugValue = slug.trim();
     const body = {
       title: title.trim(),
-      slug: slug.trim() || slugify(title),
+      // 编辑时清空 slug 不应悄悄改成标题派生的新 URL；省略字段让 API 保留原 slug。
+      ...(slugValue
+        ? { slug: slugValue }
+        : isEditing
+          ? {}
+          : { slug: slugify(title) }),
       excerpt: excerpt.trim() || null,
       content: content.trim(),
       coverImage: coverImage.trim() || null,
       published,
-      // 空串表示「未指定」，服务端按发布状态自行决定（发布时取当前时间）
-      publishedAt: publishedAt ? new Date(publishedAt).toISOString() : null,
+      // 空值表示「未指定」：省略字段而不是发 null。服务端把显式 null 解释为
+      // “清空发布日期”，曾导致草稿从后台发布后 publishedAt 变成 null。
+      ...(publishedAt ? { publishedAt: new Date(publishedAt).toISOString() } : {}),
       categoryId: categoryId || null,
       projectId: projectId || null,
       tagIds: selectedTags,

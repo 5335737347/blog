@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { slugify } from "@/lib/utils";
+import { isSafeImageReference, slugify } from "@/lib/utils";
 import { badRequest, notFound } from "@/server/errors";
 import type { Prisma } from "@prisma/client";
 
@@ -68,6 +68,9 @@ function optionalSlug(value: unknown): string | undefined {
 
 function optionalCoverImage(value: unknown): string | undefined {
   const url = optionalText(value, 2048, "封面地址");
+  if (url && !isSafeImageReference(url)) {
+    throw badRequest("封面地址仅支持 http(s) 或站内相对路径");
+  }
   return url ?? undefined;
 }
 

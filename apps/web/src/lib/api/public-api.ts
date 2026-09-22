@@ -30,12 +30,6 @@ interface TaxonomyDto {
   postCount: number;
 }
 
-export interface ContentLayoutDataDto {
-  tags: TaxonomyDto[];
-  recentPosts: { slug: string; title: string }[];
-  settings: PublicSettingsDto;
-}
-
 /** 标签/分类列表页接口的返回形状。 */
 interface TaxonomyArchiveListing {
   articles: PaginatedResult<PostSummary>;
@@ -101,7 +95,11 @@ async function getApiData<T>(path: string, revalidate = REVALIDATE_SECONDS): Pro
 // 用 cache() 去重可以消除重复的 API 往返。
 export const getPublicSettings = cache(async (): Promise<PublicSettingsDto> => {
   try {
-    return await getApiData<PublicSettingsDto>("/api/public/settings");
+    const data = await getApiData<PublicSettingsDto>("/api/public/settings");
+    return {
+      blogTitle: data.blogTitle || DEFAULT_BLOG_TITLE,
+      blogDescription: data.blogDescription || DEFAULT_BLOG_DESCRIPTION,
+    };
   } catch {
     return {
       blogTitle: DEFAULT_BLOG_TITLE,
@@ -188,12 +186,6 @@ export const getPublicTags = cache(async (): Promise<TaxonomyDto[]> => {
 });
 
 /**
- * 侧边栏数据被 6 个公开路由使用。它必须可降级：页面现在可以在构建期预渲染，
- * 而构建期（以及 CI）通常没有运行 API。若这里抛错，整站构建会直接失败；
- * 即使构建成功，API 短暂抖动也会让所有带侧边栏的页面变成 500。
- * 返回空侧边栏后，ISR 会在下一个 revalidate 周期自动补上真实数据。
- */
-/**
  * 同一路径在每个进程内只提示一次。
  *
  * 构建期会并行预渲染多个页面，API 不可用时每个页面都会命同一条降级分支；
@@ -202,28 +194,23 @@ export const getPublicTags = cache(async (): Promise<TaxonomyDto[]> => {
  */
 const warnedDegradedPaths = new Set<string>();
 
+/**
+ * 旧 API 形状兼容。
+ *
+ * `npm run update` 在重启 API 之前就构建 Web，因此新前端可能在一次构建里
+ * 拿到旧 API 的 200 响应（缺新字段）。数组字段统一在这里兜底，避免
+ * `undefined.map/length` 把构建或 ISR 预渲染打崩。
+ */
+function asArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
+}
+
 function warnDegradedOnce(path: string, error: unknown) {
   if (warnedDegradedPaths.has(path)) return;
   warnedDegradedPaths.add(path);
   const reason = error instanceof Error ? error.message : String(error);
   console.warn(`[public-api] ${path} 不可用（${reason}），已降级为默认内容。`);
 }
-
-export const getContentLayoutData = cache(async (): Promise<ContentLayoutDataDto> => {
-  try {
-    return await getApiData<ContentLayoutDataDto>("/api/public/layout");
-  } catch (error) {
-    warnDegradedOnce("/api/public/layout", error);
-    return {
-      tags: [],
-      recentPosts: [],
-      settings: {
-        blogTitle: DEFAULT_BLOG_TITLE,
-        blogDescription: DEFAULT_BLOG_DESCRIPTION,
-      },
-    };
-  }
-});
 
 /**
  * 个人资料（/about、/now 与页脚共用）。
@@ -246,7 +233,12 @@ const EMPTY_PROFILE: ProfileDto = {
 
 export const getProfile = cache(async (): Promise<ProfileDto> => {
   try {
-    return await getApiData<ProfileDto>("/api/public/profile");
+    const data = await getApiData<ProfileDto>("/api/public/profile");
+    return {
+      ...EMPTY_PROFILE,
+      ...data,
+      socialLinks: asArray(data.socialLinks),
+    };
   } catch (error) {
     warnDegradedOnce("/api/public/profile", error);
     return { ...EMPTY_PROFILE };
@@ -256,28 +248,50 @@ export const getProfile = cache(async (): Promise<ProfileDto> => {
 /** 项目页（/projects）：项目卡片（已发布计数 + 最近更新），按最近更新倒序。 */
 export const getProjectsData = cache(async (): Promise<ProjectsPageData> => {
   try {
-    return await getApiData<ProjectsPageData>("/api/public/collections");
+    const data = await getApiData<ProjectsPageData>("/api/public/collections");
+    return { projects: asArray(data.projects) };
   } catch (error) {
     warnDegradedOnce("/api/public/collections", error);
     return { projects: [] };
   }
 });
 
-export async function getHomePageData(): Promise<HomePageData> {  try {
-    return await getApiData<HomePageData>("/api/public/home");
+export async function getHomePageData(): Promise<HomePageData> {
+  try {
+    const data = await getApiData<HomePageData>("/api/public/home");
+    return {
+      recentPosts: asArray(data.recentPosts),
+      categories: asArray(data.categories),
+      tags: asArray(data.tags),
+    };
   } catch {
     return { recentPosts: [], categories: [], tags: [] };
   }
 }
 
-export const getArticleAdjacentData = cache((slug: string) =>
-  getApiData<ArticleAdjacent | null>(
+export const getArticleAdjacentData = cache(async (slug: string) => {
+  const data = await getApiData<ArticleAdjacent | null>(
     `/api/public/articles/${encodeURIComponent(slug)}/adjacent`
-  )
-);
+  );
+  if (!data) return null;
+  return {
+    previous: data.previous ?? null,
+    next: data.next ?? null,
+    related: asArray<PostSummary>(data.related),
+  };
+});
 
-export function getRssFeedData() {
-  return getApiData<{ posts: RssPostDto[]; settings: PublicSettingsDto }>("/api/public/rss-data");
+export async function getRssFeedData() {
+  const data = await getApiData<{ posts: RssPostDto[]; settings: PublicSettingsDto }>(
+    "/api/public/rss-data"
+  );
+  return {
+    posts: asArray<RssPostDto>(data.posts),
+    settings: {
+      blogTitle: data.settings?.blogTitle || DEFAULT_BLOG_TITLE,
+      blogDescription: data.settings?.blogDescription || DEFAULT_BLOG_DESCRIPTION,
+    },
+  };
 }
 
 export async function getSitemapData(): Promise<SitemapDataDto> {

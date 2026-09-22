@@ -92,10 +92,16 @@ export async function createMusicFromFile(input: MusicFileInput) {
   await mkdir(uploadDir, { recursive: true });
   await writeFile(path.join(uploadDir, filename), buffer);
 
+  const title = trimmedString(input.title) || file.name || "Unknown";
+  const artist = optionalText(input.artist);
+  if (title.length > 120 || (artist && artist.length > 120)) {
+    throw badRequest("音乐标题或作者过长");
+  }
+
   const track = await prisma.music.create({
     data: {
-      title: trimmedString(input.title) || file.name || "Unknown",
-      artist: optionalText(input.artist),
+      title,
+      artist,
       url: `/music/${filename}`,
     },
     select: musicTrackSelect,
@@ -114,12 +120,16 @@ export async function createMusicFromUrl(input: MusicUrlInput) {
   if (title.length > 120 || url.length > 2048) {
     throw badRequest("音乐标题或 URL 过长");
   }
+  const artist = optionalText(input.artist);
+  if (artist && artist.length > 120) {
+    throw badRequest("音乐作者过长");
+  }
   assertAllowedExternalUrl(url);
 
   const track = await prisma.music.create({
     data: {
       title,
-      artist: optionalText(input.artist),
+      artist,
       url,
     },
     select: musicTrackSelect,
@@ -202,8 +212,16 @@ export interface ImageQuery {
 }
 
 export async function listImages(query: ImageQuery = {}) {
+  let kind: ImageKind | undefined;
+  if (query.kind !== undefined) {
+    if (!isImageKind(query.kind)) {
+      throw badRequest("图片类型不正确，必须是 cover 或 article");
+    }
+    kind = query.kind;
+  }
+
   const rows = await prisma.mediaImage.findMany({
-    where: isImageKind(query.kind) ? { kind: query.kind } : undefined,
+    where: kind ? { kind } : undefined,
     orderBy: { createdAt: "desc" },
     select: imageSelect,
   });
@@ -216,6 +234,9 @@ export interface ImageFileInput {
 }
 
 async function registerImage(kind: ImageKind, url: string, name: string) {
+  if (!name || name.length > 200) {
+    throw badRequest("图片名称不能为空且不能超过 200 个字符");
+  }
   try {
     const row = await prisma.mediaImage.create({
       data: { kind, url, name },

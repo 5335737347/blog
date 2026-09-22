@@ -35,6 +35,17 @@ export function slugify(text: string): string {
   return "x" + Math.abs(hash).toString(36);
 }
 
+// ====== 分页参数 ======
+
+/** 与 API 的 MAX_PAGE 保持一致，避免把超大页码继续传给 API。 */
+export const MAX_PAGE = 10_000;
+
+export function parsePageParam(value: string | undefined): number {
+  const parsed = Number.parseInt(value || "1", 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return 1;
+  return Math.min(parsed, MAX_PAGE);
+}
+
 // ====== 展示格式化 ======
 
 export function formatDate(date: Date | string): string {

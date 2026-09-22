@@ -62,6 +62,16 @@ test("every failure response is JSON with a parseable envelope", async () => {
   assert.equal(body.error.retryAfterSeconds, undefined);
 });
 
+test("unknown routes use the same JSON failure envelope", async () => {
+  const response = await app.inject({ method: "GET", url: "/api/does-not-exist" });
+  assert.equal(response.statusCode, 404);
+  assert.match(String(response.headers["content-type"]), /application\/json/);
+  const body = response.json();
+  assert.equal(body.success, false);
+  assert.equal(body.error.code, "NOT_FOUND");
+  assert.equal(body.error.message, "接口不存在");
+});
+
 test("the lockout response carries retryAfterSeconds inside the envelope", async () => {
   // 上一条用例已经消耗了 1 次机会，再错 2 次即用满 3 次。
   await login("not-the-password");

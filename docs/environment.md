@@ -96,12 +96,18 @@ API 读的是另一个库**。现在 `databaseFilePath()` / `databaseUrl()` 统�
 
 `API_INTERNAL_URL` 只供服务器使用，不要添加 `NEXT_PUBLIC_` 前缀。
 
+⚠️ **`/api/*` 的 rewrite 目标在 `next build` 时固化。** 只改 `.env`/进程环境后
+重启 `next start`，浏览器请求仍会去构建时的旧地址，而服务端 SSR 可能已经用新
+地址，形成“SSR 连新 API、浏览器连旧 API”的分叉。修改该变量后必须重新执行
+`npm run build`。Web 启动时会对比 `routes-manifest.json` 与当前环境，不一致会
+拒绝启动；看到 “API_INTERNAL_URL 与当前构建产物不一致” 时重建即可。
+
 ## 数据与媒体
 
 | 变量 | 使用方 | 说明 |
 |---|---|---|
 | `DATABASE_URL` | API/Prisma 工具 | SQLite 默认值为 `file:./prisma/dev.db`，相对仓库根解析 |
-| `MEDIA_ROOT` | API | 上传目录；留空时使用 `apps/web/public` |
+| `MEDIA_ROOT` | API | 上传目录；留空时使用 `apps/web/public`。当前 Web 只把这个目录作为静态资源提供，改成其它路径时必须同步配置反向代理静态映射，否则文件写入成功但 URL 404 |
 
 ## 认证与初始化
 

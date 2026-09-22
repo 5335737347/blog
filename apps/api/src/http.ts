@@ -40,9 +40,22 @@ export function sessionToken(request: FastifyRequest): string | undefined {
   return request.cookies[SESSION_COOKIE_NAME];
 }
 
+/** 分页页码上限。超过时钳制，而不是把巨大 offset 交给 SQLite 触发 500。 */
+export const MAX_PAGE = 10_000;
+
 export function positiveInt(value: unknown, fallback: number): number {
   const parsed = Number.parseInt(typeof value === "string" ? value : "", 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+/**
+ * 分页页码。解析失败回退 1，超大页码钳到 MAX_PAGE。
+ *
+ * 之前直接 `(page - 1) * pageSize`：攻击者传 `page=10^24` 时 offset 超出
+ * SQLite 可表示的整数范围，Prisma 直接抛错，公开列表端点返回 500。
+ */
+export function pageNumber(value: unknown): number {
+  return Math.min(positiveInt(value, 1), MAX_PAGE);
 }
 
 /**
@@ -91,11 +104,16 @@ export function registerErrorHandler(reply: FastifyReply, error: unknown) {
   const statusCode = (error as { statusCode?: unknown }).statusCode;
   if (typeof statusCode === "number" && statusCode >= 400 && statusCode < 500) {
     const code = (error as { code?: unknown }).code;
-    // 细节只进服务端日志，响应体保持泛化，避免回显框架内部信息。
+    // 413 需要比「请求格式不正确」更可执行的提示：正文超限时前端/CLI 才知道
+    // 应该缩短内容，而不是误以为 JSON 坏了。
+    const message =
+      statusCode === 413
+        ? "请求体过大，请减少正文或附件大小"
+        : "请求格式不正确";
     reply.log.warn({ err: error }, "客户端请求无效");
     return reply
       .status(statusCode)
-      .send(apiFailure("请求格式不正确", typeof code === "string" ? code : "BAD_REQUEST"));
+      .send(apiFailure(message, typeof code === "string" ? code : "BAD_REQUEST"));
   }
 
   reply.log.error(error);

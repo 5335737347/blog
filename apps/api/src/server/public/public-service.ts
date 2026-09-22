@@ -44,12 +44,6 @@ export interface PublicSettingsDto {
   blogDescription: string;
 }
 
-export interface ContentLayoutDataDto {
-  tags: Awaited<ReturnType<typeof listTags>>;
-  recentPosts: { slug: string; title: string }[];
-  settings: PublicSettingsDto;
-}
-
 export interface RssPostDto {
   slug: string;
   title: string;
@@ -141,27 +135,6 @@ export async function getCategoryArchivePageData(
   ]);
 
   return { category, articles };
-}
-
-export async function getContentLayoutData(): Promise<ContentLayoutDataDto> {
-  const [tags, recentArticles, settings] = await Promise.all([
-    listTags(),
-    listArticles({
-      page: 1,
-      pageSize: 5,
-      isAdmin: false,
-    }),
-    getPublicSettings(),
-  ]);
-
-  return {
-    tags,
-    recentPosts: recentArticles.items.map((post) => ({
-      slug: post.slug,
-      title: post.title,
-    })),
-    settings,
-  };
 }
 
 export async function getRssFeedData() {

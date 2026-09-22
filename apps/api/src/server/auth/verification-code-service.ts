@@ -323,30 +323,50 @@ export async function assertVerificationCode(
 ) {
   const target = normalizeVerificationTarget(inputTarget);
   const code = typeof inputCode === "string" ? inputCode.trim() : "";
-  const key = codeKey(purpose, target);
-  const entry = await prisma.verificationCode.findUnique({ where: { key } });
-
-  if (!/^\d{6}$/.test(code) || !entry) {
+  if (!/^\d{6}$/.test(code)) {
     throw badRequest("邮箱验证码错误");
   }
-  if (entry.expiresAt.getTime() < Date.now()) {
-    await prisma.verificationCode.delete({ where: { key } });
-    throw badRequest("邮箱验证码已过期，请重新获取");
-  }
-  if (entry.attempts >= MAX_ATTEMPTS) {
-    await prisma.verificationCode.delete({ where: { key } });
+
+  const key = codeKey(purpose, target);
+
+  // 先用一条条件 UPDATE 原子地占用一个尝试名额，再比较哈希。
+  //
+  // 旧实现是「查 attempts → 比较 → 失败后 +1」。N 个并发请求可以同时读到
+  // attempts=0 并全部进入哈希比较，5 次上限在并发下形同虚设；6 位验证码
+  // 的枚举空间因此会被放大。条件更新把「检查 + 占用」压成一条 SQL，最多只有
+  // MAX_ATTEMPTS 个请求能拿到名额。
+  const now = new Date();
+  const claimed = await prisma.verificationCode.updateMany({
+    where: {
+      key,
+      expiresAt: { gt: now },
+      attempts: { lt: MAX_ATTEMPTS },
+    },
+    data: { attempts: { increment: 1 } },
+  });
+  if (claimed.count === 0) {
+    const entry = await prisma.verificationCode.findUnique({ where: { key } });
+    if (!entry) throw badRequest("邮箱验证码错误");
+    if (entry.expiresAt.getTime() <= now.getTime()) {
+      await prisma.verificationCode.deleteMany({ where: { key } });
+      throw badRequest("邮箱验证码已过期，请重新获取");
+    }
+    // 这里刻意不删除：名额已满时仍可能有并发请求正在比较/消费。
+    // 提前 delete 会把它们的「验证码错误」变成「已不存在」，也会让并发用例
+    // 难以区分“确实参与了比较”和“根本没拿到名额”。行会保留到过期或重新发送。
     throw badRequest("邮箱验证码尝试次数过多，请重新获取");
   }
 
-  if (!timingSafeEqualHex(entry.hash, codeHash(purpose, target, code))) {
-    await prisma.verificationCode.update({
-      where: { key },
-      data: { attempts: { increment: 1 } },
-    });
+  const entry = await prisma.verificationCode.findUnique({ where: { key } });
+  if (!entry || !timingSafeEqualHex(entry.hash, codeHash(purpose, target, code))) {
     throw badRequest("邮箱验证码错误");
   }
 
-  await prisma.verificationCode.delete({ where: { key } });
+  // 一次性消费：并发提交同一个正确验证码时，只有 deleteMany 返回 1 的请求成功。
+  const consumed = await prisma.verificationCode.deleteMany({ where: { key } });
+  if (consumed.count === 0) {
+    throw badRequest("邮箱验证码错误");
+  }
 }
 
 export function getRegistrationCapabilities(): { email: boolean } {

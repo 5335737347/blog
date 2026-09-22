@@ -135,7 +135,12 @@ function shutdown(code) {
   process.exit(code);
 }
 process.on("exit", () => {
-  // 兜底清理：正常路径已清过，这里覆盖异常退出（SIGKILL 除外，已由 .gitignore 兜底）
+  // 兜底清理：正常路径已清过，这里覆盖异常退出（SIGKILL 除外，已由 .gitignore 兜底）。
+  // shutdown() 里先发 SIGTERM 便于子进程优雅退出，但 process.exit() 不会等待；
+  // 若子进程尚未退出，这里同步补一发 SIGKILL，避免遗留占用端口的冒烟实例。
+  for (const child of children) {
+    try { child.kill("SIGKILL"); } catch { /* ignore */ }
+  }
   removeWebEnvOverride();
   removeSmokeBuild();
   try { rmSync(tempDir, { recursive: true, force: true }); } catch { /* ignore */ }

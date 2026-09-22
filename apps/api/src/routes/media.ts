@@ -51,9 +51,12 @@ const mediaRoutes: FastifyPluginAsync = async (app) => {
     return apiSuccess(await deleteMusicTrack(request.params.id));
   });
 
-  app.get<{ Querystring: ImageQuery }>("/images", async (request) =>
-    apiSuccess(await listImages({ kind: request.query.kind }))
-  );
+  // 图库是后台素材库，可能包含未发布文章配图、私有素材与带签名参数的外链。
+  // 公开站点的前台渲染不依赖它，因此读取也必须由管理员会话保护。
+  app.get<{ Querystring: ImageQuery }>("/images", async (request) => {
+    await requireAdminSession(sessionToken(request));
+    return apiSuccess(await listImages({ kind: request.query.kind }));
+  });
 
   // multipart（上传文件，kind 随表单字段）与 JSON（登记外部图床 URL）二选一。
   app.post("/images", async (request, reply) => {

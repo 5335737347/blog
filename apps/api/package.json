@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json && tsc-alias -p tsconfig.json",
-    "start": "node dist/index.js",
+    "start": "node scripts/start.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.check.json",
     "test": "tsx --test --import ./tests/helpers/offline-env.ts tests/*.test.ts"
   },

@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { normalizeMarkdown, parseMarkdownDocument, parseOptionalDate } from "@/lib/content";
-import { autoExcerpt, extractHashTags, slugify } from "@/lib/utils";
+import { autoExcerpt, extractHashTags, isSafeImageReference, slugify } from "@/lib/utils";
 import { badRequest, ServiceError } from "@/server/errors";
 import { resolveTagIds } from "@/server/taxonomy/taxonomy-service";
 import mammoth from "mammoth";
@@ -62,9 +62,17 @@ function booleanValue(value: unknown): boolean | undefined {
 }
 
 function stringArray(value: unknown): string[] {
-  return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === "string")
+  const items = Array.isArray(value)
+    ? value
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => item.trim())
+        .filter(Boolean)
     : [];
+  const unique = [...new Set(items)];
+  if (unique.length > 50) {
+    throw badRequest("单篇文章最多选择 50 个标签");
+  }
+  return unique;
 }
 
 /**
@@ -153,8 +161,15 @@ async function createPostFromMarkdown(input: CreatePostFromMarkdownInput) {
   const autoTags = extractHashTags(content);
   // 按名字的 Set 只做粗略去重；真正保证唯一性的是 resolveTagIds 内部的 slug 去重。
   const allTags = [
-    ...new Set([...(input.tags || []), ...parsed.frontmatter.tags, ...autoTags]),
+    ...new Set(
+      [...(input.tags || []), ...parsed.frontmatter.tags, ...autoTags]
+        .map((tag) => tag.trim())
+        .filter(Boolean)
+    ),
   ];
+  if (allTags.length > 50) {
+    throw badRequest("单篇文章最多选择 50 个标签");
+  }
   const tagConnects = (await resolveTagIds(allTags)).map((tagId) => ({ tagId }));
   const category = await resolveCategory(input.category || parsed.frontmatter.category);
   const project = await resolveProject(input.project || parsed.frontmatter.project);
@@ -162,8 +177,17 @@ async function createPostFromMarkdown(input: CreatePostFromMarkdownInput) {
   // 封面：笔记显式给出 > 已有文章的封面 > 随机内置封面（仅新建时初始化，
   // 覆盖更新不会重新随机——频繁保存不该让封面跳来跳去）。
   const explicitCover = input.coverImage || parsed.frontmatter.coverImage || null;
+  if (explicitCover && explicitCover.length > 2048) {
+    throw badRequest("封面图 URL 过长");
+  }
+  if (explicitCover && !isSafeImageReference(explicitCover)) {
+    throw badRequest("封面图地址仅支持 http(s) 或站内相对路径");
+  }
 
   const excerpt = input.excerpt || parsed.frontmatter.excerpt || autoExcerpt(content) || null;
+  if (excerpt && excerpt.length > 500) {
+    throw badRequest("摘要不能超过 500 个字符");
+  }
 
   if (existing) {
     // 覆盖更新（Obsidian「改完再发」工作流）：

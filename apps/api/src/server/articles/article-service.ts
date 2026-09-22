@@ -1,6 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { prisma, cleanOrphanTags } from "@/lib/prisma";
-import { autoExcerpt, extractHashTags, slugify } from "@/lib/utils";
+import { autoExcerpt, extractHashTags, isSafeImageReference, slugify } from "@/lib/utils";
 import { badRequest, notFound } from "@/server/errors";
 import {
   postDetailSelect,
@@ -191,6 +191,9 @@ export async function createArticle(input: ArticleMutationInput) {
   const coverImage = optionalText(input.coverImage);
   if (excerpt && excerpt.length > 500) throw badRequest("摘要不能超过 500 个字符");
   if (coverImage && coverImage.length > 2048) throw badRequest("封面图 URL 过长");
+  if (coverImage && !isSafeImageReference(coverImage)) {
+    throw badRequest("封面图地址仅支持 http(s) 或站内相对路径");
+  }
 
   const post = await prisma.post.create({
     data: {
@@ -302,6 +305,9 @@ export async function updateArticle(id: string, input: ArticleMutationInput) {
   if (input.coverImage !== undefined) {
     const coverImage = optionalText(input.coverImage);
     if (coverImage && coverImage.length > 2048) throw badRequest("封面图 URL 过长");
+    if (coverImage && !isSafeImageReference(coverImage)) {
+      throw badRequest("封面图地址仅支持 http(s) 或站内相对路径");
+    }
     data.coverImage = coverImage || null;
   }
   if (published !== undefined) {

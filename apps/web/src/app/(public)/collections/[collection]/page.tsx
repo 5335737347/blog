@@ -5,6 +5,7 @@ import Pagination from "@/components/public/articles/Pagination";
 import PageShell, { PageHeader } from "@/components/public/layout/PageShell";
 import { getCollectionPageData } from "@/lib/api/public-api";
 import { pageAlternates } from "@/lib/metadata";
+import { parsePageParam } from "@/lib/utils";
 
 const PAGE_SIZE = 10;
 
@@ -16,7 +17,7 @@ interface CollectionPageProps {
 export async function generateMetadata({ params, searchParams }: CollectionPageProps): Promise<Metadata> {
   const { collection: projectSlug } = await params;
   const { page: pageParam } = await searchParams;
-  const page = Math.max(1, Number.parseInt(pageParam || "1", 10) || 1);
+  const page = parsePageParam(pageParam);
   const { project } = await getCollectionPageData(projectSlug, 1, 1);
   if (!project) return { title: "项目不存在" };
 
@@ -32,7 +33,7 @@ export default async function CollectionPage({ params, searchParams }: Collectio
     params,
     searchParams,
   ]);
-  const page = Math.max(1, Number.parseInt(pageParam || "1", 10) || 1);
+  const page = parsePageParam(pageParam);
   const { project, articles } = await getCollectionPageData(projectSlug, page, PAGE_SIZE);
 
   if (!project) notFound();

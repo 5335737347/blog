@@ -1,6 +1,6 @@
 # Blog project memory
 
-Last updated: 2026-09-17 (Asia/Shanghai)
+Last updated: 2026-09-22 (Asia/Shanghai)
 
 ## Product direction
 
@@ -1399,3 +1399,64 @@ they need a Chromium binary (found via `CHROME_BIN` or the Playwright cache).
   because the endpoint itself was new.)
 - Server state after the aborted update: code/migrations applied, PM2 still on the
   previous release — re-running `npm run update` after pulling the fix completes it.
+
+
+## Completed 2026-09-22 (late): full-code audit hardening batch
+
+- Rolled back the premature in-progress edits first, then re-audited against
+  `d1c946f` before changing code. Findings were split into real code/runtime issues,
+  intentional design trade-offs, and docs-only staleness; stale docs were not
+  treated as code bugs.
+- Data/ops safety:
+  - `prisma/seed.ts` now refuses to touch a non-empty database unless both
+    `--reset` and `ALLOW_PRODUCTION_SEED=true` are present; no longer trusts ambient
+    `NODE_ENV`. It lowercases `ADMIN_EMAIL` and enforces `ADMIN_PASSWORD` length /
+    production non-temp-password rules.
+  - `scripts/update.mjs` now resolves the DB through `databaseFilePath()` and aborts
+    if the file is missing, instead of silently letting `migrate deploy` create an
+    empty DB. `--allow-new-database` is the explicit escape hatch.
+- Auth:
+  - Ordinary, existing accounts are no longer hard-locked by the account failure
+    counter; the counter is still recorded. ADMIN accounts keep the deliberate
+    3-failure/15-minute cooldown, and unresolved identifiers keep a 10-failure cap
+    so account enumeration stays bounded. Docs now describe this split accurately.
+  - Added a dummy bcrypt comparison for unknown/ambiguous users to reduce login
+    timing enumeration.
+  - Verification-code attempts are now claimed with an atomic conditional
+    `updateMany`; exhausted rows are kept instead of deleted so in-flight compares
+    race safely. New concurrency test asserts exactly 5 of 10 concurrent guesses
+    reach hash comparison.
+- API/robustness:
+  - Fastify bodyLimit is 8 MiB and 413 maps to a readable message.
+  - `page`/`pageNumber` clamps to MAX_PAGE=10,000; huge page no longer 500s.
+  - `publishedAt` is omitted by the admin editor when blank, so draft->publish keeps
+    the automatic timestamp instead of clearing it.
+  - Image library GET requires admin; invalid `kind` returns 400. Cover image
+    references are checked for safe http(s)/site-relative schemes in article,
+    project and publishing services.
+  - Unknown API routes now return the unified JSON failure envelope.
+  - Removed the dead `/api/public/layout` endpoint and its Web client.
+  - Home/project/profile/adjacent fetchers normalize arrays so old-API shapes
+    cannot crash Web build/ISR during the update window.
+  - Web start checks `routes-manifest.json` against runtime `API_INTERNAL_URL` and
+    refuses to start on split-brain; API `npm run start:api` now defaults
+    `NODE_ENV=production`.
+- Frontend/design:
+  - Removed the global `(public)/loading.tsx` streaming boundary so missing
+    article/category/tag/collection pages return real 404s (verified with curl:
+    404 instead of 200 + NEXT_HTTP_ERROR_FALLBACK). `/articles` list still renders.
+  - Admin article editor fetches `/api/tags?all=true` and categories with all=true,
+    so unused/draft-only tags remain selectable.
+  - Clearing the slug field while editing preserves the existing URL instead of
+    deriving a new one from the title.
+  - `shouldSkipImageOptimization` now compares protocol + hostname, matching
+    `images.remotePatterns`.
+- Tests/gates: origin-guard matrix now auto-discovers every registered
+  state-changing route via a `buildApp({ onRoute })` hook and fails if a new route
+  is not in the matrix; authorization matrix includes image GET/POST/DELETE; new
+  input-bounds and verification-concurrency tests. 164 tests, typecheck, build,
+  docs and OpenAPI checks green.
+- Docs corrected: architecture media/wallpaper description, registration delivery
+  (Resend + login lockout split), environment API_INTERNAL_URL build-time warning,
+  deployment seed warning, README mobile nav + seed warning, OpenAPI images auth,
+  next-plan checkpoint, contracts coverage caveat.

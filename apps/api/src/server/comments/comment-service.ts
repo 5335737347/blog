@@ -175,7 +175,7 @@ async function createCommentRecord(
   if (author.length > 32) {
     throw badRequest("昵称不能超过 32 个字符");
   }
-  if (email && !validEmail(email)) {
+  if (email && (!validEmail(email) || email.length > 254)) {
     throw badRequest("邮箱格式不正确");
   }
   if (content.length > 2000) {

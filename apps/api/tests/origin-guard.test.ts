@@ -17,6 +17,8 @@ const database = createTestDatabase("kpblog-origin-test-");
 
 let app: FastifyInstance;
 let siteOrigin: string;
+/** 实际注册的变更类路由，由 buildApp 的 onRoute 钩子收集。 */
+const actualMutationRoutes: { method: string; url: string }[] = [];
 
 const FOREIGN_ORIGIN = "https://evil.example";
 
@@ -46,6 +48,23 @@ const MUTATION_ENDPOINTS: Endpoint[] = [
   { method: "DELETE", path: "/api/comments/absent", label: "删除评论" },
   { method: "POST", path: "/api/music", body: {}, label: "新增音乐" },
   { method: "DELETE", path: "/api/music/absent", label: "删除音乐" },
+  { method: "POST", path: "/api/images", body: {}, label: "登记/上传图片" },
+  { method: "DELETE", path: "/api/images/absent", label: "删除图片" },
+  { method: "POST", path: "/api/images/adopt", body: {}, label: "收编图片" },
+  { method: "POST", path: "/api/categories", body: { name: "x" }, label: "新建分类" },
+  { method: "PUT", path: "/api/categories/absent", body: { name: "x" }, label: "修改分类" },
+  { method: "DELETE", path: "/api/categories/absent", label: "删除分类" },
+  { method: "POST", path: "/api/tags", body: { name: "x" }, label: "新建标签" },
+  { method: "PUT", path: "/api/tags/absent", body: { name: "x" }, label: "修改标签" },
+  { method: "DELETE", path: "/api/tags/absent", label: "删除标签" },
+  { method: "POST", path: "/api/tags/absent/merge", body: { targetId: "absent" }, label: "合并标签" },
+  { method: "POST", path: "/api/collections", body: { name: "x" }, label: "新建项目" },
+  { method: "PUT", path: "/api/collections/absent", body: { name: "x" }, label: "修改项目" },
+  { method: "DELETE", path: "/api/collections/absent", label: "删除项目" },
+  { method: "POST", path: "/api/wallpapers", body: {}, label: "上传壁纸" },
+  { method: "PUT", path: "/api/wallpapers/absent", body: { enabled: true }, label: "修改壁纸" },
+  { method: "POST", path: "/api/wallpapers/reorder", body: { ids: [] }, label: "壁纸排序" },
+  { method: "DELETE", path: "/api/wallpapers/absent", label: "删除壁纸" },
   { method: "PUT", path: "/api/profile", body: {}, label: "修改资料" },
   { method: "POST", path: "/api/publish", body: {}, label: "API 发布" },
   { method: "POST", path: "/api/import", body: {}, label: "批量导入" },
@@ -78,7 +97,16 @@ before(async () => {
   delete process.env.TRUST_PROXY_HEADER;
 
   const { buildApp } = await import("../src/app");
-  app = buildApp();
+  app = buildApp({
+    onRoute(route) {
+      const methods = Array.isArray(route.method) ? route.method : [route.method];
+      for (const method of methods) {
+        if (["POST", "PUT", "DELETE", "PATCH"].includes(method)) {
+          actualMutationRoutes.push({ method, url: route.url });
+        }
+      }
+    },
+  });
   await app.ready();
   siteOrigin = process.env.SITE_URL ?? "http://localhost:3000";
 });
@@ -88,6 +116,26 @@ after(async () => {
   const { prisma } = await import("../src/lib/prisma");
   await prisma.$disconnect();
   database.cleanup();
+});
+
+test("the origin matrix covers every registered state-changing route", () => {
+  const escapeSegment = (segment: string) =>
+    segment.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+  for (const route of actualMutationRoutes) {
+    const pattern = route.url
+      .split("/")
+      .map((segment) => (segment.startsWith(":") ? "[^/]+" : escapeSegment(segment)))
+      .join("/");
+    const regex = new RegExp(`^${pattern}$`);
+    assert.ok(
+      MUTATION_ENDPOINTS.some(
+        (endpoint) => endpoint.method === route.method && regex.test(endpoint.path)
+      ),
+      `变更路由 ${route.method} ${route.url} 未加入来源校验矩阵；` +
+        "新增 POST/PUT/DELETE 时必须同步 MUTATION_ENDPOINTS"
+    );
+  }
 });
 
 test("every state-changing endpoint rejects a foreign origin", async () => {

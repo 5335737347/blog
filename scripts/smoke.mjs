@@ -92,7 +92,12 @@ function shutdown(code) {
   process.exit(code);
 }
 process.on("exit", () => {
-  // 兜底清理：正常路径已清过，这里覆盖异常退出（SIGKILL 除外，已由 .gitignore 兜底）
+  // 兜底清理：正常路径已清过，这里覆盖异常退出（SIGKILL 除外，已由 .gitignore 兜底）。
+  // shutdown() 里先发 SIGTERM 便于子进程优雅退出，但 process.exit() 不会等待；
+  // 若子进程尚未退出，这里同步补一发 SIGKILL，避免遗留占用端口的冒烟实例。
+  for (const child of children) {
+    try { child.kill("SIGKILL"); } catch { /* ignore */ }
+  }
   removeWebEnvOverride();
   try { rmSync(webDistDir, { recursive: true, force: true }); } catch { /* ignore */ }
   try { rmSync(tempDir, { recursive: true, force: true }); } catch { /* ignore */ }
@@ -143,7 +148,13 @@ console.log("[2/4] 写入冒烟数据");
 run(process.execPath, [path.join(repositoryRoot, "apps/api/scripts/smoke-seed.mjs")], "冒烟数据播种");
 
 console.log("[3/4] 启动 API 与 Web");
-const api = spawn(bin("tsx"), ["apps/api/src/index.ts"], { cwd: repositoryRoot, env, stdio: ["ignore", "pipe", "pipe"] });
+// 直接用 node --import tsx 启动源码，而不是 tsx CLI：CLI 会再派生一个 node
+// 子进程，脚本清理只能杀掉 CLI 包装层，真正的 API 进程会变成孤儿并占着端口。
+const api = spawn(process.execPath, ["--import", "tsx", "apps/api/src/index.ts"], {
+  cwd: repositoryRoot,
+  env,
+  stdio: ["ignore", "pipe", "pipe"],
+});
 const web = spawn(bin("next"), ["dev", "--port", String(webPort)], {
   cwd: path.join(repositoryRoot, "apps/web"),
   env,

@@ -43,6 +43,23 @@ export function generateUniqueFilename(original: string): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 8)}.${ext}`;
 }
 
+/**
+ * 封面/头像等图片引用是否安全。
+ *
+ * 允许站内相对路径（/images/x.png）与完整 http(s) URL；拒绝
+ * javascript:/data:/file:、协议相对 //evil.com 等。具体错误文案由调用方决定。
+ */
+export function isSafeImageReference(value: string): boolean {
+  if (!value) return true;
+  if (value.startsWith("/")) return !value.startsWith("//");
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 // ====== 内容处理 ======
 
 /**

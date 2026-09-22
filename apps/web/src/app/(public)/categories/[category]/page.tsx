@@ -5,6 +5,7 @@ import Pagination from "@/components/public/articles/Pagination";
 import PageShell, { PageHeader } from "@/components/public/layout/PageShell";
 import { getCategoryArchivePageData } from "@/lib/api/public-api";
 import { pageAlternates } from "@/lib/metadata";
+import { parsePageParam } from "@/lib/utils";
 
 const PAGE_SIZE = 10;
 
@@ -16,7 +17,7 @@ interface CategoryPageProps {
 export async function generateMetadata({ params, searchParams }: CategoryPageProps): Promise<Metadata> {
   const { category: categorySlug } = await params;
   const { page: pageParam } = await searchParams;
-  const page = Math.max(1, Number.parseInt(pageParam || "1", 10) || 1);
+  const page = parsePageParam(pageParam);
   const { category } = await getCategoryArchivePageData(categorySlug, 1, 1);
   if (!category) return { title: "分类不存在" };
 
@@ -32,7 +33,7 @@ export default async function CategoryPage({ params, searchParams }: CategoryPag
     params,
     searchParams,
   ]);
-  const page = Math.max(1, Number.parseInt(pageParam || "1", 10) || 1);
+  const page = parsePageParam(pageParam);
   const { category, articles } = await getCategoryArchivePageData(
     categorySlug,
     page,

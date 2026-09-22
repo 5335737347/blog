@@ -9,7 +9,7 @@ import {
 } from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { loadProjectEnv } from "./load-env.mjs";
+import { databaseFilePath, loadProjectEnv } from "./load-env.mjs";
 
 // 环境加载统一走 scripts/load-env.mjs（此前这里有一份手写正则解析器，
 // 与 dotenv 在行内注释、export 前缀和转义上的行为都不一致）。
@@ -19,6 +19,7 @@ const rawArgs = process.argv.slice(2);
 const args = new Set(rawArgs);
 const supportedArgs = new Set([
   "--allow-dirty",
+  "--allow-new-database",
   "--skip-backup",
   "--skip-build",
   "--skip-check",
@@ -36,6 +37,7 @@ function printHelp() {
 
 Options:
   --allow-dirty       Allow tracked local changes before pulling
+  --allow-new-database Allow DATABASE_URL to point at a not-yet-existing file
   --skip-pull         Update the current checkout without pulling
   --skip-install      Skip npm install/ci
   --skip-check        Skip lint, typecheck, and tests
@@ -153,26 +155,39 @@ function releaseLock() {
   lockAcquired = false;
 }
 
-function sqlitePathFromEnv() {
-  const databaseUrl = process.env.DATABASE_URL;
-  if (!databaseUrl?.startsWith("file:")) return null;
+function requireDatabaseFile() {
+  let dbPath;
+  try {
+    dbPath = databaseFilePath();
+  } catch (error) {
+    throw new Error(
+      `无法解析 DATABASE_URL：${error instanceof Error ? error.message : String(error)}`
+    );
+  }
 
-  const rawPath = databaseUrl.slice("file:".length);
-  if (path.isAbsolute(rawPath)) return rawPath;
+  if (!existsSync(dbPath)) {
+    if (args.has("--allow-new-database")) {
+      console.log(`Database file does not exist yet (allowed): ${dbPath}`);
+      return dbPath;
+    }
+    throw new Error(
+      `找不到数据库文件：${dbPath}\n` +
+        "更新流程拒绝在没有备份源的情况下继续迁移（SQLite 会创建一个空库）。\n" +
+        "如确认是全新安装，请使用 --allow-new-database；否则请先修正 DATABASE_URL。"
+    );
+  }
 
-  const candidates = [path.resolve(rawPath), path.resolve("prisma", rawPath)];
-  return candidates.find((candidate) => existsSync(candidate)) || candidates[0];
+  return dbPath;
 }
 
-function backupSqlite() {
+function backupSqlite(dbPath) {
   if (args.has("--skip-backup")) {
     console.log("Skipping database backup.");
     return;
   }
 
-  const dbPath = sqlitePathFromEnv();
-  if (!dbPath || !existsSync(dbPath)) {
-    console.log("No SQLite database found to back up.");
+  if (!existsSync(dbPath)) {
+    console.log("No SQLite database found to back up (--allow-new-database).");
     return;
   }
 
@@ -308,8 +323,13 @@ async function main() {
     run("npm", ["run", "check:ci"]);
   }
 
+  // 在任何构建/迁移之前确认目标库真实存在。旧逻辑找不到库时直接 return，
+  // 随后的 prisma migrate deploy 会创建空库并写入迁移，等于把线上数据
+  // “搬”到一个新文件上。全新安装必须显式使用 --allow-new-database。
+  const databaseFile = requireDatabaseFile();
+
   section("Backup database");
-  backupSqlite();
+  backupSqlite(databaseFile);
 
   section("Apply database migrations");
   run("npx", ["prisma", "migrate", "deploy"]);
