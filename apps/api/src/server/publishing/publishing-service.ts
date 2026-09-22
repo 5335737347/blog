@@ -90,14 +90,14 @@ async function resolveCategory(categoryName: string | undefined) {
   if (!categoryName) return null;
   const slug = slugify(categoryName);
 
-  const bySlug = await prisma.category.findUnique({ where: { slug } });
-  if (bySlug) {
-    if (bySlug.name === categoryName) return bySlug;
-    return prisma.category.update({ where: { id: bySlug.id }, data: { name: categoryName } });
-  }
-
+  // 先按显示名精确匹配（后台可能给分类设置过与 slugify 结果不同的 slug）。
   const byName = await prisma.category.findUnique({ where: { name: categoryName } });
   if (byName) return byName;
+
+  // 再按 slug 匹配。注意这里只复用、不重命名：frontmatter 里的一个词
+  // 不应该悄悄改掉所有旧文章共享的分类名；重命名属于后台分类管理的职责。
+  const bySlug = await prisma.category.findUnique({ where: { slug } });
+  if (bySlug) return bySlug;
 
   return prisma.category.create({ data: { name: categoryName, slug } });
 }

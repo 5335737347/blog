@@ -422,8 +422,7 @@ flowchart TD
   P2 --> Write
   P3 --> Write
   P4 --> Write
-  Write --> Clean["内容或标签变化时 cleanOrphanTags()"]
-  Clean --> Dto["toPostDetailDto"]
+  Write --> Dto["toPostDetailDto"]
 ```
 
 必须保持的行为：
@@ -844,7 +843,7 @@ flowchart TD
   Content --> C2["CLI 发布 / 批量导入"]
   C2 --> C3["标签解析 resolveTagIds"]
   C2 --> C4["分类解析 resolveCategory"]
-  C1 --> C5["cleanOrphanTags 清理孤儿标签"]
+  C1 --> C5["/api/tags/orphaned 显式清理未使用标签"]
 
   Interact --> I1["评论 / 留言提交：先审后发"]
   I1 --> I2["管理员审核 → 公开可见"]

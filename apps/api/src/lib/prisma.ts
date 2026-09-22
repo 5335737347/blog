@@ -20,8 +20,3 @@ export const prisma = globalForPrisma.prisma ?? new PrismaClient({ adapter });
 if (process.env.NODE_ENV !== "production") {
   globalForPrisma.prisma = prisma;
 }
-
-// Delete tags that have no posts
-export async function cleanOrphanTags() {
-  await prisma.tag.deleteMany({ where: { posts: { none: {} } } });
-}

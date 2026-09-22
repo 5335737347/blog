@@ -1510,3 +1510,23 @@ they need a Chromium binary (found via `CHROME_BIN` or the Playwright cache).
 - Added the previous Web perf batch (comment lazy loading, pagination prefetch
   off) to the committed history; 165 tests, check:ci, build, smoke and smoke:prod
   remain green.
+
+
+## Completed 2026-09-22 (fifth batch): implicit destructive cleanup removed
+
+- Removed `cleanOrphanTags()` from article update/delete. It used to delete every
+  tag with zero post links on every article save, silently destroying tags the
+  admin had deliberately pre-created. Tag cleanup is now an explicit admin action:
+  `DELETE /api/tags/orphaned` plus a “清理未使用” button on /admin/tags, with a
+  test that preserves tags still attached to posts.
+- `resolveCategory()` no longer renames an existing category when the frontmatter
+  name differs but the slug matches. It first matches by exact name, then reuses by
+  slug; category rename is an explicit admin operation. Regression test added.
+- `reorderWallpapers()` now rejects duplicate ids instead of writing an ambiguous
+  order; test added.
+- `createArticle`/`updateArticle` translate P2002/P2025 race outcomes into 400/404
+  instead of 500.
+- Combined explicit + auto tags are capped at 50 in article mutations.
+- `ImagePickerModal` gains a visible close button, initial focus, Tab trap and
+  focus restoration, matching the article lightbox behavior.
+- 168 tests, check:ci, build, smoke and smoke:prod green.

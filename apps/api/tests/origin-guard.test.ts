@@ -57,6 +57,7 @@ const MUTATION_ENDPOINTS: Endpoint[] = [
   { method: "POST", path: "/api/tags", body: { name: "x" }, label: "新建标签" },
   { method: "PUT", path: "/api/tags/absent", body: { name: "x" }, label: "修改标签" },
   { method: "DELETE", path: "/api/tags/absent", label: "删除标签" },
+  { method: "DELETE", path: "/api/tags/orphaned", label: "清理未使用标签" },
   { method: "POST", path: "/api/tags/absent/merge", body: { targetId: "absent" }, label: "合并标签" },
   { method: "POST", path: "/api/collections", body: { name: "x" }, label: "新建项目" },
   { method: "PUT", path: "/api/collections/absent", body: { name: "x" }, label: "修改项目" },

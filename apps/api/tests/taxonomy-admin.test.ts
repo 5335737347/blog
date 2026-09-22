@@ -283,3 +283,17 @@ test("delete tag: post links removed, post itself survives", async () => {
   assert.ok(surviving, "删除标签不得删除文章");
   assert.equal(surviving?.tags.length, 0, "文章上的标签关联应被移除");
 });
+
+test("explicit orphan cleanup preserves tags that still have posts", async () => {
+  const used = await createTag("清理保留标签");
+  const unused = await createTag("清理删除标签");
+  await createPost("taxonomy-orphan-cleanup", [used.id]);
+
+  const { status, json } = await callAdmin("DELETE", "/api/tags/orphaned");
+  assert.equal(status, 200, json.error?.message);
+  assert.ok(json.data.deleted >= 1, "至少应删掉刚创建的未使用标签");
+
+  const { prisma } = await import("../src/lib/prisma");
+  assert.ok(await prisma.tag.findUnique({ where: { id: used.id } }), "有文章的标签必须保留");
+  assert.equal(await prisma.tag.findUnique({ where: { id: unused.id } }), null, "未使用标签应被删除");
+});

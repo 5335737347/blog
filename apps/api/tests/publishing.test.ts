@@ -215,6 +215,32 @@ test("publishMarkdown reuses an existing category whose name and slug do not cor
   assert.equal(categories.length, 1);
 });
 
+test("publishMarkdown does not rename a category merely because the slug matches", async () => {
+  const { prisma } = await import("../src/lib/prisma");
+  const existing = await prisma.category.create({ data: { name: "C++", slug: "c" } });
+
+  const result = await publishMarkdown({
+    content: [
+      "---",
+      "title: 分类名只共 slug",
+      "category: C",
+      "published: true",
+      "---",
+      "",
+      "正文",
+    ].join("\n"),
+  });
+
+  const post = await prisma.post.findUnique({
+    where: { id: result.post.id },
+    include: { category: true },
+  });
+  assert.equal(post?.category?.id, existing.id, "同名 slug 应复用已有分类");
+  const reloaded = await prisma.category.findUnique({ where: { id: existing.id } });
+  assert.equal(reloaded?.name, "C++", "frontmatter 不应隐式重命名共享分类");
+  assert.equal(await prisma.category.count({ where: { slug: "c" } }), 1);
+});
+
 test("importFiles reports per-file outcome and rejects unsupported types", async () => {
   const good = new File([new Uint8Array(Buffer.from("# 导入标题\n\n导入正文"))], "ok.md", {
     type: "text/markdown",

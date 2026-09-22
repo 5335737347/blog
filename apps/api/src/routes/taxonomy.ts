@@ -4,6 +4,7 @@ import {
   createCategory,
   createTag,
   deleteCategory,
+  deleteOrphanTags,
   deleteTag,
   listCategoriesForAdmin,
   listTagsForAdmin,
@@ -65,6 +66,13 @@ const taxonomyRoutes: FastifyPluginAsync = async (app) => {
     assertRequestOrigin(request);
     await requireAdminSession(sessionToken(request));
     return reply.status(201).send(apiSuccess(await createTag(requestBody(request))));
+  });
+
+  // 必须放在 /tags/:id 之前，避免把 "orphaned" 当作标签 id。
+  app.delete("/tags/orphaned", async (request) => {
+    assertRequestOrigin(request);
+    await requireAdminSession(sessionToken(request));
+    return apiSuccess(await deleteOrphanTags());
   });
 
   app.put<{ Params: IdParams }>("/tags/:id", async (request) => {

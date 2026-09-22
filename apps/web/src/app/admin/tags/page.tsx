@@ -35,6 +35,7 @@ export default function TagsAdminPage() {
   const [mergingId, setMergingId] = useState<string | null>(null);
   const [mergeTargetId, setMergeTargetId] = useState("");
   const [mergePending, setMergePending] = useState(false);
+  const [cleanupPending, setCleanupPending] = useState(false);
 
   const fetchTags = useCallback(async () => {
     setLoading(true);
@@ -102,6 +103,28 @@ export default function TagsAdminPage() {
     setMergingId(null);
     setNotice("");
     setError("");
+  };
+
+  const handleCleanupOrphans = async () => {
+    if (unusedCount === 0) return;
+    if (!confirm(`确定删除全部 ${unusedCount} 个未使用标签？`)) return;
+    setCleanupPending(true);
+    setError("");
+    setNotice("");
+    try {
+      const res = await fetch("/api/tags/orphaned", { method: "DELETE" });
+      if (!res.ok) {
+        setError(await readApiError(res, "清理失败"));
+        return;
+      }
+      const data = await readApiData<{ deleted: number }>(res);
+      setNotice(`已清理 ${data.deleted} 个未使用标签`);
+      await fetchTags();
+    } catch {
+      setError("网络错误，清理失败");
+    } finally {
+      setCleanupPending(false);
+    }
   };
 
   const handleSave = async (id: string) => {
@@ -191,13 +214,24 @@ export default function TagsAdminPage() {
         title="标签管理"
         description={`共 ${tags.length} 个标签${unusedCount > 0 ? `，其中 ${unusedCount} 个未挂任何文章` : ""}。计数包含草稿。`}
         actions={
-          <Input
-            aria-label="筛选标签"
-            placeholder="筛选标签…"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            className="w-44"
-          />
+          <div className="flex items-center gap-2">
+            <Input
+              aria-label="筛选标签"
+              placeholder="筛选标签…"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              className="w-44"
+            />
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={cleanupPending || unusedCount === 0}
+              onClick={handleCleanupOrphans}
+            >
+              {cleanupPending ? "清理中…" : "清理未使用"}
+            </Button>
+          </div>
         }
       />
 

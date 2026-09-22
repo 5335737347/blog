@@ -267,3 +267,15 @@ export async function mergeTag(sourceId: string, input: { targetId?: unknown }) 
   const updated = await prisma.tag.findUnique({ where: { id: targetId }, select: tagAdminSelect });
   return updated ? toTagAdminDto(updated) : null;
 }
+
+/**
+ * 显式清理没有任何文章关联的标签。
+ *
+ * 此前 cleanOrphanTags 会在每次文章更新/删除时隐式执行，但管理端允许创建
+ * “未使用的标签”，隐式清理会把管理员刚建好的标签悄悄删掉。现在改成管理员
+ * 在标签页显式触发，语义可预期。
+ */
+export async function deleteOrphanTags() {
+  const result = await prisma.tag.deleteMany({ where: { posts: { none: {} } } });
+  return { deleted: result.count };
+}

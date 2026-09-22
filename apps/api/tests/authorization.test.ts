@@ -55,6 +55,7 @@ const ADMIN_ONLY: Endpoint[] = [
   { method: "POST", path: "/api/tags", body: { name: "x" }, label: "新建标签" },
   { method: "PUT", path: "/api/tags/absent", body: { name: "x" }, label: "修改标签" },
   { method: "DELETE", path: "/api/tags/absent", label: "删除标签" },
+  { method: "DELETE", path: "/api/tags/orphaned", label: "清理未使用标签" },
   { method: "POST", path: "/api/tags/absent/merge", body: { targetId: "absent" }, label: "合并标签" },
   { method: "GET", path: "/api/images", label: "图库列表" },
   { method: "POST", path: "/api/images", body: {}, label: "登记/上传图片" },

@@ -1058,6 +1058,42 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/tags/orphaned:
+    delete:
+      tags: [Taxonomy]
+      summary: Delete tags that have no posts
+      description: >-
+        Admin only. Explicit cleanup for unused tags. The public tag list hides
+        unused tags, but admins may create them intentionally; this endpoint
+        lets the admin decide when to remove them instead of deleting them
+        implicitly on every article update.
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: Number of deleted tags
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    required: [deleted]
+                    properties:
+                      deleted:
+                        type: integer
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /api/collections:
     get:
       tags: [Collections]

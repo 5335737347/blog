@@ -153,6 +153,9 @@ export async function reorderWallpapers(input: { ids?: unknown }) {
     throw badRequest("排序数据格式不正确");
   }
   const ids = input.ids as string[];
+  if (new Set(ids).size !== ids.length) {
+    throw badRequest("排序数据不能包含重复的壁纸 id");
+  }
   const known = await prisma.homeWallpaper.findMany({ select: { id: true } });
   const knownIds = new Set(known.map((row) => row.id));
   const ordered = ids.filter((id) => knownIds.has(id));

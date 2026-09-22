@@ -5,6 +5,7 @@ import Alert from "@/components/admin/ui/Alert";
 import Button from "@/components/ui/Button";
 import type { MediaImageDto } from "@kpblog/contracts";
 import { readApiData, readApiError } from "@/lib/api-client";
+import { CloseIcon } from "@/components/public/layout/SiteIcons";
 
 export type ImageItem = MediaImageDto;
 
@@ -26,6 +27,9 @@ export default function ImagePickerModal({ kind, open, onClose, onPick }: ImageP
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const previouslyFocused = useRef<HTMLElement | null>(null);
 
   const fetchImages = useCallback(async () => {
     setLoading(true);
@@ -50,14 +54,35 @@ export default function ImagePickerModal({ kind, open, onClose, onPick }: ImageP
 
   useEffect(() => {
     if (!open) return;
+    previouslyFocused.current = document.activeElement as HTMLElement | null;
+    closeButtonRef.current?.focus();
+
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (event.key !== "Tab" || !panelRef.current) return;
+      const focusable = panelRef.current.querySelectorAll<HTMLElement>(
+        'button, input, select, textarea, a[href], [tabindex]:not([tabindex="-1"])'
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener("keydown", handleKeyDown);
     document.body.style.overflow = "hidden";
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
       document.body.style.overflow = "";
+      previouslyFocused.current?.focus();
     };
   }, [open, onClose]);
 
@@ -95,12 +120,21 @@ export default function ImagePickerModal({ kind, open, onClose, onPick }: ImageP
       aria-label="选择图片"
     >
       <div className="absolute inset-0 bg-black/40" onClick={onClose} aria-hidden="true" />
-      <div className="panel relative flex max-h-[80vh] w-full max-w-2xl flex-col p-5">
+      <div ref={panelRef} className="panel relative flex max-h-[80vh] w-full max-w-2xl flex-col p-5">
         <div className="mb-3 flex items-center justify-between">
           <h3 className="text-ui font-semibold text-ink">
             选择图片 <span className="text-ink-3">{kind === "cover" ? "· 封面" : "· 文章图片"}</span>
           </h3>
           <div className="flex items-center gap-2">
+            <button
+              ref={closeButtonRef}
+              type="button"
+              onClick={onClose}
+              aria-label="关闭图片选择"
+              className="icon-button"
+            >
+              <CloseIcon className="h-4 w-4" />
+            </button>
             <input
               ref={fileRef}
               type="file"

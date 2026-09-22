@@ -1,5 +1,5 @@
 import type { Prisma } from "@prisma/client";
-import { prisma, cleanOrphanTags } from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { autoExcerpt, extractHashTags, isSafeImageReference, slugify } from "@/lib/utils";
 import { badRequest, notFound } from "@/server/errors";
 import {
@@ -185,6 +185,9 @@ export async function createArticle(input: ArticleMutationInput) {
   const allTagIds = [
     ...new Set([...explicitTagIds, ...(await resolveTagIds(autoTags))]),
   ];
+  if (allTagIds.length > 50) {
+    throw badRequest("单篇文章最多关联 50 个标签");
+  }
   const published = booleanValue(input.published) ?? false;
   const requestedPublishedAt = parsePublishedAt(input.publishedAt);
   const excerpt = optionalText(input.excerpt);
@@ -195,25 +198,32 @@ export async function createArticle(input: ArticleMutationInput) {
     throw badRequest("封面图地址仅支持 http(s) 或站内相对路径");
   }
 
-  const post = await prisma.post.create({
-    data: {
-      title,
-      slug: finalSlug,
-      excerpt: excerpt || autoExcerpt(content) || null,
-      content,
-      coverImage: coverImage || null,
-      published,
-      publishedAt: published ? (requestedPublishedAt ?? new Date()) : null,
-      categoryId,
-      projectId,
-      tags: allTagIds.length
-        ? { create: allTagIds.map((tagId) => ({ tagId })) }
-        : undefined,
-    },
-    include: postMutationArgs.include,
-  });
-
-  return toPostDetailDto(post);
+  try {
+    const post = await prisma.post.create({
+      data: {
+        title,
+        slug: finalSlug,
+        excerpt: excerpt || autoExcerpt(content) || null,
+        content,
+        coverImage: coverImage || null,
+        published,
+        publishedAt: published ? (requestedPublishedAt ?? new Date()) : null,
+        categoryId,
+        projectId,
+        tags: allTagIds.length
+          ? { create: allTagIds.map((tagId) => ({ tagId })) }
+          : undefined,
+      },
+      include: postMutationArgs.include,
+    });
+    return toPostDetailDto(post);
+  } catch (error) {
+    // 预检与 INSERT 之间的并发窗口由唯一约束兜底；翻译成 400，别报 500。
+    if ((error as { code?: string }).code === "P2002") {
+      throw badRequest("slug 已存在，请修改");
+    }
+    throw error;
+  }
 }
 
 export async function getArticleById(id: string, options: { isAdmin: boolean }) {
@@ -330,6 +340,9 @@ export async function updateArticle(id: string, input: ArticleMutationInput) {
     }
     const autoTagIds = content ? await resolveTagIds(extractHashTags(content)) : [];
     const allTagIds = [...new Set([...explicitTagIds, ...autoTagIds])];
+    if (allTagIds.length > 50) {
+      throw badRequest("单篇文章最多关联 50 个标签");
+    }
     data.tags = {
       deleteMany: {},
       create: allTagIds.map((tagId) => ({ tagId })),
@@ -352,17 +365,19 @@ export async function updateArticle(id: string, input: ArticleMutationInput) {
       : { disconnect: true };
   }
 
-  const post = await prisma.post.update({
-    where: { id },
-    data,
-    include: postMutationArgs.include,
-  });
-
-  if (input.content !== undefined || input.tagIds !== undefined) {
-    await cleanOrphanTags();
+  try {
+    const post = await prisma.post.update({
+      where: { id },
+      data,
+      include: postMutationArgs.include,
+    });
+    return toPostDetailDto(post);
+  } catch (error) {
+    const code = (error as { code?: string }).code;
+    if (code === "P2002") throw badRequest("slug 已存在");
+    if (code === "P2025") throw notFound("文章不存在");
+    throw error;
   }
-
-  return toPostDetailDto(post);
 }
 
 export async function deleteArticle(id: string) {
@@ -372,6 +387,5 @@ export async function deleteArticle(id: string) {
   }
 
   await prisma.post.delete({ where: { id } });
-  await cleanOrphanTags();
   return { deleted: true };
 }

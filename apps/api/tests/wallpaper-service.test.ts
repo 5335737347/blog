@@ -105,3 +105,14 @@ test("deleting every entry does not resurrect the defaults", async () => {
   const afterDelete = await listWallpapers({ all: true });
   assert.equal(afterDelete.length, 0, "删空后不得重新播种默认壁纸");
 });
+
+test("reorder rejects duplicate ids instead of applying an ambiguous order", async () => {
+  const uploaded = await createWallpaperFromFile({
+    file: new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], "dup.png", { type: "image/png" }),
+  });
+  await assert.rejects(
+    () => reorderWallpapers({ ids: [uploaded.id, uploaded.id] }),
+    { status: 400 }
+  );
+  await deleteWallpaper(uploaded.id);
+});
