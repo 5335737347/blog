@@ -33,6 +33,8 @@ export default function CommentSection({ postId }: CommentSectionProps) {
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
   const successTimer = useRef<number | null>(null);
+  const sectionRef = useRef<HTMLElement>(null);
+  const [loadStarted, setLoadStarted] = useState(false);
 
   // 卸载时清理定时器，避免对已卸载组件调用 setState。
   useEffect(() => {
@@ -73,12 +75,34 @@ export default function CommentSection({ postId }: CommentSectionProps) {
     void fetchComments(1, false);
   };
 
+  // 评论区在文章页首屏之外；等它接近视口再请求，避免每看一篇文章都为
+  // 折叠线以下的评论多打一次 API。/messages 上它本来就可见，会立即加载。
   useEffect(() => {
+    const element = sectionRef.current;
+    if (!element || typeof IntersectionObserver === "undefined") {
+      const timer = window.setTimeout(() => setLoadStarted(true), 0);
+      return () => window.clearTimeout(timer);
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setLoadStarted(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "200px 0px" }
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!loadStarted) return;
     const id = window.setTimeout(() => {
       void fetchComments(1, false);
     }, 0);
     return () => window.clearTimeout(id);
-  }, [fetchComments]);
+  }, [loadStarted, fetchComments]);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -106,7 +130,7 @@ export default function CommentSection({ postId }: CommentSectionProps) {
   };
 
   return (
-    <section>
+    <section ref={sectionRef}>
       <h2 className="mb-6 flex items-center gap-2 text-xl font-semibold text-ink">
         <CommentIcon className="h-5 w-5 text-ink-3" />
         {isGuestbook ? "留言" : "评论"}

@@ -45,7 +45,7 @@ export default function Pagination({
   return (
     <nav className="mt-10 flex items-center justify-center gap-1.5" aria-label="分页">
       {currentPage > 1 && (
-        <Link href={hrefFor(currentPage - 1)} className="pagination-link gap-1">
+        <Link href={hrefFor(currentPage - 1)} prefetch={false} className="pagination-link gap-1">
           <ChevronLeftIcon className="h-3.5 w-3.5" />
           上一页
         </Link>
@@ -59,6 +59,7 @@ export default function Pagination({
           <Link
             key={page}
             href={hrefFor(page)}
+            prefetch={false}
             aria-current={page === currentPage ? "page" : undefined}
             className={`grid h-9 min-w-9 place-items-center rounded-sm px-2.5 text-meta font-medium transition-colors ${
               page === currentPage
@@ -71,7 +72,7 @@ export default function Pagination({
         )
       )}
       {currentPage < totalPages && (
-        <Link href={hrefFor(currentPage + 1)} className="pagination-link gap-1">
+        <Link href={hrefFor(currentPage + 1)} prefetch={false} className="pagination-link gap-1">
           下一页
           <ChevronRightIcon className="h-3.5 w-3.5" />
         </Link>
