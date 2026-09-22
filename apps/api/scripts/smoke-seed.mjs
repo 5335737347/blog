@@ -6,6 +6,7 @@
  */
 import { PrismaClient } from "@prisma/client";
 import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import bcrypt from "bcryptjs";
 
 const databaseUrl = process.env.SMOKE_SEED_DATABASE_URL || process.env.DATABASE_URL;
 if (!process.env.SMOKE_SEED_DATABASE_URL) {
@@ -50,5 +51,29 @@ await prisma.post.create({
   },
 });
 
-console.log(`  已写入 1 篇文章 / 1 个分类 / 1 个标签 → ${databaseUrl}`);
+// 已知凭据只存在于本次临时冒烟库，用于浏览器层登录/权限流检查。
+const adminPassword = "smoke-admin-password";
+const userPassword = "smoke-user-password";
+await prisma.user.create({
+  data: {
+    username: "smoke-admin",
+    displayName: "冒烟管理员",
+    email: "smoke-admin@example.com",
+    password: await bcrypt.hash(adminPassword, 10),
+    role: "ADMIN",
+  },
+});
+await prisma.user.create({
+  data: {
+    username: "smoke-user",
+    displayName: "冒烟用户",
+    email: "smoke-user@example.com",
+    password: await bcrypt.hash(userPassword, 10),
+    role: "USER",
+  },
+});
+
+console.log(
+  `  已写入 1 篇文章 / 1 个分类 / 1 个标签 / 2 个用户 → ${databaseUrl}`
+);
 await prisma.$disconnect();

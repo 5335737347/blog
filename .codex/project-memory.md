@@ -1542,3 +1542,14 @@ they need a Chromium binary (found via `CHROME_BIN` or the Playwright cache).
 - `ImagePickerModal` focus trap ignores hidden/disabled elements, so Tab cannot
   land on the hidden file input.
 - 169 tests, check:ci, build, smoke and smoke:prod green.
+
+
+## Completed 2026-09-22 (seventh batch): browser auth/form E2E in smoke
+
+- `smoke-seed.mjs` now creates a known admin and normal user in the disposable
+  smoke database.
+- `smoke-web.mjs` gained CDP-driven flows: public user login (header updates
+  immediately), logged-in guestbook submission with pending-review feedback,
+  admin login honoring `?redirect=/admin/comments`, and anonymous `/admin`
+  redirect to the login page.
+- The smoke script still cleans up every child process; dev and prod smoke pass.

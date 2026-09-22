@@ -227,6 +227,48 @@ async function closePage(target) {
   try { await send("Target.closeTarget", { targetId: target.targetId }); } catch { /* ignore */ }
 }
 
+async function waitFor(sessionId, expression, timeout = 10000) {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    try {
+      if (await evaluate(sessionId, expression)) return true;
+    } catch { /* retry */ }
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+  return false;
+}
+
+async function fill(sessionId, selector, value) {
+  return evaluate(
+    sessionId,
+    `(() => {
+      const element = document.querySelector(${JSON.stringify(selector)});
+      if (!element) return false;
+      const proto = element instanceof HTMLTextAreaElement
+        ? HTMLTextAreaElement.prototype
+        : HTMLInputElement.prototype;
+      const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
+      if (setter) setter.call(element, ${JSON.stringify(value)});
+      else element.value = ${JSON.stringify(value)};
+      element.dispatchEvent(new Event("input", { bubbles: true }));
+      element.dispatchEvent(new Event("change", { bubbles: true }));
+      return true;
+    })()`
+  );
+}
+
+async function click(sessionId, selector) {
+  return evaluate(
+    sessionId,
+    `(() => {
+      const element = document.querySelector(${JSON.stringify(selector)});
+      if (!element) return false;
+      element.click();
+      return true;
+    })()`
+  );
+}
+
 /* ---------- 检查 ---------- */
 const failures = [];
 const check = (name, pass, detail = "") => {
@@ -599,6 +641,59 @@ check("文章页渲染正文、目录与代码块",
   !!articleState.h1?.includes(SEEDED_TITLE) && articleState.hasToc && articleState.tocLinks >= 2 && articleState.codeBlocks >= 1,
   JSON.stringify(articleState));
 await closePage(contentPage);
+
+/* 5. 浏览器认证与表单流程：登录、留言提交、管理员登录与未登录跳转 */
+console.log("\n认证与表单流程：");
+const flowPage = await openPage();
+
+await send("Page.navigate", { url: BASE + "/login" }, flowPage.sessionId);
+await waitFor(flowPage.sessionId, `!!document.querySelector('input[autocomplete="username"]')`);
+await fill(flowPage.sessionId, 'input[autocomplete="username"]', "smoke-user");
+await fill(flowPage.sessionId, 'input[autocomplete="current-password"]', "smoke-user-password");
+await click(flowPage.sessionId, 'form button[type="submit"]');
+const userLoggedIn = await waitFor(
+  flowPage.sessionId,
+  `location.pathname === "/" && document.body.innerText.includes("冒烟用户")`,
+  15000
+);
+check("用户登录后头部立即显示账号", userLoggedIn);
+
+await send("Page.navigate", { url: BASE + "/messages" }, flowPage.sessionId);
+await waitFor(flowPage.sessionId, `!!document.querySelector('textarea[aria-label="留言内容"]')`);
+// 等 CommentSection 读到会话，确认表单切换成登录身份；否则会走匿名分支。
+await waitFor(flowPage.sessionId, `document.body.innerText.includes("以 冒烟用户 身份留言")`, 8000);
+await fill(flowPage.sessionId, 'textarea[aria-label="留言内容"]', "冒烟浏览器留言");
+await click(flowPage.sessionId, 'form[data-print="hide"] button[type="submit"]');
+const commentSubmitted = await waitFor(
+  flowPage.sessionId,
+  `document.body.innerText.includes("留言已提交")`,
+  10000
+);
+check("用户提交留言后出现待审核提示", commentSubmitted);
+
+await send("Network.clearBrowserCookies", {}, flowPage.sessionId);
+await send("Page.navigate", { url: BASE + "/admin/login?redirect=%2Fadmin%2Fcomments" }, flowPage.sessionId);
+await waitFor(flowPage.sessionId, `!!document.querySelector('input[autocomplete="username"]')`);
+await fill(flowPage.sessionId, 'input[autocomplete="username"]', "smoke-admin");
+await fill(flowPage.sessionId, 'input[autocomplete="current-password"]', "smoke-admin-password");
+await click(flowPage.sessionId, 'form button[type="submit"]');
+const adminLoggedIn = await waitFor(
+  flowPage.sessionId,
+  `location.pathname === "/admin/comments" && document.body.innerText.includes("评论审核")`,
+  15000
+);
+check("管理员登录后按 redirect 进入后台目标页", adminLoggedIn);
+
+await send("Network.clearBrowserCookies", {}, flowPage.sessionId);
+await send("Page.navigate", { url: BASE + "/admin" }, flowPage.sessionId);
+const adminRedirected = await waitFor(
+  flowPage.sessionId,
+  `location.pathname === "/admin/login"`,
+  10000
+);
+check("未登录访问 /admin 会跳转登录页", adminRedirected);
+
+await closePage(flowPage);
 }
 
 console.log(`\n结果：${failures.length === 0 ? "全部通过" : `${failures.length} 项失败`}`);
