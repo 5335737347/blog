@@ -15,6 +15,7 @@ interface ArticleData {
   published: boolean;
   publishedAt: string | null;
   categoryId: string;
+  projectId: string | null;
   tags: { id: string; name: string; slug: string }[];
 }
 
@@ -65,6 +66,7 @@ export default function EditArticlePage() {
             published: article.published,
             publishedAt: article.publishedAt,
             categoryId: article.categoryId || "",
+            projectId: article.projectId || "",
             tagIds: article.tags.map((t) => t.id),
           }}
         />

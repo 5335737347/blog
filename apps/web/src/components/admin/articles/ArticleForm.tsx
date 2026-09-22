@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Textarea from "@/components/ui/Textarea";
+import ImagePickerModal from "@/components/admin/resources/ImagePickerModal";
 import ArticleEditor from "./ArticleEditor";
 import { slugify } from "@/lib/utils";
 import { readApiData, readApiError } from "@/lib/api-client";
@@ -22,6 +23,12 @@ interface Category {
   slug: string;
 }
 
+interface Project {
+  id: string;
+  name: string;
+  postCount: number;
+}
+
 interface ArticleFormData {
   title: string;
   slug: string;
@@ -31,6 +38,7 @@ interface ArticleFormData {
   published: boolean;
   publishedAt: string | null;
   categoryId: string;
+  projectId: string;
   tagIds: string[];
 }
 
@@ -65,12 +73,15 @@ export default function ArticleForm({
   // datetime-local 需要 "YYYY-MM-DDTHH:mm"（本地时区）；从 ISO 串换算。
   const [publishedAt, setPublishedAt] = useState(() => toLocalInput(initialData?.publishedAt));
   const [categoryId, setCategoryId] = useState(initialData?.categoryId || "");
+  const [projectId, setProjectId] = useState(initialData?.projectId || "");
   const [selectedTags, setSelectedTags] = useState<string[]>(
     initialData?.tagIds || []
   );
 
+  const [coverPickerOpen, setCoverPickerOpen] = useState(false);
   const [tags, setTags] = useState<Tag[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -78,10 +89,12 @@ export default function ArticleForm({
     Promise.all([
       fetch("/api/tags").then((response) => readApiData<Tag[]>(response)),
       fetch("/api/categories").then((response) => readApiData<Category[]>(response)),
+      fetch("/api/collections?all=true").then((response) => readApiData<Project[]>(response)),
     ])
-      .then(([nextTags, nextCategories]) => {
+      .then(([nextTags, nextCategories, nextProjects]) => {
         setTags(nextTags);
         setCategories(nextCategories);
+        setProjects(nextProjects);
       })
       .catch((reason) => {
         setError(reason instanceof Error ? reason.message : "加载分类和标签失败");
@@ -123,6 +136,7 @@ export default function ArticleForm({
       // 空串表示「未指定」，服务端按发布状态自行决定（发布时取当前时间）
       publishedAt: publishedAt ? new Date(publishedAt).toISOString() : null,
       categoryId: categoryId || null,
+      projectId: projectId || null,
       tagIds: selectedTags,
     };
 
@@ -187,16 +201,36 @@ export default function ArticleForm({
       />
 
       <div>
-        <Input
-          label="封面图 URL"
-          value={coverImage}
-          onChange={(e) => setCoverImage(e.target.value)}
-          placeholder="https://... 或 /images/... 或留空"
-        />
+        <div className="flex items-end gap-2">
+          <div className="min-w-0 flex-1">
+            <Input
+              label="封面图 URL"
+              value={coverImage}
+              onChange={(e) => setCoverImage(e.target.value)}
+              placeholder="https://... 或 /images/... 或留空"
+            />
+          </div>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => setCoverPickerOpen(true)}
+          >
+            从图库选择
+          </Button>
+        </div>
         <p className="mt-1 text-micro text-ink-3">
-          本站图片可在后台「资源管理」上传后复制地址粘贴到这里；外链同样支持。
+          可从图库选择、就地上传，或粘贴外部图床地址。
         </p>
       </div>
+      <ImagePickerModal
+        kind="cover"
+        open={coverPickerOpen}
+        onClose={() => setCoverPickerOpen(false)}
+        onPick={(url) => {
+          setCoverPickerOpen(false);
+          setCoverImage(url);
+        }}
+      />
 
       <div>
         <label className="mb-1 block text-meta font-medium text-ink-2">内容 *</label>
@@ -231,6 +265,35 @@ export default function ArticleForm({
                 去「分类管理」新建
               </Link>
               ；也可以先发布，之后再补。
+            </p>
+          )}
+
+          <label
+            htmlFor="article-project"
+            className="mb-2 mt-4 block text-meta font-medium text-ink-2"
+          >
+            项目（可选）
+          </label>
+          <select
+            id="article-project"
+            value={projectId}
+            onChange={(e) => setProjectId(e.target.value)}
+            className="h-10 w-full rounded-sm border border-line bg-surface px-3 text-ui text-ink transition-colors focus:border-accent focus:outline-none"
+          >
+            <option value="">不归入项目</option>
+            {projects.map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.name}
+              </option>
+            ))}
+          </select>
+          {projects.length === 0 && (
+            <p className="mt-1.5 text-micro text-ink-3">
+              还没有项目，
+              <Link href="/admin/collections" className="text-primary-deep underline">
+                去「项目管理」新建
+              </Link>
+              ；归档页会把未归入项目的文章按年份分组。
             </p>
           )}
         </div>
