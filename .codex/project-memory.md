@@ -1188,3 +1188,56 @@ they need a Chromium binary (found via `CHROME_BIN` or the Playwright cache).
 - Known leftover: uncommitted-and-reverted docs/README.md row linking
   learning-guide.md (file never created) briefly broke check:docs; restored to
   HEAD. If the learning guide materializes, re-add the row.
+
+## Completed 2026-09-22 media registry + project collections + front IA reshuffle
+
+- Owner asks that drove this: (1) existing songs/covers invisible in 资源管理;
+  (2) images should split into 封面 vs 文章图片; (3) /articles vs /archive overlap —
+  /articles = all + basic search, /archive = collections by project.
+- **Root causes verified before building**: covers invisible because the gallery was a
+  pure-filesystem listing while every real cover is an external (GitHub host) URL in
+  `Post.coverImage`; also `listImages` was non-recursive (8 `images/home/*` wallpapers
+  invisible). Songs NOT showing had NO code cause (Music list is unfiltered; verified
+  locally) — data question on the server; `apps/api/scripts/import-music-files.mjs`
+  (dry-run default, `--write` to insert) rebuilds Music rows from files found in
+  `MEDIA_ROOT/music`. Server triage: pm2 log prints `database=<path>` →
+  `sqlite3 <path> "select count(*) from Music"` → compare with files in
+  `apps/web/public/music`.
+- **MediaImage registry** (migration 20260922020457): images are now DB rows
+  `{id, kind: cover|article, name, url UNIQUE, createdAt}`; local uploads still land in
+  `MEDIA_ROOT/images` but the row is authoritative (same model as Music). url is
+  GLOBABLY unique — one image, one classification; the adopt scan classifies cover-first.
+  `DELETE /api/images/:id` (was by filename) refuses with 409 + count while posts
+  reference the url (cover = exact match on Post.coverImage; article = substring of
+  content) unless `?force=true`; posts are never modified. `POST /api/images/adopt`
+  scans posts and registers coverImage → cover, markdown body images → article;
+  idempotent, returns NEWLY-registered counts. GET /api/images?kind= public as before.
+- **Editor integration**: ArticleEditor prepends two custom @uiw/react-md-editor
+  commands (upload → /api/images kind=article; pick → ImagePickerModal). Insert
+  position = cursor captured at command time, restored after the async upload via
+  `api.textArea.selectionStart` + `api.replaceSelection` (TextAreaTextApi keeps the
+  live textarea reference, so post-await insertion works). ArticleForm cover field has
+  a 从图库选择 button (same modal, kind=cover).
+- **Project collections** (migration 20260922042415-ish `add_project`):
+  `Project {name UNIQUE, slug UNIQUE, description, coverImage?}` + `Post.projectId`
+  (SET NULL, indexed). Admin endpoints mirror taxonomy exactly
+  (GET /api/collections[?all=true], POST/PUT/DELETE; rename keeps slug; /admin/collections
+  page; authz matrix extended). `ArticleMutationInput.projectId` validated via
+  assertProjectReference; postDetailSelect carries projectId for edit backfill.
+- **Front IA**: /articles gained URL-driven category/tag dropdowns
+  (ArticleFilters; API already supported both filters — zero API work needed for that
+  part; ArticleSearch now preserves ?category/?tag via useSearchParams and hrefFor is
+  a useCallback so the debounce effect deps stay honest). /archive rewritten:
+  project sections (ordered by latest post desc, heading links to the project page)
+  then year fallback for ungrouped posts. New /collections/[collection] page mirrors
+  the category page pipeline (public endpoint /api/public/collections/{slug}).
+  getArticleIndexPageData passes filters through.
+- **Watch out**: MediaImage.url uniqueness means the same file cannot appear in both
+  封面 and 文章图片 sections (the vis-seed tripped this first try). ArchiveData
+  contract changed shape ({total, projects, years}) — archive.test.ts pins the empty
+  shape; update it if you touch the contract again.
+- Verification: 149/149 tests, check:openapi 46 routes, full `npm run check` (incl.
+  browser smoke) + `npm run build` green. Visual acceptance 18/18 via the extended
+  `.research/tools/admin-vis.{mjs,ts}` stack (seed now copies real wallpapers into
+  MEDIA_ROOT/images so thumbnails render offline; paths resolved from import.meta.url —
+  cwd-dependent `../web/public` resolution bit twice in one day).
