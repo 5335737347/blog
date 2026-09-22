@@ -61,6 +61,19 @@ const env = {
   API_INTERNAL_URL: `http://127.0.0.1:${apiPort}`,
   SITE_URL: `http://127.0.0.1:${webPort}`,
   NEXT_PUBLIC_SITE_URL: `http://127.0.0.1:${webPort}`,
+  // 临时冒烟实例用调试验证码覆盖注册表单全链路；生产进程环境不会注入它。
+  ALLOW_DEBUG_VERIFICATION_CODE: "true",
+  // 阻断开发机 .env.local 里的真实邮件配置：空字符串同样算“已定义”，
+  // 会挡住 loadProjectEnv(override:false) 从文件里补入 SMTP/Resend 凭据。
+  RESEND_API_KEY: "",
+  RESEND_FROM: "",
+  SMTP_HOST: "",
+  SMTP_PORT: "",
+  SMTP_SECURE: "",
+  SMTP_STARTTLS: "",
+  SMTP_USER: "",
+  SMTP_PASSWORD: "",
+  SMTP_FROM: "",
   SMOKE_SEED_DATABASE_URL: `file:${path.join(tempDir, "prod-smoke.db")}`,
   // Web 与 `next start` 都用这个构建目录，仓库的 `.next` 完全不参与。
   NEXT_DIST_DIR: webDistDir,

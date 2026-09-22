@@ -7,6 +7,7 @@ import Button from "@/components/ui/Button";
 import { ChevronLeftIcon } from "@/components/public/layout/SiteIcons";
 import Input from "@/components/ui/Input";
 import { readApiData, readApiError } from "@/lib/api-client";
+import { refreshSession } from "@/components/public/auth/AuthNav";
 
 interface RegisterResponse {
   loggedIn: boolean;
@@ -121,6 +122,8 @@ export default function RegisterForm({ initialCapabilities }: RegisterFormProps)
       }
 
       await readApiData<RegisterResponse>(res);
+      // 与登录表单一致：注册后根布局不会重新挂载，必须主动通知 AuthNav。
+      await refreshSession();
       router.push("/");
       router.refresh();
     } catch {

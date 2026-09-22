@@ -269,6 +269,20 @@ async function click(sessionId, selector) {
   );
 }
 
+async function clickByText(sessionId, text) {
+  return evaluate(
+    sessionId,
+    `(() => {
+      const element = [...document.querySelectorAll("button")].find((button) =>
+        (button.textContent || "").includes(${JSON.stringify(text)})
+      );
+      if (!element) return false;
+      element.click();
+      return true;
+    })()`
+  );
+}
+
 /* ---------- 检查 ---------- */
 const failures = [];
 const check = (name, pass, detail = "") => {
@@ -692,6 +706,63 @@ const adminRedirected = await waitFor(
   10000
 );
 check("未登录访问 /admin 会跳转登录页", adminRedirected);
+
+// 注册全链路：调试验证码模式下，表单取码、注册、登录态头部同步。
+const newUsername = "smoke-new-user";
+await send("Page.navigate", { url: BASE + "/register" }, flowPage.sessionId);
+await waitFor(flowPage.sessionId, `!!document.querySelector('input[autocomplete="email"]')`);
+await fill(flowPage.sessionId, 'input[autocomplete="username"]', newUsername);
+await fill(flowPage.sessionId, 'input[autocomplete="name"]', "冒烟新用户");
+await fill(flowPage.sessionId, 'input[autocomplete="email"]', "smoke-new-user@example.com");
+// 等 React 水合完成：SSR 的按钮可能先存在但事件还没挂上。
+await waitFor(
+  flowPage.sessionId,
+  `(() => {
+    const button = [...document.querySelectorAll("button")].find((item) =>
+      (item.textContent || "").includes("发送验证码")
+    );
+    return !!button && !button.disabled;
+  })()`,
+  10000
+);
+await clickByText(flowPage.sessionId, "发送验证码");
+const codeVisible = await waitFor(
+  flowPage.sessionId,
+  `/验证码已生成：\\d{6}/.test(document.body.innerText)`,
+  10000
+);
+const debugCode = codeVisible
+  ? await evaluate(flowPage.sessionId, `(document.body.innerText.match(/验证码已生成：(\\d{6})/) || [])[1] || ""`)
+  : "";
+const registerFallbackText = codeVisible
+  ? ""
+  : await evaluate(flowPage.sessionId, `document.body.innerText.replace(/\\s+/g, " ").slice(0, 160)`);
+check("注册页可发送并显示调试验证码", codeVisible && /^\d{6}$/.test(debugCode), debugCode || registerFallbackText);
+
+await fill(flowPage.sessionId, 'input[autocomplete="one-time-code"]', debugCode);
+await evaluate(
+  flowPage.sessionId,
+  `(() => {
+    const inputs = [...document.querySelectorAll('input[autocomplete="new-password"]')];
+    const setValue = (element, value) => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      if (setter) setter.call(element, value);
+      else element.value = value;
+      element.dispatchEvent(new Event("input", { bubbles: true }));
+      element.dispatchEvent(new Event("change", { bubbles: true }));
+    };
+    if (inputs[0]) setValue(inputs[0], "smoke-new-password");
+    if (inputs[1]) setValue(inputs[1], "smoke-new-password");
+    return inputs.length >= 2;
+  })()`
+);
+await click(flowPage.sessionId, 'form button[type="submit"]');
+const registered = await waitFor(
+  flowPage.sessionId,
+  `location.pathname === "/" && document.body.innerText.includes("冒烟新用户")`,
+  15000
+);
+check("注册成功后自动登录并同步头部账号", registered);
 
 await closePage(flowPage);
 }

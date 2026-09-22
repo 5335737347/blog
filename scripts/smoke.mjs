@@ -38,6 +38,19 @@ const env = {
   API_INTERNAL_URL: `http://127.0.0.1:${apiPort}`,
   SITE_URL: `http://127.0.0.1:${webPort}`,
   NEXT_PUBLIC_SITE_URL: `http://127.0.0.1:${webPort}`,
+  // 临时冒烟实例用调试验证码覆盖注册表单全链路；生产进程环境不会注入它。
+  ALLOW_DEBUG_VERIFICATION_CODE: "true",
+  // 阻断开发机 .env.local 里的真实邮件配置：空字符串同样算“已定义”，
+  // 会挡住 loadProjectEnv(override:false) 从文件里补入 SMTP/Resend 凭据。
+  RESEND_API_KEY: "",
+  RESEND_FROM: "",
+  SMTP_HOST: "",
+  SMTP_PORT: "",
+  SMTP_SECURE: "",
+  SMTP_STARTTLS: "",
+  SMTP_USER: "",
+  SMTP_PASSWORD: "",
+  SMTP_FROM: "",
   SMOKE_SEED_DATABASE_URL: databaseUrl,
   // Next 16 不允许同一目录下同时运行两个 dev server（.next 被锁），
   // 冒烟实例用独立构建目录，就不必要求用户先关掉自己的开发服务。

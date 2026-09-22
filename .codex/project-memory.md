@@ -1553,3 +1553,18 @@ they need a Chromium binary (found via `CHROME_BIN` or the Playwright cache).
   admin login honoring `?redirect=/admin/comments`, and anonymous `/admin`
   redirect to the login page.
 - The smoke script still cleans up every child process; dev and prod smoke pass.
+
+
+## Completed 2026-09-22 (eighth batch): registration E2E finds a real session bug
+
+- Smoke seed now also creates known admin/normal users; smoke-web drives public user
+  login, guestbook submission, admin login with redirect, anonymous /admin redirect,
+  and the full registration code flow in debug mode.
+- The new registration assertion exposed a real bug: RegisterForm did not call
+  `refreshSession()` after signup, so the header still showed 注册/登录 until a hard
+  refresh. It now mirrors LoginForm and awaits `refreshSession()` before routing home.
+- Smoke env explicitly blanks RESEND/SMTP variables with empty strings, preventing
+  the developer's .env.local from injecting real mail credentials into the
+  disposable smoke instance.
+- 169 unit/integration tests, check:ci, build, smoke and smoke:prod green; dev smoke
+  now has 6 authenticated/form assertions.
