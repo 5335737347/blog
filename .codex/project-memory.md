@@ -1383,3 +1383,19 @@ they need a Chromium binary (found via `CHROME_BIN` or the Playwright cache).
   silently no-ops — always assert before writing; and slicing a test file for
   insertion truncated it once (git checkout + insert-before-anchor). 159 tests,
   check + build green.
+
+## Hotfix 2026-09-22: sitemap build crash during update (ebe5ec2)
+
+- Production update ABORTED at build: /sitemap.xml prerender crashed with
+  `undefined.map`. Root cause: the P1 release added `projects` to
+  /api/public/sitemap-data; `npm run update` builds web BEFORE reloading the API,
+  so the build-time fetch hit the OLD API → 200 with the OLD shape (no projects key)
+  → destructuring overwrote the `[]` default with undefined. A 404 would have
+  degraded cleanly (throw → catch); **200-with-old-shape silently passes undefined**.
+- Fix: public-api getSitemapData normalizes every array field (`?? []`). Rule going
+  forward: any new field added to an existing public SSR endpoint must be defaulted
+  in its web fetcher, because one full update cycle always builds against the
+  previous API. (The earlier /projects 404 degrade was the same ordering, benign
+  because the endpoint itself was new.)
+- Server state after the aborted update: code/migrations applied, PM2 still on the
+  previous release — re-running `npm run update` after pulling the fix completes it.
