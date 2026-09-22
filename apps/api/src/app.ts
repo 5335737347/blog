@@ -73,9 +73,35 @@ export function buildApp(options: BuildAppOptions = {}) {
   // 通过 register 引入的插件钩子不会应用到之后注册的路由（见 compression.ts 注释）。
   registerCompression(app);
 
-  // 把请求 ID 回给客户端：用户截图报错时能直接给出可在日志里检索的编号。
+  function appendVary(current: string | number | string[] | undefined, value: string) {
+    const existing = String(current ?? "")
+      .split(",")
+      .map((part) => part.trim())
+      .filter(Boolean);
+    if (!existing.some((part) => part.toLowerCase() === value.toLowerCase())) {
+      existing.push(value);
+    }
+    return existing.join(", ");
+  }
+
+  /**
+   * 请求 ID + 缓存策略。
+   *
+   * GET 且不带 Cookie：公开数据允许短时间共享缓存，减轻重复搜索/翻页请求。
+   * 带 Cookie 或 /api/auth/*：响应可能随会话变化，必须 private/no-store，
+   * 避免共享缓存把管理员看到的草稿/图库串给匿名访客。
+   */
   app.addHook("onSend", async (request, reply) => {
     reply.header("X-Request-Id", request.id);
+    if (request.method !== "GET" || !request.url.startsWith("/api/")) return;
+
+    const hasSessionCookie = Boolean(request.headers.cookie);
+    if (hasSessionCookie || request.url.startsWith("/api/auth/")) {
+      reply.header("cache-control", "private, no-store");
+      reply.header("vary", appendVary(reply.getHeader("vary"), "Cookie"));
+    } else {
+      reply.header("cache-control", "public, max-age=0, s-maxage=60, stale-while-revalidate=300");
+    }
   });
 
   app.register(cookie);

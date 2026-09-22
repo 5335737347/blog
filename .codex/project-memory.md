@@ -1460,3 +1460,39 @@ they need a Chromium binary (found via `CHROME_BIN` or the Playwright cache).
   (Resend + login lockout split), environment API_INTERNAL_URL build-time warning,
   deployment seed warning, README mobile nav + seed warning, OpenAPI images auth,
   next-plan checkpoint, contracts coverage caveat.
+
+
+## Completed 2026-09-22 (later): second optimization batch
+
+- API GET cache policy: adds `Cache-Control: public, s-maxage=60,
+  stale-while-revalidate=300` for cookie-less public GETs, and
+  `private, no-store` + `Vary: Cookie` for session/cookie-dependent responses.
+  This prevents shared caches from mixing admin views with anonymous traffic.
+- Registration now uses a single atomic `INSERT ... SELECT ... WHERE NOT EXISTS`
+  statement for case-insensitive username/email/cross-field uniqueness, closing
+  the race between precheck and insert without relying on SQLite's
+  case-sensitive UNIQUE constraints.
+- Public comments route now rejects draft/missing posts with 404, matching
+  `createComment`.
+- Admin login honors the `?redirect=/admin/...` parameter with a same-origin
+  path whitelist.
+- Next startup now also checks runtime `SITE_URL` / `NEXT_PUBLIC_SITE_URL`
+  against the build-time `images-manifest.json` remotePatterns, alongside the
+  existing `API_INTERNAL_URL` rewrite check.
+- Tests: 165 green after adding cache-header and draft-comment regressions.
+
+
+## Completed 2026-09-22 (third batch): UX, caching, contracts and front-end polish
+
+- Contracts package expanded with public settings, registration capabilities, media
+  image, music track, wallpaper, RSS, sitemap, project detail and archive response
+  types; Web public-api and admin media components now consume them instead of
+  maintaining local duplicates. API media DTOs are annotated with the same types.
+- CommentSection now surfaces load failures with an inline retry action instead of
+  silently rendering an empty section.
+- MarkdownFigure lightbox focuses its close button on open, traps Tab within the
+  dialog, and returns focus to the image trigger on close.
+- Next headers add HSTS and short-lived caching for `/images/*` and `/music/*`.
+- Category and project `generateMetadata` now read from the already-cached public
+  taxonomy/project lists instead of issuing a second single-item archive request.
+- 165 tests, check:ci, build, smoke and smoke:prod green.

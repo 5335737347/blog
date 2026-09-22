@@ -4,6 +4,7 @@ import type {
   HomePageData,
   ProjectCardData,
   ProjectsPageData,
+  PublicSettingsDto,
 } from "@kpblog/contracts";
 import { prisma } from "@/lib/prisma";
 import { postSummarySelect, toPostSummaryDto } from "@/server/articles/article-dto";
@@ -38,11 +39,6 @@ const rssPostSelect = {
 } satisfies Prisma.PostSelect;
 
 type RssPostRecord = Prisma.PostGetPayload<{ select: typeof rssPostSelect }>;
-
-export interface PublicSettingsDto {
-  blogTitle: string;
-  blogDescription: string;
-}
 
 export interface RssPostDto {
   slug: string;

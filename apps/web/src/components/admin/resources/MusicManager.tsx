@@ -5,21 +5,14 @@ import Alert from "@/components/admin/ui/Alert";
 import EmptyState from "@/components/admin/ui/EmptyState";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
+import type { MusicTrackDto } from "@kpblog/contracts";
 import { readApiData, readApiError } from "@/lib/api-client";
-
-interface Track {
-  id: string;
-  title: string;
-  artist: string | null;
-  url: string;
-  createdAt: string;
-}
 
 /**
  * 音乐管理：从原独立页面整体迁入「资源管理」，交互不变。
  */
 export default function MusicManager() {
-  const [tracks, setTracks] = useState<Track[]>([]);
+  const [tracks, setTracks] = useState<MusicTrackDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState("");
@@ -35,7 +28,7 @@ export default function MusicManager() {
     setLoading(true);
     try {
       const res = await fetch("/api/music");
-      setTracks(await readApiData<Track[]>(res));
+      setTracks(await readApiData<MusicTrackDto[]>(res));
     } catch (reason) {
       setMessageKind("error");
       setMessage(reason instanceof Error ? reason.message : "加载音乐失败");
@@ -109,7 +102,7 @@ export default function MusicManager() {
     }
   };
 
-  const handleDelete = async (track: Track) => {
+  const handleDelete = async (track: MusicTrackDto) => {
     if (!confirm(`确定删除「${track.title}」？`)) return;
     setMessage("");
     try {

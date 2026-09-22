@@ -1,6 +1,7 @@
 import { mkdir, unlink, writeFile } from "fs/promises";
 import path from "path";
 import type { Prisma } from "@prisma/client";
+import type { MediaImageDto } from "@kpblog/contracts";
 import { prisma } from "@/lib/prisma";
 import { generateUniqueFilename } from "@/lib/utils";
 import { badRequest, notFound, ServiceError } from "@/server/errors";
@@ -197,7 +198,7 @@ const imageSelect = {
 
 type ImageRecord = Prisma.MediaImageGetPayload<{ select: typeof imageSelect }>;
 
-export function toImageDto(image: ImageRecord) {
+export function toImageDto(image: ImageRecord): MediaImageDto {
   return {
     id: image.id,
     kind: image.kind,

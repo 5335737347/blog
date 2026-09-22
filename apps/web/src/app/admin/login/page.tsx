@@ -13,6 +13,16 @@ interface LoginResponse {
   };
 }
 
+/** Proxy 在跳转登录页时带上 redirect；只接受站内 /admin 路径。 */
+function safeAdminRedirect(): string {
+  const raw = new URLSearchParams(window.location.search).get("redirect");
+  if (!raw) return "/admin";
+  if (!raw.startsWith("/admin") || raw.startsWith("//") || raw.startsWith("/admin/login")) {
+    return "/admin";
+  }
+  return raw;
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const [username, setUsername] = useState("");
@@ -56,7 +66,7 @@ export default function LoginPage() {
           setError("当前账号不是管理员");
           return;
         }
-        router.push("/admin");
+        router.push(safeAdminRedirect());
       } else {
         // body 只能读一次：先取下来，再同时拿出文案与剩余秒数。
         // 之前这里先 res.json() 再 readApiError(res.clone())，clone 会抛

@@ -22,6 +22,65 @@ export interface HealthResponse {
   checks: { database: "ok" | "error" };
 }
 
+export interface PublicSettingsDto {
+  blogTitle: string;
+  blogDescription: string;
+}
+
+export interface RegistrationCapabilities {
+  email: boolean;
+}
+
+export interface MediaImageDto {
+  id: string;
+  /** 当前取值为 cover / article；服务层会拒绝其它值。 */
+  kind: string;
+  name: string;
+  url: string;
+  createdAt: string;
+}
+
+export interface MusicTrackDto {
+  id: string;
+  title: string;
+  artist: string | null;
+  url: string;
+  createdAt: string;
+}
+
+export interface HomeWallpaperDto {
+  id: string;
+  url: string;
+  enabled: boolean;
+  sortOrder: number;
+  createdAt: string;
+}
+
+export interface RssPostDto {
+  slug: string;
+  title: string;
+  excerpt: string | null;
+  content: string;
+  coverImage: string | null;
+  publishedAt: string | null;
+  tags: { name: string }[];
+}
+
+export interface SitemapDataDto {
+  posts: { slug: string; updatedAt: string }[];
+  tags: { slug: string }[];
+  categories: { slug: string }[];
+  projects: { slug: string; lastModified: string | null }[];
+}
+
+export interface ProjectDetailData {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  coverImage: string | null;
+}
+
 export interface TaxonomySummary {
   name: string;
   slug: string;
@@ -82,6 +141,21 @@ export interface TaxonomyWithCount {
   name: string;
   slug: string;
   postCount: number;
+}
+
+export interface TagArchiveData {
+  tag: TaxonomyWithCount | null;
+  articles: PaginatedResult<PostSummary>;
+}
+
+export interface CategoryArchiveData {
+  category: TaxonomyWithCount | null;
+  articles: PaginatedResult<PostSummary>;
+}
+
+export interface CollectionArchiveData {
+  project: ProjectDetailData | null;
+  articles: PaginatedResult<PostSummary>;
 }
 
 export interface ArticleAdjacent {

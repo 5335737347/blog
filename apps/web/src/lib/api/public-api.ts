@@ -4,61 +4,24 @@ import type {
   ProjectsPageData,
   ApiResponse,
   ArticleAdjacent,
+  CategoryArchiveData,
+  CollectionArchiveData,
   HomePageData,
+  HomeWallpaperDto,
   PaginatedResult,
   PostDetail,
   PostSummary,
   ProfileDto,
+  PublicSettingsDto,
+  RegistrationCapabilities,
+  RssPostDto,
+  SitemapDataDto,
+  TagArchiveData,
+  TaxonomyWithCount,
 } from "@kpblog/contracts";
 
 const DEFAULT_BLOG_TITLE = "鲲鹏の博客";
 const DEFAULT_BLOG_DESCRIPTION = "一个关于技术和生活的个人博客";
-
-export interface PublicSettingsDto {
-  blogTitle: string;
-  blogDescription: string;
-}
-
-export interface RegistrationCapabilities {
-  email: boolean;
-}
-
-interface TaxonomyDto {
-  id: string;
-  name: string;
-  slug: string;
-  postCount: number;
-}
-
-/** 标签/分类列表页接口的返回形状。 */
-interface TaxonomyArchiveListing {
-  articles: PaginatedResult<PostSummary>;
-}
-
-interface TagArchiveData extends TaxonomyArchiveListing {
-  tag: TaxonomyDto | null;
-}
-
-interface CategoryArchiveData extends TaxonomyArchiveListing {
-  category: TaxonomyDto | null;
-}
-
-export interface RssPostDto {
-  slug: string;
-  title: string;
-  excerpt: string | null;
-  content: string;
-  coverImage: string | null;
-  publishedAt: string | null;
-  tags: { name: string }[];
-}
-
-export interface SitemapDataDto {
-  posts: { slug: string; updatedAt: string }[];
-  tags: { slug: string }[];
-  categories: { slug: string }[];
-  projects: { slug: string; lastModified: string | null }[];
-}
 
 function apiBaseUrl() {
   return (process.env.API_INTERNAL_URL || "http://127.0.0.1:3002").replace(/\/$/, "");
@@ -133,27 +96,8 @@ export function getCategoryArchivePageData(categorySlug: string, page: number, p
   return getApiData<CategoryArchiveData>(`/api/public/categories/${encodeURIComponent(categorySlug)}?page=${page}&limit=${pageSize}`);
 }
 
-interface ProjectSummary {
-  id: string;
-  name: string;
-  slug: string;
-  description: string;
-  coverImage: string | null;
-}
-
-interface CollectionArchiveData extends TaxonomyArchiveListing {
-  project: ProjectSummary | null;
-}
-
 export function getCollectionPageData(projectSlug: string, page: number, pageSize: number) {
   return getApiData<CollectionArchiveData>(`/api/public/collections/${encodeURIComponent(projectSlug)}?page=${page}&limit=${pageSize}`);
-}
-
-export interface HomeWallpaperDto {
-  id: string;
-  url: string;
-  enabled: boolean;
-  sortOrder: number;
 }
 
 /**
@@ -169,17 +113,17 @@ export const getHomeWallpapers = cache(async (): Promise<HomeWallpaperDto[]> => 
 });
 
 /** /articles 列表页的筛选下拉数据。可降级：分类/标签拿不到时筛选框隐藏。 */
-export const getPublicCategories = cache(async (): Promise<TaxonomyDto[]> => {
+export const getPublicCategories = cache(async (): Promise<TaxonomyWithCount[]> => {
   try {
-    return await getApiData<TaxonomyDto[]>("/api/categories");
+    return await getApiData<TaxonomyWithCount[]>("/api/categories");
   } catch {
     return [];
   }
 });
 
-export const getPublicTags = cache(async (): Promise<TaxonomyDto[]> => {
+export const getPublicTags = cache(async (): Promise<TaxonomyWithCount[]> => {
   try {
-    return await getApiData<TaxonomyDto[]>("/api/tags");
+    return await getApiData<TaxonomyWithCount[]>("/api/tags");
   } catch {
     return [];
   }

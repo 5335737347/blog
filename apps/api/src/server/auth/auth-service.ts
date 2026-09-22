@@ -12,7 +12,7 @@ import {
   normalizeVerificationTarget,
   sendVerificationCode,
 } from "@/server/auth/verification-code-service";
-import { badRequest, forbidden, unauthorized } from "@/server/errors";
+import { badRequest, forbidden, ServiceError, unauthorized } from "@/server/errors";
 
 export interface LoginInput {
   username?: unknown;
@@ -227,12 +227,27 @@ export async function registerUser(input: unknown) {
     tokenVersion: 0,
   };
 
+  const passwordHash = await hashPassword(password);
   try {
-    await prisma.$executeRaw`
+    // 预检与插入之间存在竞态：两个并发注册可能都通过 LOWER(username) 预检。
+    // 这里把大小写不敏感的跨字段唯一性做成同一条 INSERT ... SELECT ... WHERE
+    // NOT EXISTS 语句，SQLite 的写事务会保证只有一个能插入成功。
+    const inserted = await prisma.$executeRaw`
       INSERT INTO "User" ("id", "username", "email", "phone", "displayName", "password", "role")
-      VALUES (${user.id}, ${username}, ${email}, NULL, ${user.displayName}, ${await hashPassword(password)}, 'USER')
+      SELECT ${user.id}, ${username}, ${email}, NULL, ${user.displayName}, ${passwordHash}, 'USER'
+      WHERE NOT EXISTS (
+        SELECT 1 FROM "User"
+        WHERE LOWER("username") = LOWER(${username})
+           OR LOWER("email") = LOWER(${email})
+           OR LOWER("username") = LOWER(${email})
+           OR ("email" IS NOT NULL AND LOWER("email") = LOWER(${username}))
+      )
     `;
+    if (inserted === 0) {
+      throw badRequest("用户名或邮箱已被使用");
+    }
   } catch (error) {
+    if (error instanceof ServiceError) throw error;
     // 只把真正的唯一约束冲突翻译成 400；磁盘/数据库故障必须继续冒泡成 500，
     // 否则运维看到的是“用户名已被使用”，真实故障被永久掩盖。
     const code = (error as { code?: unknown }).code;

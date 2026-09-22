@@ -128,6 +128,10 @@ test("comments are rejected for missing posts, drafts and invalid input", async 
     () => createComment({ postId: draft.id, author: "甲", content: "内容" }),
     { status: 404 }
   );
+  await assert.rejects(
+    () => listPublicComments(draft.id, { page: 1, pageSize: 10 }),
+    { status: 404 }
+  );
 
   await assert.rejects(() => createComment({ postId, author: "", content: "内容" }), { status: 400 });
   await assert.rejects(() => createComment({ postId, author: "甲", content: "" }), { status: 400 });

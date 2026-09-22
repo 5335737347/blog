@@ -5,7 +5,7 @@ import CommentForm from "./CommentForm";
 import CommentList from "./CommentList";
 import { CommentIcon } from "@/components/public/layout/SiteIcons";
 import type { CommentThreadPage, CommentWithReplies } from "@kpblog/contracts";
-import { readApiData } from "@/lib/api-client";
+import { readApiData, readApiError } from "@/lib/api-client";
 
 /** 与后端默认页大小一致；后端上限为 50。 */
 const PAGE_SIZE = 20;
@@ -29,6 +29,7 @@ export default function CommentSection({ postId }: CommentSectionProps) {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
+  const [error, setError] = useState("");
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
   const successTimer = useRef<number | null>(null);
@@ -41,6 +42,7 @@ export default function CommentSection({ postId }: CommentSectionProps) {
   }, []);
 
   const fetchComments = useCallback(async (targetPage: number, append: boolean) => {
+    setError("");
     try {
       const params = new URLSearchParams({
         page: String(targetPage),
@@ -49,20 +51,27 @@ export default function CommentSection({ postId }: CommentSectionProps) {
       if (postId) params.set("postId", postId);
       const endpoint = postId ? "/api/comments" : "/api/public/guestbook";
       const res = await fetch(`${endpoint}?${params.toString()}`);
-      if (res.ok) {
-        const data = await readApiData<CommentThreadPage>(res);
-        setComments((previous) => (append ? [...previous, ...data.items] : data.items));
-        setTotal(data.total);
-        setTotalPages(data.totalPages);
-        setPage(data.page);
+      if (!res.ok) {
+        setError(await readApiError(res, "评论加载失败，请稍后重试"));
+        return;
       }
+      const data = await readApiData<CommentThreadPage>(res);
+      setComments((previous) => (append ? [...previous, ...data.items] : data.items));
+      setTotal(data.total);
+      setTotalPages(data.totalPages);
+      setPage(data.page);
     } catch {
-      // silent fail
+      setError("网络错误，评论加载失败");
     } finally {
       setLoading(false);
       setLoadingMore(false);
     }
   }, [postId]);
+
+  const retryComments = () => {
+    setLoading(true);
+    void fetchComments(1, false);
+  };
 
   useEffect(() => {
     const id = window.setTimeout(() => {
@@ -105,6 +114,22 @@ export default function CommentSection({ postId }: CommentSectionProps) {
           <span className="text-meta font-normal text-ink-3">({total})</span>
         )}
       </h2>
+
+      {error && (
+        <div
+          role="alert"
+          className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-sm border border-danger/30 bg-danger-soft px-4 py-2.5 text-meta text-danger"
+        >
+          <span>{error}</span>
+          <button
+            type="button"
+            onClick={retryComments}
+            className="font-medium underline underline-offset-2"
+          >
+            重新加载
+          </button>
+        </div>
+      )}
 
       {showSuccess && (
         <div role="status" aria-live="polite" className="mb-4 rounded-sm bg-success-soft px-4 py-2.5 text-meta text-success">

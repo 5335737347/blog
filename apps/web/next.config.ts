@@ -99,6 +99,58 @@ function assertRewriteTargetMatchesRuntimeEnv() {
   }
 }
 
+/**
+ * 图片白名单与 rewrite 同源问题：images.remotePatterns 也是 next build 时
+ * 固化的。只改运行时 SITE_URL 重启，运行时 shouldSkipImageOptimization 会按新
+ * 域名判断，但构建产物仍只信任旧域名，出现“本地图走优化却 400/报错”的错配。
+ */
+function assertImagePatternsMatchRuntimeEnv() {
+  if (process.env.NEXT_PHASE === "phase-production-build") return;
+  if (process.env.NODE_ENV !== "production") return;
+
+  const manifestPath = path.join(
+    path.dirname(fileURLToPath(import.meta.url)),
+    configuredDistDir(),
+    "images-manifest.json"
+  );
+  if (!existsSync(manifestPath)) return;
+
+  let patterns: { protocol?: string; hostname?: string }[] = [];
+  try {
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
+      images?: { remotePatterns?: { protocol?: string; hostname?: string }[] };
+    };
+    patterns = manifest.images?.remotePatterns ?? [];
+  } catch {
+    return;
+  }
+
+  for (const candidate of [process.env.SITE_URL, process.env.NEXT_PUBLIC_SITE_URL]) {
+    if (!candidate) continue;
+    let url: URL;
+    try {
+      url = new URL(candidate);
+    } catch {
+      continue;
+    }
+    if (url.protocol !== "http:" && url.protocol !== "https:") continue;
+    const protocol = url.protocol.replace(":", "");
+    const matched = patterns.some(
+      (pattern) =>
+        pattern.protocol === protocol &&
+        typeof pattern.hostname === "string" &&
+        new RegExp(pattern.hostname, "i").test(url.hostname)
+    );
+    if (!matched) {
+      throw new Error(
+        `SITE_URL 与当前构建产物的 images.remotePatterns 不一致：${url.origin}\n` +
+          "修改 SITE_URL / NEXT_PUBLIC_SITE_URL 后必须重新执行 npm run build，" +
+          "否则本站图片优化白名单会与运行时判断错配。"
+      );
+    }
+  }
+}
+
 function siteImagePatterns() {
   const candidates = [process.env.SITE_URL, process.env.NEXT_PUBLIC_SITE_URL];
   const patterns: { protocol: "http" | "https"; hostname: string }[] = [];
@@ -154,6 +206,7 @@ function allowedDevOrigins(): string[] {
 }
 
 assertRewriteTargetMatchesRuntimeEnv();
+assertImagePatternsMatchRuntimeEnv();
 
 const nextConfig: NextConfig = {
   turbopack: {
@@ -193,6 +246,21 @@ const nextConfig: NextConfig = {
           { key: "X-Frame-Options", value: "DENY" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+          { key: "Strict-Transport-Security", value: "max-age=31536000" },
+        ],
+      },
+      {
+        // 上传媒体与仓库自带的壁纸/音乐文件名基本稳定，适合短缓存以减少重复传输；
+        // 默认壁纸未来可能同名更新，所以用 1 小时而不是 immutable。
+        source: "/images/:path*",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=3600, stale-while-revalidate=86400" },
+        ],
+      },
+      {
+        source: "/music/:path*",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=3600, stale-while-revalidate=86400" },
         ],
       },
     ];

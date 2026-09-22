@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "fs/promises";
 import path from "path";
 import type { Prisma } from "@prisma/client";
+import type { HomeWallpaperDto } from "@kpblog/contracts";
 import { prisma } from "@/lib/prisma";
 import { generateUniqueFilename } from "@/lib/utils";
 import { badRequest, notFound } from "@/server/errors";
@@ -43,7 +44,7 @@ const wallpaperSelect = {
 
 type WallpaperRecord = Prisma.HomeWallpaperGetPayload<{ select: typeof wallpaperSelect }>;
 
-export function toWallpaperDto(wallpaper: WallpaperRecord) {
+export function toWallpaperDto(wallpaper: WallpaperRecord): HomeWallpaperDto {
   return {
     id: wallpaper.id,
     url: wallpaper.url,

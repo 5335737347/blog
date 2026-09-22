@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import ArticleList from "@/components/public/articles/ArticleList";
 import Pagination from "@/components/public/articles/Pagination";
 import PageShell, { PageHeader } from "@/components/public/layout/PageShell";
-import { getCollectionPageData } from "@/lib/api/public-api";
+import { getCollectionPageData, getProjectsData } from "@/lib/api/public-api";
 import { pageAlternates } from "@/lib/metadata";
 import { parsePageParam } from "@/lib/utils";
 
@@ -18,7 +18,8 @@ export async function generateMetadata({ params, searchParams }: CollectionPageP
   const { collection: projectSlug } = await params;
   const { page: pageParam } = await searchParams;
   const page = parsePageParam(pageParam);
-  const { project } = await getCollectionPageData(projectSlug, 1, 1);
+  const { projects } = await getProjectsData();
+  const project = projects.find((item) => item.slug === projectSlug) ?? null;
   if (!project) return { title: "项目不存在" };
 
   return {

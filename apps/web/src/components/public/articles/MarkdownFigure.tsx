@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CloseIcon, ExpandIcon } from "@/components/public/layout/SiteIcons";
 
 interface MarkdownFigureProps {
@@ -13,13 +13,29 @@ interface MarkdownFigureProps {
  */
 export default function MarkdownFigure({ src, alt = "" }: MarkdownFigureProps) {
   const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
 
-  const close = useCallback(() => setOpen(false), []);
+  const close = useCallback(() => {
+    setOpen(false);
+    // 关闭后把焦点还给触发图片的按钮，键盘用户不会掉回页面开头。
+    triggerRef.current?.focus();
+  }, []);
 
   useEffect(() => {
     if (!open) return;
+    closeButtonRef.current?.focus();
+
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") close();
+      if (event.key === "Escape") {
+        close();
+        return;
+      }
+      // 对话框里只有关闭按钮可交互，Tab 保持在其中，避免焦点跑到背景页面。
+      if (event.key === "Tab") {
+        event.preventDefault();
+        closeButtonRef.current?.focus();
+      }
     };
     document.addEventListener("keydown", onKey);
     document.body.style.overflow = "hidden";
@@ -33,6 +49,7 @@ export default function MarkdownFigure({ src, alt = "" }: MarkdownFigureProps) {
     <>
       <figure className="markdown-image-frame">
         <button
+          ref={triggerRef}
           type="button"
           onClick={() => setOpen(true)}
           className="group relative block w-full cursor-zoom-in overflow-hidden rounded-md border border-line"
@@ -64,6 +81,7 @@ export default function MarkdownFigure({ src, alt = "" }: MarkdownFigureProps) {
             className="max-h-[90svh] max-w-full rounded-md object-contain"
           />
           <button
+            ref={closeButtonRef}
             type="button"
             onClick={close}
             aria-label="关闭预览"

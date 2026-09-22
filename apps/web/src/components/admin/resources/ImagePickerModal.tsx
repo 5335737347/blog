@@ -3,15 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Alert from "@/components/admin/ui/Alert";
 import Button from "@/components/ui/Button";
+import type { MediaImageDto } from "@kpblog/contracts";
 import { readApiData, readApiError } from "@/lib/api-client";
 
-export interface ImageItem {
-  id: string;
-  kind: string;
-  name: string;
-  url: string;
-  createdAt: string;
-}
+export type ImageItem = MediaImageDto;
 
 interface ImagePickerModalProps {
   kind: "cover" | "article";

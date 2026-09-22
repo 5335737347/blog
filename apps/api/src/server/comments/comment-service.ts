@@ -106,6 +106,17 @@ export async function listPublicComments(postId: string, options: ListPublicComm
   if (!postId) {
     throw badRequest("缺少 postId");
   }
+
+  // 评论只能属于已发布文章；草稿/不存在文章的评论不应通过公开端点泄漏。
+  // 这与 createComment 的校验口径一致，避免“文章 404 但评论还能读”的缝隙。
+  const post = await prisma.post.findUnique({
+    where: { id: postId },
+    select: { id: true, published: true },
+  });
+  if (!post || !post.published) {
+    throw notFound("文章不存在");
+  }
+
   return listApprovedRoots({ postId }, options);
 }
 

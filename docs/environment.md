@@ -102,6 +102,10 @@ API 读的是另一个库**。现在 `databaseFilePath()` / `databaseUrl()` 统�
 `npm run build`。Web 启动时会对比 `routes-manifest.json` 与当前环境，不一致会
 拒绝启动；看到 “API_INTERNAL_URL 与当前构建产物不一致” 时重建即可。
 
+同理，`SITE_URL` / `NEXT_PUBLIC_SITE_URL` 决定 `images.remotePatterns` 中本站图片
+优化白名单，也在 `next build` 时固化；只改运行时值不重建会导致图片优化域名错配，
+Web 启动时同样会拒绝并提示重建。
+
 ## 数据与媒体
 
 | 变量 | 使用方 | 说明 |

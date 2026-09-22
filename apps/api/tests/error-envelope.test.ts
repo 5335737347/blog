@@ -62,6 +62,19 @@ test("every failure response is JSON with a parseable envelope", async () => {
   assert.equal(body.error.retryAfterSeconds, undefined);
 });
 
+test("GET cache policy separates public data from session-dependent responses", async () => {
+  const publicResponse = await app.inject({ method: "GET", url: "/api/public/settings" });
+  assert.match(String(publicResponse.headers["cache-control"]), /public/);
+
+  const sessionResponse = await app.inject({
+    method: "GET",
+    url: "/api/public/settings",
+    headers: { cookie: "session=not-a-real-token" },
+  });
+  assert.match(String(sessionResponse.headers["cache-control"]), /private, no-store/);
+  assert.match(String(sessionResponse.headers["vary"]), /Cookie/);
+});
+
 test("unknown routes use the same JSON failure envelope", async () => {
   const response = await app.inject({ method: "GET", url: "/api/does-not-exist" });
   assert.equal(response.statusCode, 404);

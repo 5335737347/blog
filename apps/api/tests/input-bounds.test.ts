@@ -29,12 +29,12 @@ test("extremely large page numbers are clamped instead of crashing SQLite", asyn
   assert.equal(articleIndex.statusCode, 200);
   assert.equal(articleIndex.json().data.page, 10_000);
 
-  const comments = await app.inject({
+  const guestbook = await app.inject({
     method: "GET",
-    url: `/api/comments?postId=absent&page=${huge}`,
+    url: `/api/public/guestbook?page=${huge}`,
   });
-  assert.equal(comments.statusCode, 200);
-  assert.equal(comments.json().data.page, 10_000);
+  assert.equal(guestbook.statusCode, 200);
+  assert.equal(guestbook.json().data.page, 10_000);
 });
 
 test("a JSON body over the configured limit returns a readable 413", async () => {

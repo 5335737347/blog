@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import ArticleList from "@/components/public/articles/ArticleList";
 import Pagination from "@/components/public/articles/Pagination";
 import PageShell, { PageHeader } from "@/components/public/layout/PageShell";
-import { getCategoryArchivePageData } from "@/lib/api/public-api";
+import { getCategoryArchivePageData, getPublicCategories } from "@/lib/api/public-api";
 import { pageAlternates } from "@/lib/metadata";
 import { parsePageParam } from "@/lib/utils";
 
@@ -18,7 +18,8 @@ export async function generateMetadata({ params, searchParams }: CategoryPagePro
   const { category: categorySlug } = await params;
   const { page: pageParam } = await searchParams;
   const page = parsePageParam(pageParam);
-  const { category } = await getCategoryArchivePageData(categorySlug, 1, 1);
+  const categories = await getPublicCategories();
+  const category = categories.find((item) => item.slug === categorySlug) ?? null;
   if (!category) return { title: "分类不存在" };
 
   return {

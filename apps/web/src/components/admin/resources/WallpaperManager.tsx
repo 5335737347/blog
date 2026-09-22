@@ -3,14 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Alert from "@/components/admin/ui/Alert";
 import Button from "@/components/ui/Button";
+import type { HomeWallpaperDto } from "@kpblog/contracts";
 import { readApiData, readApiError } from "@/lib/api-client";
-
-interface WallpaperItem {
-  id: string;
-  url: string;
-  enabled: boolean;
-  sortOrder: number;
-}
 
 /**
  * 首页壁纸轮换管理：上传新壁纸（追加到轮换末尾并启用）、启用/停用、
@@ -20,7 +14,7 @@ interface WallpaperItem {
  * 通过重新上传同路径恢复，但更常见的用法是停用而非删除。
  */
 export default function WallpaperManager() {
-  const [wallpapers, setWallpapers] = useState<WallpaperItem[]>([]);
+  const [wallpapers, setWallpapers] = useState<HomeWallpaperDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -32,7 +26,7 @@ export default function WallpaperManager() {
     setLoading(true);
     try {
       const res = await fetch("/api/wallpapers?all=true");
-      setWallpapers(await readApiData<WallpaperItem[]>(res));
+      setWallpapers(await readApiData<HomeWallpaperDto[]>(res));
     } catch (reason) {
       setMessageKind("error");
       setMessage(reason instanceof Error ? reason.message : "加载壁纸失败");
@@ -99,14 +93,14 @@ export default function WallpaperManager() {
     }
   };
 
-  const toggle = (item: WallpaperItem) =>
+  const toggle = (item: HomeWallpaperDto) =>
     act(item.id, () => fetch(`/api/wallpapers/${item.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ enabled: !item.enabled }),
     }), item.enabled ? "已停用" : "已启用");
 
-  const remove = (item: WallpaperItem) => {
+  const remove = (item: HomeWallpaperDto) => {
     if (!confirm(`把这张壁纸移出首页轮换？（不删除文件）`)) return;
     return act(item.id, () => fetch(`/api/wallpapers/${item.id}`, { method: "DELETE" }), "已移出轮换");
   };
