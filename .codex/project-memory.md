@@ -1265,3 +1265,20 @@ they need a Chromium binary (found via `CHROME_BIN` or the Playwright cache).
   blank below-fold thumbnails are lazy-load capture artifacts).
 - 155 tests (wallpaper-service.test.ts adds 6, incl. the no-resurrect pin); 49
   routes contract-clean; smoke + build green.
+
+## Changed 2026-09-22 (same day): nav is now 文章 + 项目; /archive removed
+
+- Owner: nav should be 文章 + 项目, not 文章 + 归档 — /articles = search/index for
+  everything, projects follow real-world project organization (mainstream-blog style).
+- /archive page, /api/public/archive endpoint, getArchiveData and the ArchiveData/
+  ArchiveYear/ArchivePostSummary contracts are DELETED (85d373e). Superseded by:
+  - `/projects` (revalidate 300): project cards — cover thumb, name, description,
+    N 篇, 最近更新 — sorted by latest update, from GET /api/public/collections
+    (getProjectsPageData; published-only counts). Cards link to /collections/[slug].
+  - /articles remains the full index (time-desc + q/category/tag filters); posts not
+    assigned to any project live ONLY there now — the year fallback is gone by design.
+- Header nav {/projects 项目}; sitemap entry swapped; smoke PAGES list swapped.
+- gotcha: stale `.next/(dev/)types` reference deleted pages after route removal and
+  fail `tsc` — delete those dirs before blaming source code. And line-surgery on
+  openapi.yaml corrupted it once; `git checkout` + content-anchored edits, then
+  `check:openapi` (its duplicate-key detector caught the leftover tail).
