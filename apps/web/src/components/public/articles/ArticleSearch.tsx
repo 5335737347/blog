@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { SearchIcon } from "@/components/public/layout/SiteIcons";
 
 interface ArticleSearchProps {
@@ -21,9 +21,23 @@ const DEBOUNCE_MS = 500;
  */
 export default function ArticleSearch({ initialQuery = "" }: ArticleSearchProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [value, setValue] = useState(initialQuery);
   const timer = useRef<number | null>(null);
   const lastPushed = useRef(initialQuery);
+
+  // 构建保留其它筛选参数（?category= ?tag=）的目标地址；搜索变更回第一页。
+  const hrefFor = useCallback(
+    (query: string) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (query) params.set("q", query);
+      else params.delete("q");
+      params.delete("page");
+      const qs = params.toString();
+      return qs ? `/articles?${qs}` : "/articles";
+    },
+    [searchParams]
+  );
 
   useEffect(() => {
     const query = value.trim();
@@ -31,12 +45,14 @@ export default function ArticleSearch({ initialQuery = "" }: ArticleSearchProps)
     if (timer.current !== null) window.clearTimeout(timer.current);
     timer.current = window.setTimeout(() => {
       lastPushed.current = query;
-      router.replace(query ? `/articles?q=${encodeURIComponent(query)}` : "/articles");
+      router.replace(hrefFor(query));
     }, DEBOUNCE_MS);
     return () => {
       if (timer.current !== null) window.clearTimeout(timer.current);
     };
-  }, [value, router]);
+    // hrefFor 随 searchParams 变化：URL 被其它筛选更新时重算目标地址。
+    // lastPushed 兜底保证不会循环触发（相同 q 直接返回）。
+  }, [value, router, hrefFor]);
 
   // 回车立即跳转并保留一条历史,便于后退回到搜索前
   const submit = (event: FormEvent) => {
@@ -45,13 +61,13 @@ export default function ArticleSearch({ initialQuery = "" }: ArticleSearchProps)
     if (query === lastPushed.current.trim()) return;
     if (timer.current !== null) window.clearTimeout(timer.current);
     lastPushed.current = query;
-    router.push(query ? `/articles?q=${encodeURIComponent(query)}` : "/articles");
+    router.push(hrefFor(query));
   };
 
   const clear = () => {
     setValue("");
     lastPushed.current = "";
-    router.replace("/articles");
+    router.replace(hrefFor(""));
   };
 
   return (

@@ -1,16 +1,17 @@
 import type { Metadata } from "next";
 import ArticleList from "@/components/public/articles/ArticleList";
+import ArticleFilters from "@/components/public/articles/ArticleFilters";
 import ArticleSearch from "@/components/public/articles/ArticleSearch";
 import Pagination from "@/components/public/articles/Pagination";
 import PageShell, { PageHeader } from "@/components/public/layout/PageShell";
-import { getArticleIndexPageData } from "@/lib/api/public-api";
+import { getArticleIndexPageData, getPublicCategories, getPublicTags } from "@/lib/api/public-api";
 import { getSiteUrl } from "@/lib/env";
 import { pageAlternates } from "@/lib/metadata";
 
 const PAGE_SIZE = 10;
 
 interface ArticleIndexPageProps {
-  searchParams: Promise<{ page?: string; q?: string }>;
+  searchParams: Promise<{ page?: string; q?: string; category?: string; tag?: string }>;
 }
 
 export async function generateMetadata({
@@ -18,10 +19,10 @@ export async function generateMetadata({
 }: ArticleIndexPageProps): Promise<Metadata> {
   const siteUrl = getSiteUrl();
   const url = siteUrl ? `${siteUrl}/articles` : undefined;
-  const { q } = await searchParams;
+  const { q, category, tag } = await searchParams;
   const query = q?.trim() || "";
 
-  if (query) {
+  if (query || category || tag) {
     // 搜索结果页有无限个 URL 形态,不允许索引,但允许顺着结果继续抓取
     return {
       title: `「${query}」的搜索结果`,
@@ -43,10 +44,21 @@ export async function generateMetadata({
 }
 
 export default async function ArticleIndexPage({ searchParams }: ArticleIndexPageProps) {
-  const { page: pageParam, q: qParam } = await searchParams;
+  const { page: pageParam, q: qParam, category: categoryParam, tag: tagParam } = await searchParams;
   const page = Math.max(1, Number.parseInt(pageParam || "1", 10) || 1);
   const query = qParam?.trim() || "";
-  const articles = await getArticleIndexPageData(page, PAGE_SIZE, query || undefined);
+  const category = categoryParam?.trim() || "";
+  const tag = tagParam?.trim() || "";
+  const [articles, categories, tags] = await Promise.all([
+    getArticleIndexPageData(page, PAGE_SIZE, query || undefined, {
+      category: category || undefined,
+      tag: tag || undefined,
+    }),
+    getPublicCategories(),
+    getPublicTags(),
+  ]);
+  const activeCategory = categories.find((item) => item.slug === category);
+  const activeTag = tags.find((item) => item.slug === tag);
 
   return (
     <PageShell>
@@ -57,15 +69,18 @@ export default async function ArticleIndexPage({ searchParams }: ArticleIndexPag
         meta={
           query
             ? `找到 ${articles.total} 篇与「${query}」相关`
-            : articles.total > 0
-              ? `共 ${articles.total} 篇`
-              : undefined
+            : activeCategory || activeTag
+              ? `筛选出 ${articles.total} 篇`
+              : articles.total > 0
+                ? `共 ${articles.total} 篇`
+                : undefined
         }
       />
       <ArticleSearch initialQuery={query} />
-      {query && articles.total === 0 ? (
+      <ArticleFilters categories={categories} tags={tags} />
+      {(query || category || tag) && articles.total === 0 ? (
         <div className="empty-state mt-10">
-          没有找到与「{query}」相关的文章,换个关键词试试。
+          没有符合条件的文章,换个关键词或清除筛选试试。
         </div>
       ) : (
         <>

@@ -108,9 +108,16 @@ export const getPublicSettings = cache(async (): Promise<PublicSettingsDto> => {
   }
 });
 
-export function getArticleIndexPageData(page: number, pageSize: number, query?: string) {
+export function getArticleIndexPageData(
+  page: number,
+  pageSize: number,
+  query?: string,
+  filters?: { category?: string; tag?: string }
+) {
   const params = new URLSearchParams({ page: String(page), limit: String(pageSize) });
   if (query) params.set("q", query);
+  if (filters?.category) params.set("category", filters.category);
+  if (filters?.tag) params.set("tag", filters.tag);
   return getApiData<PaginatedResult<PostSummary>>(`/api/public/article-index?${params.toString()}`);
 }
 
@@ -125,6 +132,39 @@ export function getTagArchivePageData(tagSlug: string, page: number, pageSize: n
 export function getCategoryArchivePageData(categorySlug: string, page: number, pageSize: number) {
   return getApiData<CategoryArchiveData>(`/api/public/categories/${encodeURIComponent(categorySlug)}?page=${page}&limit=${pageSize}`);
 }
+
+interface ProjectSummary {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  coverImage: string | null;
+}
+
+interface CollectionArchiveData extends TaxonomyArchiveListing {
+  project: ProjectSummary | null;
+}
+
+export function getCollectionPageData(projectSlug: string, page: number, pageSize: number) {
+  return getApiData<CollectionArchiveData>(`/api/public/collections/${encodeURIComponent(projectSlug)}?page=${page}&limit=${pageSize}`);
+}
+
+/** /articles 列表页的筛选下拉数据。可降级：分类/标签拿不到时筛选框隐藏。 */
+export const getPublicCategories = cache(async (): Promise<TaxonomyDto[]> => {
+  try {
+    return await getApiData<TaxonomyDto[]>("/api/categories");
+  } catch {
+    return [];
+  }
+});
+
+export const getPublicTags = cache(async (): Promise<TaxonomyDto[]> => {
+  try {
+    return await getApiData<TaxonomyDto[]>("/api/tags");
+  } catch {
+    return [];
+  }
+});
 
 /**
  * 侧边栏数据被 6 个公开路由使用。它必须可降级：页面现在可以在构建期预渲染，
@@ -198,7 +238,7 @@ export const getArchiveData = cache(async (): Promise<ArchiveData> => {
     return await getApiData<ArchiveData>("/api/public/archive");
   } catch (error) {
     warnDegradedOnce("/api/public/archive", error);
-    return { total: 0, years: [] };
+    return { total: 0, projects: [], years: [] };
   }
 });
 
