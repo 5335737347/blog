@@ -160,10 +160,18 @@ pm2 set pm2-logrotate:max_size 20M     # 单文件上限
 pm2 set pm2-logrotate:retain 14        # 保留 14 份
 pm2 set pm2-logrotate:compress true
 pm2 set pm2-logrotate:rotateInterval '0 0 * * *'
+pm2 save                               # 关键：模块要进 dump.pm2 才能在重启后自动恢复
 ```
 
-该配置不随仓库分发（属于主机状态），因此每次重建服务器后都要重做，并确认
-`pm2 conf pm2-logrotate` 与实际磁盘水位一致。
+`pm2 save` 不能漏：`pm2 install` 之后模块只存在于当前 PM2 daemon 里，若此前的
+`dump.pm2` 是在安装之前保存的，服务器重启后轮转就不存在了（日志重新无限增长）。
+
+验证方式：`pm2 conf` 会打印模块当前配置（等价于 `cat ~/.pm2/module_conf.json`）；
+轮转发生在**单文件超过 `max_size`** 或**到达 `rotateInterval`** 时，次日检查
+`ls -la ~/.pm2/logs/` 应能看到带时间戳的归档文件（`compress true` 时为 `.gz`）。
+需要立刻验证时可以临时把 `max_size` 调到 `1K`，等一个 `workerInterval` 后再改回 20M。
+
+该配置属于主机状态、不随仓库分发，因此每次重建服务器后都要重做。
 
 ## 注册服务上线边界
 
