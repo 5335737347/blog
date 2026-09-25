@@ -1642,6 +1642,13 @@ they need a Chromium binary (found via `CHROME_BIN` or the Playwright cache).
   `pm2 install pm2-logrotate` 已安装并设置为 max_size 20M / retain 14 / compress /
   每日 00:00 轮转（主机状态，不入仓库；重建服务器后需重做，且必须 `pm2 save`
   才会随 dump.pm2 在重启后恢复）。
+- 2026-09-25 补充实测：`pm2 save` **不会**把模块写进 `dump.pm2`（模块另存于
+  `~/.pm2/module_conf.json` 的 `module-db-v2`，实测 grep dump 结果为 0），而
+  `pm2 kill && pm2 resurrect` 证明 daemon 启动时会自动拉起已安装模块
+  （日志 `[PM2][Module] Starting NPM module pm2-logrotate`），两个应用也从
+  dump.pm2 正常恢复，进程 id 会重排。**尚未在服务器上确认 `pm2 startup` 的
+  systemd 单元是否 enabled**——没有它，真机重启后 PM2 daemon 根本不会被拉起，
+  应用与模块都会停摆。部署手册已新增「服务器重启后检查」一节记录命令与本前提。
 - 仍未做（需站主决策或主机操作）：
   - CSP（先 Report-Only）与 Nginx `limit_req` 实际落地：仓库提供配置与步骤，
     主机侧尚未启用。

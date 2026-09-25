@@ -440,6 +440,43 @@ Next 的静态资源，整目录替换会连带删掉仓库自带的文件。合
 还必须覆盖生产密钥、文件权限、PM2 进程、健康检查和回滚；该工作仍记录在
 [后续维护计划](next-plan.md)。
 
+## 服务器重启后检查
+
+2026-09-25 在生产上实测了 PM2 daemon 重启（`pm2 kill && pm2 resurrect`，即 systemd
+在开机时拉起 PM2 后发生的事）：
+
+- 已安装模块会从 `~/.pm2/module_conf.json` 的 `module-db-v2` **自动启动**
+  （日志：`[PM2][Module] Starting NPM module pm2-logrotate`）；
+- 两个应用从 `~/.pm2/dump.pm2` 恢复；
+- 进程 id 会重新分配（`blog-api` 可能从 0 变成 1），属正常现象。
+
+**但这依赖 PM2 本身被 systemd 拉起**，而这一步不在仓库的部署步骤里（属于主机状态，
+重建服务器后必须重做）：
+
+```bash
+systemctl is-enabled pm2-ubuntu        # 期望输出 enabled
+```
+
+若未启用，补一次即可：
+
+```bash
+sudo env PATH=$PATH:/usr/bin pm2 startup systemd -u ubuntu --hp /home/ubuntu
+pm2 save
+```
+
+开机后按顺序核对：
+
+```bash
+pm2 ls                                                  # 两个应用 online，Module 段有 pm2-logrotate
+curl --fail http://127.0.0.1:3002/health                # 数据库探针通过
+sqlite3 ~/blog/prisma/dev.db "PRAGMA journal_mode;"     # 必须仍是 wal
+curl -sI https://<站点域名>/ | head -1                  # 对外返回 200
+```
+
+注意：`resurrect` 使用的是**最后一次 `pm2 save` 的环境快照**。改过 `.env` 或 PM2 环境
+变量之后必须再执行一次 `pm2 save`，否则重启会退回旧值——历史上的
+`API_INTERNAL_URL` 残留（页面能打开、内容全空）就是这类故障。
+
 ## 发布后检查
 
 ```text
