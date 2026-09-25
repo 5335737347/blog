@@ -1646,9 +1646,11 @@ they need a Chromium binary (found via `CHROME_BIN` or the Playwright cache).
   `~/.pm2/module_conf.json` 的 `module-db-v2`，实测 grep dump 结果为 0），而
   `pm2 kill && pm2 resurrect` 证明 daemon 启动时会自动拉起已安装模块
   （日志 `[PM2][Module] Starting NPM module pm2-logrotate`），两个应用也从
-  dump.pm2 正常恢复，进程 id 会重排。**尚未在服务器上确认 `pm2 startup` 的
-  systemd 单元是否 enabled**——没有它，真机重启后 PM2 daemon 根本不会被拉起，
-  应用与模块都会停摆。部署手册已新增「服务器重启后检查」一节记录命令与本前提。
+  dump.pm2 正常恢复，进程 id 会重排。`pm2 startup` 的 systemd 单元也已实测
+  `systemctl is-enabled pm2-ubuntu` → `enabled`，因此真机重启链路
+  （systemd → PM2 daemon → 模块自启 + 应用 resurrect）完整成立；唯一尚未做过的是
+  一次真实的整机 reboot 演练本身（风险极低，且开机后有现成核对命令）。
+  部署手册已新增「服务器重启后检查」一节记录命令与本前提。
 - 仍未做（需站主决策或主机操作）：
   - CSP（先 Report-Only）与 Nginx `limit_req` 实际落地：仓库提供配置与步骤，
     主机侧尚未启用。
