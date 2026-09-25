@@ -18,10 +18,14 @@ model User {
   createdAt   DateTime  @default(now())
   comments    Comment[]
 
-  /// 会话代次。JWT 中带上该值，校验时与数据库比对；自增即可让该用户
+  /// 公开会话代次。JWT 中带上该值，校验时与数据库比对；自增即可让该用户
   /// 已签发的全部令牌立即失效（登出、改密、管理员踢下线）。
   /// 校验复用 getOptionalAuthSession 已有的那次用户查询，不增加额外开销。
   tokenVersion Int @default(0)
+
+  /// 私有 Admin 会话代次。与公开会话分离，管理员登出/改密时只吊销 Admin
+  /// 令牌，不影响公开站点的普通会话。
+  adminTokenVersion Int @default(0)
 }
 
 model Post {

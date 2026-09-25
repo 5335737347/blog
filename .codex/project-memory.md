@@ -1641,8 +1641,9 @@ they need a Chromium binary (found via `CHROME_BIN` or the Playwright cache).
   - CSP（先 Report-Only）、Nginx `limit_req` 实际落地、`pm2 install pm2-logrotate`
     均属主机状态，仓库只提供配置与步骤。
   - 文章编辑的乐观并发（双标签页静默覆盖）需要动 Contracts + 后台表单，单独一批。
-  - `prisma/schema.prisma` + `add_admin_token_version` 迁移是私有 Admin 分离的
-    半成品（字段已加、无代码使用），要么尽快继续该迁移，要么明确保持未提交状态，
-    不要只提交 schema。
+  - `adminTokenVersion`（schema 字段 + `add_admin_token_version` 迁移）已作为
+    **独立提交**落地：它只是私有 Admin 会话分离的预留列，当前没有任何代码读写，
+    对现有行为无影响（列有默认值 0）。下一步必须继续完成「管理员与公开会话分离」
+    的其余阶段，不能停在「字段已经在库里」这个中间态。
   - 项目公开可见性（草稿项目 meta 出现在 /projects）保持现状，需要站主选择
     「与标签对齐过滤」还是「接受公开导航占位」。
