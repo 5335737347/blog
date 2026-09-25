@@ -57,17 +57,23 @@ export default function HeroSection({
       className="relative isolate flex min-h-[calc(100svh-4rem)] items-center overflow-hidden bg-slate-900"
     >
       {/*
-        氛围层从 `<Image fill>` 改成 CSS 背景 + blur：
-        - 原来为了「模糊铺底 + 清晰前景」请求了**同一张壁纸两次**
-          （第一次进首屏网络瀑布），纯属浪费；
-        - CSS 背景不是 <img>，也就没有「无 width/height 的图片」这一结构性问题
-          （评估中首页实测 imgNoDims=2）。
-        清晰前景仍用 next/image，负责 LCP 与响应式 srcset。
+        氛围层 = 低质量 next/image 变体 + CSS blur：
+        - 最早两个层都是 <Image>，preload 与 srcset 候选不一致导致同图双拉；
+          于是改成 CSS 背景引用**原始文件**——结果更糟：原始壁纸最大 499KB，
+          只为被糊掉却全量下载（实测首页图片 716KB/总计 1318KB）。
+        - 现在：模糊层 quality={20} 且无 priority（无预载、单请求，约几十 KB），
+          清晰前景保持 priority 负责 LCP 与响应式 srcset。
       */}
-      <div
+      <Image
+        key={`blur-${wallpaper}`}
+        src={wallpaper}
+        alt=""
+        fill
+        sizes="100vw"
+        quality={20}
+        loading="eager"
         aria-hidden="true"
-        className="absolute inset-0 scale-110 bg-cover bg-center opacity-70 blur-2xl"
-        style={{ backgroundImage: `url(${wallpaper})` }}
+        className="animate-wallpaper scale-110 object-cover object-center opacity-70 blur-2xl"
       />
       <Image
         key={wallpaper}

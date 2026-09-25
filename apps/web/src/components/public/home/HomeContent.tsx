@@ -126,7 +126,7 @@ export default function HomeContent({ recentPosts, categories, tags, profile }: 
                       className="-mx-2 flex items-baseline justify-between rounded-sm px-2 py-1.5 text-ui text-ink-2 transition-colors hover:bg-surface-hover hover:text-ink"
                     >
                       <span className="min-w-0 truncate">{category.name}</span>
-                      <span className="shrink-0 text-micro tabular-nums text-ink-4">
+                      <span className="shrink-0 text-micro tabular-nums text-ink-3">
                         {category.postCount}
                       </span>
                     </Link>
@@ -146,9 +146,9 @@ export default function HomeContent({ recentPosts, categories, tags, profile }: 
                     href={`/tags/${tag.slug}`}
                     className="inline-flex items-center gap-1 rounded-full border border-line bg-surface px-2.5 py-1 text-meta text-ink-2 transition-colors hover:border-primary-soft hover:bg-primary-soft hover:text-primary-deep"
                   >
-                    <span className="text-ink-4">#</span>
+                    <span className="text-ink-3">#</span>
                     {tag.name}
-                    <span className="text-micro tabular-nums text-ink-4">{tag.postCount}</span>
+                    <span className="text-micro tabular-nums text-ink-3">{tag.postCount}</span>
                   </Link>
                 ))}
               </div>
