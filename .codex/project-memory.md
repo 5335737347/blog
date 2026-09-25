@@ -1661,3 +1661,38 @@ they need a Chromium binary (found via `CHROME_BIN` or the Playwright cache).
     的其余阶段，不能停在「字段已经在库里」这个中间态。
   - 项目公开可见性（草稿项目 meta 出现在 /projects）保持现状，需要站主选择
     「与标签对齐过滤」还是「接受公开导航占位」。
+
+
+## Fixed 2026-09-25 (生产反馈): 桌面头部混入移动端菜单按钮 + hero 账号区不可读
+
+- 站主在生产的首页截图里发现「功能失效」：头部出现一个 ×（移动菜单的关闭按钮），
+  点击后页面看得见却滚不动；同时「用户登录显示」几乎看不见。
+- **根因（两层，都被实测证实）**：
+  1. `globals.css` 里的组件类（`.icon-button`、`.btn`、`.nav-link` …）写在**无层
+     CSS**里，而 Tailwind 的 `lg:hidden` 位于 `@layer utilities`。级联规则是
+     「无层样式胜过任何分层样式」，所以 `className="icon-button lg:hidden"` 中的
+     `lg:hidden` 一直是失效的 → 桌面宽度也渲染菜单开关。点开时抽屉与遮罩
+     （纯工具类，正常生效）被 lg 隐藏，但 Header 的 `body{overflow:hidden}`
+     已经生效 → 页面被滚动锁冻住，且桌面上没有可见的关闭入口。
+     编译产物证据：`.icon-button{…display:inline-grid}` 无层，
+     `.lg\:hidden{display:none}` 在 `@layer utilities{…}` 内。
+  2. AuthNav 的颜色是为浅色背景选的（显示名 `text-ink-2`、管理/退出 `.btn-text`），
+     而首页 hero 头部背后是 0.86~0.94 的深色压暗层 → 显示名深色压深色，
+     实测近乎不可见（同一类问题此前只修过 `.nav-link`/`.icon-button`）。
+- 修复：
+  - 新增 `.header-menu-toggle` + `@media (min-width:1024px){display:none}`（无层、
+    后置、显式媒体查询，能稳定压过 `.icon-button` 的 display）。
+  - Header 增加 matchMedia 监听：视口跨过 lg 断点即收起移动菜单，保证滚动锁
+    一定会被释放（这是「冻结」症状的根治）。
+  - 新增 `.header-auth` 容器 + `header[data-over-hero] .header-auth a/button`
+    白字规则（排除 `.btn-primary`，注册按钮保持品牌色）；移动端抽屉里的
+    AuthNav 不在该容器内，仍用深色，不受影响。
+- 回归断言（smoke-web.mjs，先红后绿验证过）：
+  「桌面宽度不出现移动端菜单开关，且页面未被滚动锁冻结」
+  「hero 之上的账号区使用不透明白字（可读性）」。
+- **遗留的结构性问题（下次改样式前先读这条）**：无层组件 CSS 与 Tailwind
+  工具类的优先级关系是本项目反复踩坑的根源。`className="btn h-8 px-3 text-meta"`
+  这类写法里的工具类目前也是失效的（按钮比代码写的更大）。建议单独一批把
+  `.panel/.btn/.icon-button/.nav-link/.reading` 等迁入 `@layer components`，
+  之后工具类按预期生效；这与颜色无关，但会改变多个页面的实际尺寸，
+  必须配合截图验收（design-plan 的视觉验收流程）分批做，不要顺手改。

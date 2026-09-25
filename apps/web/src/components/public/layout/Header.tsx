@@ -103,6 +103,25 @@ export default function Header({ blogTitle }: { blogTitle: string }) {
     };
   }, [menuVisible]);
 
+  /**
+   * 视口跨过 lg 断点时收起移动菜单。
+   *
+   * 抽屉与遮罩都是 `lg:hidden`：如果菜单状态还开着就放大窗口（或把平板横过来），
+   * 两者会被隐藏，但上面那段 `body { overflow: hidden }` 仍然生效——页面看得见、
+   * 滚不动，而且桌面上已经没有可点的关闭按钮。只在真正跨越断点（change 事件）时
+   * 关闭，因此不会在挂载时同步 setState。
+   *
+   * 1024px 必须与 globals.css 的 `.header-menu-toggle` 媒体查询保持一致。
+   */
+  useEffect(() => {
+    const desktop = window.matchMedia("(min-width: 1024px)");
+    const onChange = (event: MediaQueryListEvent) => {
+      if (event.matches) setMenuOpen(false);
+    };
+    desktop.addEventListener("change", onChange);
+    return () => desktop.removeEventListener("change", onChange);
+  }, []);
+
   // 只有首页 hero 之上才允许出现「透明 + 白字」形态;搜索展开时输入框切换为
   // 玻璃白字样式(HeaderSearch 的 overHero 分支),头部本身不再变色。
   const overHero = isHome && !scrolled;
@@ -201,12 +220,12 @@ export default function Header({ blogTitle }: { blogTitle: string }) {
             <LazyMusicPlayer />
           </div>
           <ThemeSelector />
-          <div className="ml-1 hidden border-l border-line pl-2 lg:block">
+          <div className="header-auth ml-1 hidden border-l border-line pl-2 lg:block">
             <AuthNav />
           </div>
           <button
             type="button"
-            className="icon-button lg:hidden"
+            className="icon-button header-menu-toggle lg:hidden"
             aria-label={menuVisible ? "关闭菜单" : "打开菜单"}
             aria-expanded={menuVisible}
             aria-controls={MENU_ID}

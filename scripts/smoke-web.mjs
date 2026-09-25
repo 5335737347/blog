@@ -407,6 +407,32 @@ const headerButtons = await evaluate(componentPage.sessionId, `(() => {
 })()`);
 check("头部渲染音乐与主题入口", headerButtons.hasMusic && headerButtons.hasTheme, JSON.stringify(headerButtons.labels));
 
+/* 桌面宽度下不应出现移动端菜单开关。
+
+   历史缺陷（2026-09-25 生产实测）：`.icon-button` 是 globals.css 里的**无层**样式，
+   而无层样式在级联中胜过 Tailwind 的 `@layer utilities`，于是
+   `className="icon-button lg:hidden"` 里的 `lg:hidden` 完全失效——桌面宽度也会
+   渲染菜单按钮。点开之后抽屉与遮罩（纯工具类，正常生效）在 lg 下被隐藏，
+   但 Header 的 body 滚动锁已经生效，页面表现为「看得见、滚不动」，
+   只有一个 × 留在头部。这里把「桌面不出现开关 + 页面仍可滚动」钉成断言。 */
+const desktopHeader = await evaluate(componentPage.sessionId, `(() => {
+  const toggle = document.querySelector('button[aria-controls="mobile-menu"]');
+  const visible = (el) => !!el && el.getClientRects().length > 0
+    && getComputedStyle(el).display !== 'none'
+    && getComputedStyle(el).visibility !== 'hidden';
+  return {
+    toggleVisible: visible(toggle),
+    toggleLabel: toggle ? (toggle.getAttribute('aria-label') || '') : null,
+    bodyOverflow: getComputedStyle(document.body).overflow,
+    scrollable: document.documentElement.scrollHeight > window.innerHeight,
+  };
+})()`);
+check(
+  "桌面宽度不出现移动端菜单开关，且页面未被滚动锁冻结",
+  desktopHeader.toggleVisible === false && desktopHeader.bodyOverflow !== "hidden",
+  JSON.stringify(desktopHeader)
+);
+
 // 音乐播放器：点击后必须真的出现面板（历史回归点）
 const musicOpened = await evaluate(componentPage.sessionId, `(() => {
   const btn = [...document.querySelectorAll('header button')].find(b => (b.getAttribute('aria-label') || '').includes('音乐'));
@@ -720,6 +746,33 @@ const adminLoggedIn = await waitFor(
   15000
 );
 check("管理员登录后按 redirect 进入后台目标页", adminLoggedIn);
+
+/* hero 之上的账号区必须可读。
+
+   历史缺陷（2026-09-25 生产实测）：AuthNav 用的是为浅色背景选的深色
+   （显示名 text-ink-2、管理/退出 .btn-text），而首页头部背后是深色压暗层，
+   显示名几乎不可见。这条断言把「登录态账号区 = 不透明白字」钉住。 */
+await send("Page.navigate", { url: BASE + "/" }, flowPage.sessionId);
+await waitFor(flowPage.sessionId, `document.body.innerText.includes("鲲鹏")`, 10000);
+const authContrast = await evaluate(flowPage.sessionId, `(() => {
+  const box = document.querySelector('.header-auth');
+  if (!box) return { found: false };
+  const nodes = [...box.querySelectorAll('a, button')];
+  return {
+    found: true,
+    overHero: !!document.querySelector('header[data-over-hero]'),
+    labels: nodes.map(n => (n.textContent || '').trim()),
+    colors: nodes.map(n => getComputedStyle(n).color),
+  };
+})()`);
+check(
+  "hero 之上的账号区使用不透明白字（可读性）",
+  authContrast.found === true &&
+    authContrast.overHero === true &&
+    authContrast.colors.length >= 2 &&
+    authContrast.colors.every((color) => color === "rgb(255, 255, 255)"),
+  JSON.stringify(authContrast)
+);
 
 // 后台文章表单：创建草稿 → 详情页 → 修改标题 → 后台列表可见。
 if (adminLoggedIn) {

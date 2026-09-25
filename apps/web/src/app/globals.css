@@ -400,6 +400,28 @@ header[data-over-hero] .icon-button:hover {
   background: rgb(255 255 255 / 0.16);
 }
 
+/*
+  hero 之上的账号区。
+
+  AuthNav 里的显示名用 `text-ink-2`、管理/退出用 `.btn-text`（color: var(--text-2)），
+  都是为浅色背景选的深色；而 hero 头部背后是 0.86~0.94 的深色压暗层，
+  实测显示名几乎不可见（2026-09-25 生产截图）。这里把文字统一钉成不透明白，
+  hover 时给白色半透明底——与上面的 .nav-link / .icon-button 同一套规则。
+
+  注意选择器只作用于 `.header-auth`（桌面容器）：移动端抽屉里的 AuthNav 落在
+  浅色背板上，不能套用这套白字规则。
+*/
+header[data-over-hero] .header-auth a:not(.btn-primary),
+header[data-over-hero] .header-auth button {
+  color: #fff;
+}
+
+header[data-over-hero] .header-auth a:not(.btn-primary):hover,
+header[data-over-hero] .header-auth button:hover {
+  color: #fff;
+  background: rgb(255 255 255 / 0.16);
+}
+
 .nav-link:hover {
   color: var(--text);
   background: var(--surface-hover);
@@ -435,6 +457,24 @@ header[data-over-hero] .icon-button:hover {
 .icon-button:hover {
   color: var(--primary-deep);
   background: var(--surface-hover);
+}
+
+/*
+  移动端菜单开关：只在 lg 以下出现。
+
+  为什么不能只写 `className="icon-button lg:hidden"`：`.icon-button` 是本节里的
+  **无层**样式，而 Tailwind 的 `lg:hidden` 位于 `@layer utilities`——级联规定
+  无层样式胜过任何分层样式，所以那个 `lg:hidden` 一直是失效的（2026-09-25
+  生产上实测到桌面宽度仍渲染菜单按钮）。点开后抽屉与遮罩（纯工具类，正常生效）
+  在 lg 下被隐藏，但 Header 的 body 滚动锁已生效，页面表现为「看得见、滚不动」。
+
+  这里用同层（无层）+ 更靠后 + 显式媒体查询把它压回去；`lg` 断点必须与
+  Header.tsx 里 matchMedia 的 1024px 保持一致。
+*/
+@media (min-width: 1024px) {
+  .header-menu-toggle {
+    display: none;
+  }
 }
 
 /* ===== 按钮 ===== */
