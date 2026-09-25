@@ -190,8 +190,22 @@ npm run update
 
 更新脚本依次执行：仓库与并发更新检查、`git pull --ff-only`、`npm ci`、
 Prisma Client 生成、`check:ci`（lint/typecheck/tests/文档/契约）、SQLite 备份、
-migration、双应用构建、对**构建产物**跑 `smoke:prod`、PM2 `startOrReload`、
-`pm2 save`，最后轮询 API 与 Web 的本机健康端点。
+migration（前后短暂停启 `blog-api`）、双应用构建、对**构建产物**跑 `smoke:prod`、
+PM2 `startOrReload`、`pm2 save`，最后轮询 API 与 Web 的本机健康端点。
+
+> **迁移为什么要停 API**（2026-09-25 生产事故 + 本地复现）：SQLite 只有一个写者，
+> 而 Prisma 的 schema engine 拿不到写锁时**不做 busy_timeout 重试**，直接以
+> `database is locked` 失败（栈顶 `sql_migration_persistence::initialize`）。
+> 本地用「每 5ms 写一次」的并发连接复现：**WAL 模式 2/2 失败，delete 模式同样场景
+> 却通过**——也就是说启用 WAL 之后，「边服务边迁移」不再成立。现在脚本在
+> `prisma migrate deploy` 前后 `pm2 stop/start blog-api`（窗口通常 <1 秒），
+> 并在收到 SIGINT/SIGTERM 时兜底把 API 拉回来；`--skip-restart` 会选择不停 API
+> （迁移可能因此失败）。备份不需要这层保护：`VACUUM INTO` 在并发写下实测正常。
+>
+> 另注意：校验阶段会删除 `apps/api/dist`。如果更新在迁移处中断，PM2 里的
+> `blog-api` 仍在用内存中的旧代码运行，**但任何重启（含服务器重启）都会失败**。
+> 脚本现在会在失败时显式告警；恢复方式是重新跑 `npm run update`，或先
+> `npm run build --workspace @kpblog/api` 再 `pm2 startOrReload`。
 
 > 从 2026-09-17 起，更新路径不再运行 dev 形态的 `npm run smoke`。
 > 它用 `next dev` 起实例，服务器上要现编译页面（实测单页 7–8 秒），

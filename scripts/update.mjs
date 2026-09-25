@@ -49,6 +49,11 @@ Options:
 
 --allow-dirty does not overwrite changes or resolve pull conflicts.
 --skip-* options are intended for recovery and deliberate partial updates.
+
+The update briefly stops blog-api around "prisma migrate deploy" and starts it
+again immediately: SQLite has a single writer, and with WAL enabled a concurrent
+write makes the schema engine fail with "database is locked". --skip-restart
+opts out of that quiesce (and may therefore fail the migration).
 `);
 }
 
@@ -66,6 +71,31 @@ if (args.has("--help")) {
   printHelp();
   process.exit(0);
 }
+
+/** 迁移期间是否已经停掉 blog-api（用于信号中断时的兜底恢复）。 */
+let apiStoppedForMigration = false;
+
+/**
+ * 被 Ctrl-C / SIGTERM 打断时，把迁移期间停下的 API 拉回来。
+ *
+ * `try/finally` 只在正常抛错时生效，信号会直接结束进程——那样会留下一个
+ * 「站点没有 API」的状态，且没人知道。窗口通常不到一秒，但代价不对等。
+ */
+function rescueApiAfterInterrupt() {
+  if (!apiStoppedForMigration) return;
+  console.error("\n收到中断信号：正在把迁移期间停下的 blog-api 拉回来…");
+  apiStoppedForMigration = false;
+  spawnSync("pm2", ["start", "blog-api"], { stdio: "inherit", shell: false });
+}
+
+process.on("SIGINT", () => {
+  rescueApiAfterInterrupt();
+  process.exit(130);
+});
+process.on("SIGTERM", () => {
+  rescueApiAfterInterrupt();
+  process.exit(143);
+});
 
 function section(title) {
   console.log(`\n==> ${title}`);
@@ -211,6 +241,61 @@ function backupSqlite(dbPath) {
   }
 }
 
+/**
+ * PM2 中某个进程的 pid（0 表示没跑、或这台机器上根本没有 PM2）。
+ *
+ * 用 `pm2 pid` 而不是解析 `pm2 ls` 的表格：后者是给人看的，列宽会随版本变化。
+ */
+function pm2ProcessPid(name) {
+  const out = capture("pm2", ["pid", name]);
+  const pid = Number.parseInt(out, 10);
+  return Number.isFinite(pid) && pid > 0 ? pid : 0;
+}
+
+/**
+ * 迁移前让出数据库：停掉 blog-api。
+ *
+ * 为什么必须这么做（2026-09-25 生产实测）：SQLite 只有一个写者，而 Prisma 的
+ * schema engine 在拿不到写锁时**不做 busy_timeout 重试**，直接以
+ * `database is locked` 失败（栈顶 sql_migration_persistence::initialize）。
+ * 本地用「每 5ms 写一次」的并发连接复现：WAL 模式 2/2 失败，delete 模式同样场景
+ * 却能通过——也就是说 WAL 启用后，更新脚本「边服务边迁移」的做法不再成立。
+ * 备份不受影响：VACUUM INTO 在并发写下实测正常（读不阻塞写）。
+ */
+function stopApiForMigration() {
+  if (args.has("--skip-restart")) {
+    console.log(
+      "Skipping the API quiesce because --skip-restart was given; " +
+        'the migration may fail with "database is locked" if the API writes concurrently.'
+    );
+    return false;
+  }
+  if (!pm2ProcessPid("blog-api")) return false;
+
+  console.log("Stopping blog-api so the SQLite migration has no concurrent writer…");
+  run("pm2", ["stop", "blog-api"]);
+  apiStoppedForMigration = true;
+  return true;
+}
+
+/** 迁移结束（无论成败）立即把 API 拉回来；失败时给出可执行的恢复指引。 */
+function startApiAfterMigration() {
+  apiStoppedForMigration = false;
+  try {
+    run("pm2", ["start", "blog-api"]);
+    console.log("blog-api restarted (still the previous build until the final reload).");
+  } catch (error) {
+    console.error(
+      `\n⚠️  blog-api 未能自动启动（${error?.message || error}）。` +
+        "\n    站点目前没有 API，请立即执行： pm2 start blog-api && pm2 save" +
+        "\n    若启动失败且提示找不到 apps/api/dist/index.js，" +
+        "\n    先跑 `npm run build --workspace @kpblog/api` 恢复产物再启动。\n"
+    );
+  }
+}
+
+const apiEntryPoint = path.resolve("apps/api/dist/index.js");
+
 function internalApiHealthUrl() {
   const base = process.env.API_INTERNAL_URL || "http://127.0.0.1:3002";
   return new URL("/health", base.endsWith("/") ? base : `${base}/`).toString();
@@ -332,7 +417,13 @@ async function main() {
   backupSqlite(databaseFile);
 
   section("Apply database migrations");
-  run("npx", ["prisma", "migrate", "deploy"]);
+  // 迁移期间必须没有并发写者，见 stopApiForMigration 的注释。
+  const apiWasRunning = stopApiForMigration();
+  try {
+    run("npx", ["prisma", "migrate", "deploy"]);
+  } finally {
+    if (apiWasRunning) startApiAfterMigration();
+  }
 
   if (args.has("--skip-build")) {
     section("Build app");
@@ -374,6 +465,18 @@ try {
   await main();
 } catch (error) {
   console.error(`\nUpdate failed: ${error?.message || error}`);
+  // 校验阶段会删除 apps/api/dist（防止陈旧产物被当成当前构建使用）。若此时更新
+  // 中断，PM2 里的 blog-api 仍在用内存中的旧代码，但**任何重启都会失败**——
+  // 包括服务器重启。必须把这件事说出来，否则故障会以「重启后站点挂了」的形式
+  // 在几小时或几天后才爆发。
+  if (!existsSync(apiEntryPoint)) {
+    console.error(
+      "\n⚠️  apps/api/dist 已被本次更新清除，而流程没有跑到构建步骤。" +
+        "\n    blog-api 目前仍以内存中的旧代码运行，但只要重启（含服务器重启）就会启动失败。" +
+        "\n    请修复中断原因后重新执行 `npm run update`；" +
+        "\n    若暂时不打算重跑，至少先执行 `npm run build --workspace @kpblog/api` 恢复产物。\n"
+    );
+  }
   process.exitCode = 1;
 } finally {
   releaseLock();

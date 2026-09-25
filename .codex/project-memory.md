@@ -1696,3 +1696,32 @@ they need a Chromium binary (found via `CHROME_BIN` or the Playwright cache).
   `.panel/.btn/.icon-button/.nav-link/.reading` 等迁入 `@layer components`，
   之后工具类按预期生效；这与颜色无关，但会改变多个页面的实际尺寸，
   必须配合截图验收（design-plan 的视觉验收流程）分批做，不要顺手改。
+
+
+## Fixed 2026-09-25 (生产事故): WAL 下「边服务边迁移」必然失败 → 更新脚本改为迁移前后停启 API
+
+- 现象：站主执行 `npm run update`（42733f0）时，`npx prisma migrate deploy` 失败：
+  `Error: SQLite database error / database is locked`，栈顶
+  `sql_migration_persistence::initialize`。更新中断在「校验」之后、「构建」之前，
+  因此 `apps/api/dist` **已被脚本删除**，PM2 里的 blog-api 仍以内存中的旧代码运行
+  （站点没挂，但任何重启都会启动失败）。
+- 根因（本地最小复现，非推测）：SQLite 单写者 + Prisma schema engine 不做
+  busy_timeout 重试。用「每 5ms 写一次」的并发连接复现：
+  - **WAL 模式：migrate 2/2 直接失败**（错误栈与生产完全一致）；
+  - **delete 模式：同样场景通过**（`No pending migrations to apply.`）；
+  - 空闲连接（不写）在 WAL 下也不阻塞 → 触发条件是「迁移瞬间有并发写」。
+  这解释了为什么启用 WAL 之前同样的流程能反复成功：**这是 WAL 引入的行为变化**，
+  不是既有竞态。备份不受影响：`VACUUM INTO` 在并发写下实测正常。
+- 修复（scripts/update.mjs）：
+  1. `prisma migrate deploy` 前后 `pm2 stop/start blog-api`（窗口通常 <1 秒），
+     用 `pm2 pid blog-api` 判断是否真在运行；没有 PM2（开发机/CI）时自动跳过。
+  2. `try/finally` + SIGINT/SIGTERM 兜底恢复，避免中断留下「站点没有 API」。
+  3. 失败时若 `apps/api/dist/index.js` 不存在，打印明确告警与恢复命令
+     （这是本次事故最危险的部分：重启即挂）。
+  4. `--skip-restart` 会选择不停 API（并在日志里说明迁移可能因此失败）。
+- 生产恢复路径（当时给站主的）：`git pull --ff-only && npm run update`
+  （新脚本会自动停启 API 完成迁移并重建 dist）；或手动 `pm2 stop blog-api` →
+  `npx prisma migrate deploy` → `npm run build` → `pm2 startOrReload … && pm2 save`。
+- 教训：给 SQLite 加任何「改变锁语义」的设置（WAL 就是）时，必须同时审计
+  所有会并发访问该库的外部进程（迁移 CLI、备份脚本、restore、sqlite3 CLI），
+  不能只验证应用自身的读写路径。
