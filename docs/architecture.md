@@ -78,6 +78,8 @@ Web Proxy 调用 `/api/auth/me` 提前处理页面跳转，但这只是体验层
 ## 数据与媒体
 
 - SQLite 相对路径以仓库根目录解析。
+- SQLite 在 API 启动时切到 WAL（`synchronous=NORMAL`、`busy_timeout=10s`），让读写
+  不互相阻塞；因此 `blog-api` 必须保持单实例，不要使用 PM2 cluster（见部署手册）。
 - Prisma Client 仅由 API 使用。
 - schema 修改必须同时提交 migration。
 - 当前媒体目录默认是 `apps/web/public`，要求 Web 与 API 共用磁盘。

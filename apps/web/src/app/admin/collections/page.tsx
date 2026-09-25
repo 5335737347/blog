@@ -155,6 +155,11 @@ export default function CollectionsAdminPage() {
         description="项目是写作期间的工作单元，项目页汇集其下全部文章；删除项目不会删除文章。"
       />
 
+      <Alert variant="info">
+        项目一经创建，名称、链接标识与简介就会出现在公开的 /projects 与 /collections/&lt;slug&gt;
+        （即使其下还没有已发布文章）。请勿在简介里写内部备注。
+      </Alert>
+
       {error && <Alert variant="error">{error}</Alert>}
       {notice && <Alert variant="success">{notice}</Alert>}
 

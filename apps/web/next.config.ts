@@ -183,12 +183,19 @@ function siteImagePatterns() {
 function allowedDevOrigins(): string[] {
   const hosts = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
-  for (const addresses of Object.values(networkInterfaces())) {
-    for (const address of addresses ?? []) {
-      if (address.family === "IPv4" && !address.internal) {
-        hosts.add(address.address);
+  // 枚举网卡在受限容器 / seccomp 环境里会抛 ERR_SYSTEM_ERROR（实测：
+  // uv_interface_addresses 被拦截时整个 next build 直接失败）。开发期便利
+  // 不值得让构建挂掉，失败就退回回环地址。
+  try {
+    for (const addresses of Object.values(networkInterfaces())) {
+      for (const address of addresses ?? []) {
+        if (address.family === "IPv4" && !address.internal) {
+          hosts.add(address.address);
+        }
       }
     }
+  } catch {
+    // 只影响开发期来源放宽，生产构建照常继续。
   }
 
   // 仍需显式补充的来源（临时隧道等），与 API 的同源校验共用一份配置。

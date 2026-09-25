@@ -120,10 +120,27 @@ export function registerErrorHandler(reply: FastifyReply, error: unknown) {
   return reply.status(500).send(apiFailure("服务器内部错误"));
 }
 
-export async function multipartFiles(request: FastifyRequest) {
+/**
+ * 单次 multipart 解析的资源上限。
+ *
+ * 全局默认（app.ts：20 个文件 × 20 MiB）是为了兼容批量导入场景，但绝大多数
+ * 上传端点只用第一个文件（`files[0]`）。不收紧时，一个请求就能让服务端把
+ * 20 × 20 MiB 全部读进内存——这类请求在 Nginx 有 25m body 限制时到不了，
+ * 但 API 不应该把自身的内存安全寄托在反向代理配置上。
+ *
+ * 传 `undefined` 时沿用全局限制。
+ */
+export interface MultipartLimits {
+  files?: number;
+  fileSize?: number;
+  fields?: number;
+  parts?: number;
+}
+
+export async function multipartFiles(request: FastifyRequest, limits?: MultipartLimits) {
   const files: File[] = [];
   const fields: Record<string, string> = {};
-  for await (const part of request.parts()) {
+  for await (const part of request.parts(limits ? { limits } : undefined)) {
     if (part.type === "file") {
       const buffer = await part.toBuffer();
       const bytes = new Uint8Array(buffer.length);

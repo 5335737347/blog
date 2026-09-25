@@ -1,6 +1,6 @@
 # Blog project memory
 
-Last updated: 2026-09-22 (Asia/Shanghai)
+Last updated: 2026-09-25 (Asia/Shanghai)
 
 ## Product direction
 
@@ -1593,3 +1593,56 @@ they need a Chromium binary (found via `CHROME_BIN` or the Playwright cache).
   (create, edit, list, delete) through the real UI.
 - 169 unit/integration tests, check:ci, build, dev smoke and production smoke all
   green.
+
+
+## Completed 2026-09-25: 设计与后端深度审计 + 修复批次 1/2
+
+- 审计报告（对话内交付）覆盖后端全量源码、Prisma/schema/迁移、Web 集成面、
+  部署与更新脚本。审计基线：`npm test` 169/169、4 workspace typecheck、
+  check:docs、check:openapi(49 路由) 全绿；实测 SQLite `journal_mode=delete`。
+- 本批次实现的修复（每条都有回归测试）：
+  1. **发布竞态 500 → 409**：`publishMarkdown` 的 create 分支此前会把 P2002
+     原样冒泡成 500（已用「预检返回 null、create 撞唯一约束」的确定性复现验证）。
+     现在 `isUniqueConstraintViolation()` 统一翻译为 409 CONFLICT，
+     `resolveCategory()` 的并发自动建分类同样处理（重查后返回库里的那条）。
+  2. **SQLite 运行时模式**：新增 `configureDatabaseRuntime()`
+     （apps/api/src/lib/prisma.ts），在 `listen()` 之前设置
+     `journal_mode=WAL` + `synchronous=NORMAL` + `busy_timeout=10000`，
+     启动日志打印 `SQLite 运行模式`。journal_mode 持久在库文件里，另两个是
+     连接级参数。库文件缺失时**跳过**配置并告警（绝不静默创建空库），
+     /health 继续报 degraded。实测编译产物输出 `journalMode=wal`。
+     文档中「API 持有数据库连接和 WAL」这句以前是错的，现在成立。
+  3. **multipart 限额按路由收紧**：全局 20 文件 × 20MiB 只留给 `/api/import`
+     （10 文件 × 10MiB）；`/api/music`、`/api/images`、`/api/wallpapers`
+     单文件路由改为 `files:1`。此前单请求最多可缓冲 ~400MiB（PM2 上限 512M），
+     只靠 Nginx `client_max_body_size 25m` 挡着——现在 API 自身安全。
+  4. **上传失败回收文件**：图片/壁纸/音乐「先落盘后写库」的失败路径现在会
+     unlink 刚写的文件；音乐标题校验提前到写盘之前（此前会留孤儿音频）。
+  5. **MEDIA_ROOT 单一来源**：删除 media-service/wallpaper-service 里
+     `path.resolve(process.cwd(), "../web/public")` 的兜底（从仓库根启动会解析到
+     `<repo>/../web/public`），统一走 `scripts/load-env.mjs` 的 `mediaRootPath()`。
+  6. **networkInterfaces() 容错**：Web `allowedDevOrigins()` 与 API
+     `localMachineHosts()` 现在 try/catch。真实触发过：受限环境里
+     `uv_interface_addresses` 抛 ERR_SYSTEM_ERROR，导致 `next build` 直接失败。
+  7. 管理端 `/admin/collections` 增加提示：项目一经创建，名称/slug/简介即便
+     没有已发布文章也会出现在公开 `/projects` 与 `/collections/<slug>`
+     （行为本身是既有设计取舍，未擅自改动，留待站主决定是否过滤）。
+- 文档/配置：deployment.md 新增 Nginx `limit_req` 加固示例、SQLite 运行模式与
+  单实例约束、pm2-logrotate 安装与保留策略；architecture.md 与
+  ecosystem.config.cjs 注明 WAL 与「blog-api 必须单实例」。
+- 验证（全部实测）：lint、4 workspace typecheck、check:docs、check:openapi（49 路由）、
+  **npm test 177/177**（169 + multipart-limits 5 + sqlite-runtime 1 +
+  publishing 竞态 1 + media 回收 1）、`npm run build`（双应用）、
+  `npm run smoke:prod`（生产构建 + Chromium，全部通过，含注册/登录/留言/后台 CRUD）。
+- 测试环境注意：`tsx --test` 在受限沙箱里会因 unix socket 被拦而失败，可改用
+  `node --import tsx --test --import ./tests/helpers/offline-env.ts tests/*.test.ts`；
+  其中 3 个用例会真实监听 127.0.0.1（journey/services/smtp），必须在沙箱外跑。
+- 仍未做（需站主决策或主机操作）：
+  - CSP（先 Report-Only）、Nginx `limit_req` 实际落地、`pm2 install pm2-logrotate`
+    均属主机状态，仓库只提供配置与步骤。
+  - 文章编辑的乐观并发（双标签页静默覆盖）需要动 Contracts + 后台表单，单独一批。
+  - `prisma/schema.prisma` + `add_admin_token_version` 迁移是私有 Admin 分离的
+    半成品（字段已加、无代码使用），要么尽快继续该迁移，要么明确保持未提交状态，
+    不要只提交 schema。
+  - 项目公开可见性（草稿项目 meta 出现在 /projects）保持现状，需要站主选择
+    「与标签对齐过滤」还是「接受公开导航占位」。

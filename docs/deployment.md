@@ -86,6 +86,35 @@ server {
 
 Nginx 不需要单独暴露 `/api`；请求进入 Web 后由 Next.js 同域转发。启用 HTTPS 后再按实际代理链评估 `TRUST_PROXY`，不能因为使用了 Nginx 就直接信任任意请求头。
 
+应用层限流（按 IP / 按账号 / 按验证码目标）在 API 内实现，Nginx 不是替代品。但如果站点
+遭遇真实洪水，反向代理层的粗粒度限速是最便宜的第一道闸门——它挡在 TLS 与 Next.js
+之前，不消耗 Node 的 CPU。以下配置为可选加固（`limit_req_zone` 必须写在 `http {}` 里）：
+
+```nginx
+# http 上下文
+limit_req_zone $binary_remote_addr zone=kpblog_auth:10m rate=30r/m;
+limit_req_zone $binary_remote_addr zone=kpblog_api:10m rate=600r/m;
+
+server {
+    # 认证与验证码端点：更严的阈值交给 API 内的账号/目标维度限流兜底
+    location /api/auth/ {
+        limit_req zone=kpblog_auth burst=10 nodelay;
+        proxy_pass http://127.0.0.1:3001;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location / {
+        limit_req zone=kpblog_api burst=120 nodelay;
+        proxy_pass http://127.0.0.1:3001;
+        # 其余 proxy_set_header 与上面的基本配置一致
+    }
+}
+```
+
 `TRUST_PROXY=false` 时，API 使用直接 socket 对端地址作为限流身份，并忽略转发头。
 生产环境如需按真实访客而不是本机 Web 代理区分限流，必须确认 Nginx 覆盖 `X-Real-IP`、
 Next.js rewrite 将该头传给仅监听回环地址的 API，然后才设置：
@@ -98,6 +127,43 @@ TRUST_PROXY_HEADER="x-real-ip"
 不能只写环境变量而不验证实际请求链。验证时应从两个不同客户端触发低风险测试请求，确认
 API 得到不同的限流身份；如果代理链不能可靠覆盖该头，应保持 API 不公开且关闭代理信任，
 不得信任客户端可以直接控制的转发头。
+
+## SQLite 运行模式与进程数约束
+
+API 在 `listen()` 之前会把数据库切到 WAL 并固定连接级参数（`apps/api/src/lib/prisma.ts`
+的 `configureDatabaseRuntime`），启动日志里会打印实际生效的值：
+
+```text
+"SQLite 运行模式" journalMode=wal synchronous=1 busyTimeoutMs=10000
+```
+
+- `journal_mode` 持久化在数据库文件里（第一个连接设置后长期有效）；`synchronous` 与
+  `busy_timeout` 是连接级参数，每次启动重新设置。
+- 切到 WAL 的原因：本服务的高频路径（登录、评论、验证码）每个请求都要写限流桶，而
+  `npm run update` 会在 API 在线时做全库 `VACUUM INTO` 备份。rollback journal 下读写在
+  提交窗口互斥，可能出现请求等锁甚至 `SQLITE_BUSY`；WAL 让读不阻塞写、写不阻塞读。
+- 启动日志若出现 `SQLite 未启用 WAL` 警告，说明数据库位于不支持 WAL 的文件系统
+  （例如部分网络文件系统）。此时并发能力与备份窗口都会变差，应先解决存储位置。
+- **`blog-api` 必须保持单实例**（PM2 默认行为）。不要使用 cluster 模式或把 `instances`
+  调大：SQLite 只有一个写者，多进程只会带来跨进程锁竞争。需要横向扩展时先迁库。
+- `VACUUM INTO` 在 WAL 下仍然是事务一致的快照。若改用「直接复制 .db 文件」这类备份方式，
+  必须同时带上 `-wal` / `-shm` 文件，否则会拿到过期数据——本仓库不支持这种备份方式。
+
+## 日志轮转
+
+PM2 默认把 stdout/stderr 写进 `~/.pm2/logs/`，**不会自动轮转**；pino 的请求日志在
+长期运行后会持续增长，磁盘写满会同时危及 SQLite 与备份。部署时应安装官方轮转模块：
+
+```bash
+pm2 install pm2-logrotate
+pm2 set pm2-logrotate:max_size 20M     # 单文件上限
+pm2 set pm2-logrotate:retain 14        # 保留 14 份
+pm2 set pm2-logrotate:compress true
+pm2 set pm2-logrotate:rotateInterval '0 0 * * *'
+```
+
+该配置不随仓库分发（属于主机状态），因此每次重建服务器后都要重做，并确认
+`pm2 conf pm2-logrotate` 与实际磁盘水位一致。
 
 ## 注册服务上线边界
 
@@ -341,7 +407,7 @@ BACKUP_KEEP=30 npm run db:backup   # 保留最新 30 份（默认 10）
 ### 恢复
 
 ```bash
-pm2 stop blog-api                                   # 必须先停：API 持有数据库连接和 WAL
+pm2 stop blog-api                                   # 必须先停：API 持有数据库连接（WAL 模式）
 npm run db:restore -- backups/dev.db.20260917-013914.bak          # 预览，不写入
 npm run db:restore -- backups/dev.db.20260917-013914.bak --yes    # 执行
 npm run media:restore -- backups/media/20260917-013832 --yes

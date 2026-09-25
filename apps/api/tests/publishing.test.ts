@@ -279,3 +279,41 @@ test("importFiles does not leak internal error details on unexpected failures", 
   assert.equal(result.failed, 1);
   assert.match(result.results[0].error ?? "", /10MB/);
 });
+
+test("a publish that loses the slug race returns 409 instead of a Prisma 500", async () => {
+  const slug = "race-condition-slug";
+
+  // 先正常发布一次占住 slug，再模拟并发窗口：让下一次预检看不到它，
+  // 于是流程走到 create 并撞上唯一约束——这正是两个请求同时发布同一篇
+  // 新笔记时发生的顺序。
+  await publishMarkdown({ title: "竞态发布", content: "第一版正文", slug });
+
+  const { prisma } = await import("../src/lib/prisma");
+  const delegate = prisma.post as unknown as Record<string, unknown>;
+  const original = delegate.findUnique as (args: unknown) => Promise<unknown>;
+  let preChecked = false;
+  delegate.findUnique = async (args: unknown) => {
+    const where = (args as { where?: { slug?: string } }).where;
+    if (where?.slug === slug && !preChecked) {
+      preChecked = true;
+      return null;
+    }
+    return original(args);
+  };
+
+  try {
+    await assert.rejects(
+      () => publishMarkdown({ title: "竞态发布", content: "正文内容", slug }),
+      (error: unknown) => {
+        const typed = error as { name?: string; status?: number; code?: string; message?: string };
+        assert.equal(typed.name, "ServiceError", "必须是统一的 ServiceError，而不是裸 Prisma 错误");
+        assert.equal(typed.status, 409);
+        assert.equal(typed.code, "CONFLICT");
+        assert.match(typed.message ?? "", /已被另一请求创建|已存在/);
+        return true;
+      }
+    );
+  } finally {
+    delegate.findUnique = original;
+  }
+});

@@ -5,7 +5,7 @@ import { badRequest, ServiceError } from "@/server/errors";
 import { resolveTagIds } from "@/server/taxonomy/taxonomy-service";
 import mammoth from "mammoth";
 
-const MAX_IMPORT_FILE_SIZE = 10 * 1024 * 1024;
+export const MAX_IMPORT_FILE_SIZE = 10 * 1024 * 1024;
 const MAX_ARTICLE_CONTENT_LENGTH = 1_000_000;
 
 type MammothWithMarkdown = typeof mammoth & {
@@ -99,7 +99,29 @@ async function resolveCategory(categoryName: string | undefined) {
   const bySlug = await prisma.category.findUnique({ where: { slug } });
   if (bySlug) return bySlug;
 
-  return prisma.category.create({ data: { name: categoryName, slug } });
+  try {
+    return await prisma.category.create({ data: { name: categoryName, slug } });
+  } catch (error) {
+    // 并发导入同一份 frontmatter 时，两个请求可能都走到 create。
+    // 唯一约束兜底后重新按库里的那条返回，而不是把 P2002 冒泡成 500。
+    if (!isUniqueConstraintViolation(error)) throw error;
+    const raced =
+      (await prisma.category.findUnique({ where: { name: categoryName } })) ??
+      (await prisma.category.findUnique({ where: { slug } }));
+    if (raced) return raced;
+    throw error;
+  }
+}
+
+/**
+ * Prisma 唯一约束冲突。
+ *
+ * 预检（findUnique）与写入（create）之间永远存在窗口：并发发布/导入同一个
+ * slug、同一个分类名时会撞唯一约束。没有这层翻译时，`POST /api/publish`
+ * 会把 Prisma 错误冒泡成 500「服务器内部错误」，而它其实是一次可重试的冲突。
+ */
+export function isUniqueConstraintViolation(error: unknown): boolean {
+  return (error as { code?: unknown }).code === "P2002";
 }
 
 /**
@@ -225,20 +247,32 @@ async function createPostFromMarkdown(input: CreatePostFromMarkdownInput) {
     ? parseOptionalDate(input.date || parsed.frontmatter.date) || new Date()
     : null;
 
-  const post = await prisma.post.create({
-    data: {
-      title,
-      slug,
-      content,
-      excerpt,
-      coverImage: explicitCover ?? randomDefaultCover(),
-      published,
-      publishedAt,
-      categoryId: category?.id,
-      projectId: project?.id,
-      tags: tagConnects.length > 0 ? { create: tagConnects } : undefined,
-    },
-  });
+  const post = await prisma.post
+    .create({
+      data: {
+        title,
+        slug,
+        content,
+        excerpt,
+        coverImage: explicitCover ?? randomDefaultCover(),
+        published,
+        publishedAt,
+        categoryId: category?.id,
+        projectId: project?.id,
+        tags: tagConnects.length > 0 ? { create: tagConnects } : undefined,
+      },
+    })
+    .catch((error: unknown) => {
+      if (isUniqueConstraintViolation(error)) {
+        // 与导入路径共用同一句文案：调用方看到的是「冲突，请重试」而不是 500。
+        throw new ServiceError(
+          input.duplicateSlugMessage?.(slug) ?? `slug "${slug}" 已被另一请求创建，请重试`,
+          409,
+          "CONFLICT"
+        );
+      }
+      throw error;
+    });
 
   return { post, updated: false };
 }

@@ -11,6 +11,8 @@ import {
   deleteMusicTrack,
   listImages,
   listMusicTracks,
+  MAX_AUDIO_SIZE,
+  MAX_IMAGE_SIZE,
 } from "@/server/media/media-service";
 import {
   createWallpaperFromFile,
@@ -38,7 +40,10 @@ const mediaRoutes: FastifyPluginAsync = async (app) => {
     await requireAdminSession(sessionToken(request));
     const track = request.isMultipart()
       ? await (async () => {
-          const { files, fields } = await multipartFiles(request);
+          const { files, fields } = await multipartFiles(request, {
+            files: 1,
+            fileSize: MAX_AUDIO_SIZE,
+          });
           return createMusicFromFile({ file: files[0] || null, title: fields.title, artist: fields.artist });
         })()
       : await createMusicFromUrl(requestBody<MusicUrlInput>(request));
@@ -64,7 +69,10 @@ const mediaRoutes: FastifyPluginAsync = async (app) => {
     await requireAdminSession(sessionToken(request));
     const image = request.isMultipart()
       ? await (async () => {
-          const { files, fields } = await multipartFiles(request);
+          const { files, fields } = await multipartFiles(request, {
+            files: 1,
+            fileSize: MAX_IMAGE_SIZE,
+          });
           return createImageFromFile({ file: files[0] || null, kind: fields.kind });
         })()
       : await createImageFromUrl(requestBody<ImageUrlInput>(request));
@@ -94,7 +102,7 @@ const mediaRoutes: FastifyPluginAsync = async (app) => {
   app.post("/wallpapers", async (request, reply) => {
     assertRequestOrigin(request);
     await requireAdminSession(sessionToken(request));
-    const { files } = await multipartFiles(request);
+    const { files } = await multipartFiles(request, { files: 1, fileSize: MAX_IMAGE_SIZE });
     return reply.status(201).send(apiSuccess(await createWallpaperFromFile({ file: files[0] || null })));
   });
 

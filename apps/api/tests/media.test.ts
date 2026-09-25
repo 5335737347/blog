@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { after, before, test } from "node:test";
 import { createTestDatabase, createTestMediaRoot } from "./helpers/test-db";
@@ -253,4 +253,41 @@ test("adopt scans covers and body images and is idempotent", async () => {
   // 同文件内更早的用例还注册过其他 article 类图片，这里只断言成员。
   assert.ok(articles.some((item) => item.url === "https://img.example.com/one.png"));
   assert.ok(articles.some((item) => item.url === "https://img.example.com/two.jpg"));
+});
+
+test("a failed image registration removes the freshly written file", async () => {
+  const { prisma } = await import("../src/lib/prisma");
+  const imagesDir = path.join(media.dir, "images");
+  const countFiles = () => (existsSync(imagesDir) ? readdirSync(imagesDir).length : 0);
+  const before = countFiles();
+
+  // 模拟「文件已落盘、登记时撞唯一约束」：这正是重复上传/并发上传会走的路径。
+  const delegate = prisma.mediaImage as unknown as Record<string, unknown>;
+  const original = delegate.create as (args: unknown) => Promise<unknown>;
+  const duplicate = Object.assign(new Error("Unique constraint failed on the fields: (url)"), {
+    code: "P2002",
+  });
+  delegate.create = async () => {
+    throw duplicate;
+  };
+
+  try {
+    await assert.rejects(
+      () =>
+        createImageFromFile({
+          file: new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], "orphan.png", {
+            type: "image/png",
+          }),
+          kind: "article",
+        }),
+      (error: unknown) => {
+        assert.equal((error as { status?: number }).status, 400);
+        return true;
+      }
+    );
+  } finally {
+    delegate.create = original;
+  }
+
+  assert.equal(countFiles(), before, "登记失败后不得留下永远不会被登记的孤儿文件");
 });

@@ -1,6 +1,7 @@
+import { existsSync } from "node:fs";
 import { buildApp } from "@/app";
 import { getJwtSecret, getSiteUrl } from "@/lib/env";
-import { prisma } from "@/lib/prisma";
+import { configureDatabaseRuntime, prisma } from "@/lib/prisma";
 import { databaseFilePath } from "../../../scripts/load-env.mjs";
 
 const app = buildApp();
@@ -61,18 +62,58 @@ try {
   process.exit(1);
 }
 
+// SQLite 运行时模式（WAL / synchronous=NORMAL / busy_timeout）。
+//
+// 放在 listen 之前：模式设置失败时要在开始接流量之前就知道。但**不**因为失败
+// 而退出——库文件缺失或位于不支持 WAL 的文件系统时，仍然让它启动并由 /health
+// 报告 degraded，保留既有的「启动后可见」语义。
+// DATABASE_URL 缺失/不是 file: 时这里会抛错；给一句可执行的提示，而不是让
+// 顶层 await 抛出一段没有上下文的堆栈。注意非法 file: 之外的写法会在
+// bootstrap-env 加载阶段更早退出。
+let databasePath: string;
+try {
+  databasePath = databaseFilePath();
+} catch (error) {
+  process.stderr.write(
+    `[api] 启动失败：${error instanceof Error ? error.message : String(error)}\n`
+  );
+  process.exit(1);
+}
+
+if (existsSync(databasePath)) {
+  try {
+    const runtime = await configureDatabaseRuntime();
+    if (runtime.journalMode !== "wal") {
+      warnings.push(
+        `SQLite 未启用 WAL（journal_mode=${runtime.journalMode}）：并发读写仍会互相阻塞，` +
+          "备份期间写入可能等锁。常见原因是数据库位于不支持 WAL 的文件系统。"
+      );
+    }
+    app.log.info({ ...runtime, database: databasePath }, "SQLite 运行模式");
+  } catch (error) {
+    warnings.push(
+      `SQLite 运行时配置失败：${error instanceof Error ? error.message : String(error)}；` +
+        "已继续使用默认 journal 模式。"
+    );
+  }
+} else {
+  warnings.push(
+    `数据库文件不存在（${databasePath}）：已跳过 SQLite 运行时配置，/health 会报告 degraded。`
+  );
+}
+
 // 启动时把实际使用的数据库文件打出来：脚本（冒烟、测试）需要能核对
 // 「我以为连的库」和「实际连的库」是同一个。此前它只在出错时才暴露差异。
 //
 // 用 stderr 而不是 app.log：pino 写 stdout 时是带缓冲的，父进程通过管道捕获日志时
 // 拿不到及时输出，冒烟脚本的自检会误判为「日志里没有 database 字段」。
 process.stderr.write(
-  `[api] database=${databaseFilePath()} port=${port} host=${host}\n`
+  `[api] database=${databasePath} port=${port} host=${host}\n`
 );
 for (const warning of warnings) {
   process.stderr.write(`[api] 警告：${warning}\n`);
 }
-app.log.info({ database: databaseFilePath(), port, host, warnings }, "API 启动中");
+app.log.info({ database: databasePath, port, host, warnings }, "API 启动中");
 
 try {
   await app.listen({ port, host });

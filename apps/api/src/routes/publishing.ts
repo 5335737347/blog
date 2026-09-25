@@ -1,7 +1,11 @@
 import type { FastifyPluginAsync } from "fastify";
 import { requireAdminSession, verifyPublishApiKey } from "@/server/auth/auth-service";
 import type { PublishInput } from "@/server/publishing/publishing-service";
-import { importFiles, publishMarkdown } from "@/server/publishing/publishing-service";
+import {
+  importFiles,
+  MAX_IMPORT_FILE_SIZE,
+  publishMarkdown,
+} from "@/server/publishing/publishing-service";
 import { assertRateLimit, requestIp } from "@/server/request-guard";
 import {
   apiSuccess,
@@ -31,7 +35,12 @@ const publishingRoutes: FastifyPluginAsync = async (app) => {
   app.post("/import", async (request, reply) => {
     assertRequestOrigin(request);
     await requireAdminSession(sessionToken(request));
-    const { files } = await multipartFiles(request);
+    // 导入是唯一的多文件端点：按服务层的单文件上限（10MB）与一次导入的合理
+    // 批量（10 个）收紧，避免请求把远大于业务上限的数据先读进内存再逐个拒绝。
+    const { files } = await multipartFiles(request, {
+      files: 10,
+      fileSize: MAX_IMPORT_FILE_SIZE,
+    });
     return reply.status(201).send(apiSuccess(await importFiles(files)));
   });
 };

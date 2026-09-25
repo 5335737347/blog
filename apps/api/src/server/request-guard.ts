@@ -34,12 +34,19 @@ function isDevelopment(): boolean {
  */
 function localMachineHosts(): Set<string> {
   const hosts = new Set(LOOPBACK_HOSTS);
-  for (const addresses of Object.values(networkInterfaces())) {
-    for (const address of addresses ?? []) {
-      if (address.family === "IPv4" && !address.internal) {
-        hosts.add(address.address);
+  // 受限容器 / seccomp 环境可能让 uv_interface_addresses 直接抛错（实测见
+  // next.config.ts 的同名调用）。这里失败只应退化为「仅回环地址可信」，
+  // 绝不能把异常抛到请求路径上。
+  try {
+    for (const addresses of Object.values(networkInterfaces())) {
+      for (const address of addresses ?? []) {
+        if (address.family === "IPv4" && !address.internal) {
+          hosts.add(address.address);
+        }
       }
     }
+  } catch {
+    // 保持仅回环地址；生产环境本来就不用这条开发期放宽规则。
   }
   return hosts;
 }

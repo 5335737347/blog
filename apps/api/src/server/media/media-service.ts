@@ -5,6 +5,7 @@ import type { MediaImageDto } from "@kpblog/contracts";
 import { prisma } from "@/lib/prisma";
 import { generateUniqueFilename } from "@/lib/utils";
 import { badRequest, notFound, ServiceError } from "@/server/errors";
+import { mediaRootPath } from "../../../../../scripts/load-env.mjs";
 import { musicTrackSelect, toMusicTrackDto } from "./media-dto";
 
 /**
@@ -18,7 +19,7 @@ import { musicTrackSelect, toMusicTrackDto } from "./media-dto";
 
 const ALLOWED_AUDIO_TYPES = ["audio/mpeg", "audio/wav", "audio/ogg", "audio/mp3", "audio/webm"];
 const AUDIO_EXT_RE = /\.(mp3|wav|ogg|webm)$/i;
-const MAX_AUDIO_SIZE = 20 * 1024 * 1024;
+export const MAX_AUDIO_SIZE = 20 * 1024 * 1024;
 
 export interface MusicFileInput {
   file: File | null;
@@ -32,8 +33,23 @@ export interface MusicUrlInput {
   url?: unknown;
 }
 
+/**
+ * 媒体根目录只有一个来源：`scripts/load-env.mjs` 的 `mediaRootPath()`。
+ *
+ * 这里此前写的是 `process.env.MEDIA_ROOT || path.resolve(process.cwd(), "../web/public")`：
+ * 兜底分支依赖进程 cwd，从仓库根启动时会解析到 `<repo>/../web/public`——一个仓外目录。
+ * 当前 `bootstrap-env` 总会先把 MEDIA_ROOT 归一成绝对路径，所以它没被触发过；
+ * 但任何漏掉 bootstrap-env 的新入口都会静默写错地方。现在统一走同一份解析。
+ */
 function publicPath(...segments: string[]) {
-  return path.join(process.env.MEDIA_ROOT || path.resolve(process.cwd(), "../web/public"), ...segments);
+  return path.join(mediaRootPath(), ...segments);
+}
+
+/** 数据库写入失败时回收刚落盘的文件，避免留下永远不会被登记的孤儿文件。 */
+async function removeFileQuietly(filePath: string) {
+  await unlink(filePath).catch(() => {
+    // 文件可能已不存在；这是补偿清理，不应再抛第二个错误掩盖真实失败原因。
+  });
 }
 
 function trimmedString(value: unknown): string | undefined {
@@ -86,27 +102,34 @@ export async function createMusicFromFile(input: MusicFileInput) {
     throw badRequest("文件大小不能超过 20MB");
   }
 
-  const filename = generateUniqueFilename(file.name);
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const uploadDir = publicPath("music");
-
-  await mkdir(uploadDir, { recursive: true });
-  await writeFile(path.join(uploadDir, filename), buffer);
-
+  // 先校验再落盘：此前标题过长是在写完文件之后才拒绝的，会留下孤儿音频。
   const title = trimmedString(input.title) || file.name || "Unknown";
   const artist = optionalText(input.artist);
   if (title.length > 120 || (artist && artist.length > 120)) {
     throw badRequest("音乐标题或作者过长");
   }
 
-  const track = await prisma.music.create({
-    data: {
-      title,
-      artist,
-      url: `/music/${filename}`,
-    },
-    select: musicTrackSelect,
-  });
+  const filename = generateUniqueFilename(file.name);
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const uploadDir = publicPath("music");
+  const target = path.join(uploadDir, filename);
+
+  await mkdir(uploadDir, { recursive: true });
+  await writeFile(target, buffer);
+
+  const track = await prisma.music
+    .create({
+      data: {
+        title,
+        artist,
+        url: `/music/${filename}`,
+      },
+      select: musicTrackSelect,
+    })
+    .catch(async (error: unknown) => {
+      await removeFileQuietly(target);
+      throw error;
+    });
 
   return toMusicTrackDto(track);
 }
@@ -172,7 +195,7 @@ export async function deleteMusicTrack(id: string) {
 
 const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif", "image/avif"];
 const IMAGE_EXT_RE = /\.(jpe?g|png|webp|gif|avif)$/i;
-const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
+export const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
 
 const IMAGE_KINDS = ["cover", "article"] as const;
 export type ImageKind = (typeof IMAGE_KINDS)[number];
@@ -270,11 +293,18 @@ export async function createImageFromFile(input: ImageFileInput) {
   const filename = generateUniqueFilename(file.name);
   const buffer = Buffer.from(await file.arrayBuffer());
   const uploadDir = publicPath("images");
+  const target = path.join(uploadDir, filename);
 
   await mkdir(uploadDir, { recursive: true });
-  await writeFile(path.join(uploadDir, filename), buffer);
+  await writeFile(target, buffer);
 
-  return registerImage(kind, `/images/${filename}`, file.name || filename);
+  try {
+    return await registerImage(kind, `/images/${filename}`, file.name || filename);
+  } catch (error) {
+    // 登记失败（例如 URL 已在库中）时必须把文件删掉，否则它会永远留在磁盘上。
+    await removeFileQuietly(target);
+    throw error;
+  }
 }
 
 export interface ImageUrlInput {

@@ -1,10 +1,11 @@
-import { mkdir, writeFile } from "fs/promises";
+import { mkdir, unlink, writeFile } from "fs/promises";
 import path from "path";
 import type { Prisma } from "@prisma/client";
 import type { HomeWallpaperDto } from "@kpblog/contracts";
 import { prisma } from "@/lib/prisma";
 import { generateUniqueFilename } from "@/lib/utils";
 import { badRequest, notFound } from "@/server/errors";
+import { mediaRootPath } from "../../../../../scripts/load-env.mjs";
 
 /**
  * 首页壁纸轮换的后台管理。
@@ -54,11 +55,9 @@ export function toWallpaperDto(wallpaper: WallpaperRecord): HomeWallpaperDto {
   };
 }
 
+/** 与 media-service 同一约定：媒体根目录只来自 load-env 的 mediaRootPath()。 */
 function publicPath(...segments: string[]) {
-  return path.join(
-    process.env.MEDIA_ROOT || path.resolve(process.cwd(), "../web/public"),
-    ...segments
-  );
+  return path.join(mediaRootPath(), ...segments);
 }
 
 async function ensureSeeded() {
@@ -112,20 +111,28 @@ export async function createWallpaperFromFile(input: WallpaperFileInput) {
   const filename = generateUniqueFilename(file.name);
   const buffer = Buffer.from(await file.arrayBuffer());
   const uploadDir = publicPath("images");
+  const target = path.join(uploadDir, filename);
 
   await mkdir(uploadDir, { recursive: true });
-  await writeFile(path.join(uploadDir, filename), buffer);
+  await writeFile(target, buffer);
 
-  const last = await prisma.homeWallpaper.findFirst({
-    orderBy: { sortOrder: "desc" },
-    select: { sortOrder: true },
-  });
+  try {
+    const last = await prisma.homeWallpaper.findFirst({
+      orderBy: { sortOrder: "desc" },
+      select: { sortOrder: true },
+    });
 
-  const created = await prisma.homeWallpaper.create({
-    data: { url: `/images/${filename}`, sortOrder: (last?.sortOrder ?? -1) + 1 },
-    select: wallpaperSelect,
-  });
-  return toWallpaperDto(created);
+    const created = await prisma.homeWallpaper.create({
+      data: { url: `/images/${filename}`, sortOrder: (last?.sortOrder ?? -1) + 1 },
+      select: wallpaperSelect,
+    });
+    return toWallpaperDto(created);
+  } catch (error) {
+    // 登记失败时回收文件；壁纸删除是「只删登记不删文件」，但半途失败的文件
+    // 既不会被轮换引用，也不会出现在后台列表里，属于纯垃圾。
+    await unlink(target).catch(() => {});
+    throw error;
+  }
 }
 
 export async function updateWallpaper(
