@@ -281,6 +281,15 @@ function stopApiForMigration() {
 /** 迁移结束（无论成败）立即把 API 拉回来；失败时给出可执行的恢复指引。 */
 function startApiAfterMigration() {
   apiStoppedForMigration = false;
+  // 全新安装或产物被清掉时不要硬启：PM2 会以「模块找不到」反复重启，
+  // 直到构建完成，日志里全是噪音。这里说清楚，让构建后的 reload 负责拉起。
+  if (!existsSync(apiEntryPoint)) {
+    console.warn(
+      "apps/api/dist/index.js 不存在，暂不启动 blog-api；" +
+        "它会在构建完成后由 `pm2 startOrReload` 拉起（在此之前站点没有 API）。"
+    );
+    return;
+  }
   try {
     run("pm2", ["start", "blog-api"]);
     console.log("blog-api restarted (still the previous build until the final reload).");
@@ -379,15 +388,12 @@ async function main() {
   //
   // 只删生成物，不影响源码；构建会重新生成。
   //
-  // 这里同时清理 API 的旧输出：`tsc` 不会删除已移除源文件对应的产物，
-  // 而校验阶段（typecheck / tsx 脚本 / 冒烟）可能会把这个过期目录当成
-  // 「当前产物」使用。真实案例：服务器上残留的 `dist/lib/phone.js` 还在
-  // import 早已不存在的依赖，于是 `smoke:prod` 直接以模块找不到失败，
-  // 报错指向一个本次上线根本没改的模块。
-  // 清理不随 --skip-check 跳过：跳过校验的恢复路径恰恰是最可能带着
-  // 陈旧产物运行的场景（真实事故：残留 dist/lib/phone.js 让 smoke:prod
-  // 找不到模块）。删除过期目录本身开销极小、无副作用。
-  for (const stale of ["apps/web/.next/types", "apps/web/.next/dev/types", "apps/api/dist"]) {
+  // 注意 `apps/api/dist` **不在**这里清理（它在构建前才删）：
+  // 迁移阶段要先停掉 blog-api 再拉回来，而它启动用的就是这个目录。
+  // 2026-09-25 实测过提前删除的后果——迁移后的 `pm2 start blog-api` 起不来，
+  // 于是整个「构建 + smoke:prod」窗口里 API 都是 down 的（构建日志里表现为
+  // `[public-api] … fetch failed` 与 sitemap 退化为仅静态页）。
+  for (const stale of ["apps/web/.next/types", "apps/web/.next/dev/types"]) {
     if (existsSync(stale)) {
       rmSync(stale, { recursive: true, force: true });
       console.log(`Removed stale build output: ${stale}`);
@@ -427,11 +433,23 @@ async function main() {
 
   if (args.has("--skip-build")) {
     section("Build app");
-    console.log("Skipping API and Web production builds.");
+    console.log(
+      "Skipping API and Web production builds. The existing apps/api/dist (if any) " +
+        "is kept as-is and will be what the final PM2 reload runs."
+    );
   } else {
     section("Build app");
-    // 过期的 API 产物已在「Validate workspace」之前清掉（见那里的注释），
-    // 这里不再重复删除。
+    // 清掉过期的 API 产物，紧挨着构建执行：`tsc` 不会删除已移除源文件对应的
+    // 输出，残留文件会让产物与源码不一致（真实事故：dist/lib/phone.js 仍 import
+    // 早已移除的依赖，让 smoke:prod 以模块找不到失败）。
+    //
+    // 为什么挪到这里而不是校验阶段：迁移前后要停启 blog-api，它启动用的就是这个
+    // 目录；提前删除会让 API 在整个构建 + 冒烟窗口里起不来（2026-09-25 实测）。
+    // 而 smoke:prod 在构建之后才跑，届时产物已是新的，清理依然发生在它之前。
+    if (existsSync("apps/api/dist")) {
+      rmSync("apps/api/dist", { recursive: true, force: true });
+      console.log("Removed stale build output: apps/api/dist");
+    }
     run("npm", ["run", "build"]);
 
     // 对**构建产物**跑浏览器冒烟（CI 用的也是这一条）。dev 形态的冒烟留给

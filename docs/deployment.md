@@ -206,6 +206,14 @@ PM2 `startOrReload`、`pm2 save`，最后轮询 API 与 Web 的本机健康端�
 > `blog-api` 仍在用内存中的旧代码运行，**但任何重启（含服务器重启）都会失败**。
 > 脚本现在会在失败时显式告警；恢复方式是重新跑 `npm run update`，或先
 > `npm run build --workspace @kpblog/api` 再 `pm2 startOrReload`。
+>
+> **`apps/api/dist` 的清理挪到了「构建」步骤之前**（原先在校验阶段）。
+> 原因是迁移前后要停启 `blog-api`，而它启动用的正是这个目录：提前删除会让
+> 迁移后的 `pm2 start blog-api` 起不来，整个「构建 + smoke:prod」窗口里 API 都是
+> down 的（2026-09-25 实测，构建日志表现为 `[public-api] … fetch failed` 与
+> sitemap 退化为仅静态页）。顺带的行为变化：迁移后重启的 API 仍是**上一个构建**
+> 的产物——这正是更新窗口需要的方式，也意味着新增 migration 必须对旧代码保持
+> 向后兼容（本项目一贯要求）。
 
 > 从 2026-09-17 起，更新路径不再运行 dev 形态的 `npm run smoke`。
 > 它用 `next dev` 起实例，服务器上要现编译页面（实测单页 7–8 秒），

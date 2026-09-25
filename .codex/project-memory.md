@@ -1725,3 +1725,25 @@ they need a Chromium binary (found via `CHROME_BIN` or the Playwright cache).
 - 教训：给 SQLite 加任何「改变锁语义」的设置（WAL 就是）时，必须同时审计
   所有会并发访问该库的外部进程（迁移 CLI、备份脚本、restore、sqlite3 CLI），
   不能只验证应用自身的读写路径。
+
+### 同日追加修复：dist 清理顺序导致 API 在构建窗口内 down
+
+- 上述修复上线后的第一次真实 `npm run update`（2240e57）验证了 quiesce 生效：
+  `pm2 stop blog-api` → `migrate deploy: No pending migrations` → `pm2 start blog-api`
+  一气呵成，两条新的头部冒烟断言也在生产构建里通过。
+- 但同一次日志暴露了我自己引入的第二个缺陷：构建阶段出现
+  `[public-api] /api/public/profile 不可用（fetch failed）`、sitemap 退化为仅静态页。
+  根因是**清理顺序**——`apps/api/dist` 在「校验」阶段就被删除，而迁移后
+  `pm2 start blog-api` 要用这个目录启动；产物不存在 → API 起不来（PM2 反复重启），
+  直到构建完成才由最终 `pm2 startOrReload` 拉起。也就是说每次更新都会有
+  数分钟 API 中断（比 WAL 之前的「API 一直在线」是明显退步）。
+- 修复（scripts/update.mjs）：
+  1. `apps/api/dist` 的清理从校验阶段挪到**构建步骤之前**（Next 的
+     `.next/(dev/)types` 仍在校验前清理，它只影响 typecheck）；`smoke:prod`
+     在构建之后运行，所以「陈旧产物不得进入冒烟」这条保护仍然成立。
+  2. `startApiAfterMigration()` 在产物不存在时**不硬启**（避免 PM2 模块找不到的
+     重启风暴），改为打印说明，交给构建后的 reload。
+  3. `--skip-build` 会保留现有 dist 并明确提示：最终 reload 跑的就是这份产物。
+- 由此确立的更新顺序不变式：**校验（不删 dist）→ 备份 → 停 API → 迁移 → 启 API
+  （旧产物）→ 删 dist → 构建 → smoke → reload（新产物）**。新增 migration 必须
+  对旧代码保持向后兼容，因为 API 会以旧产物服务到 reload 为止。
