@@ -257,14 +257,16 @@ async function fill(sessionId, selector, value) {
   );
   /* 水合竞态自愈：waitFor 只能确认 SSR 的输入框存在；若 fill 跑在 React
      附接 onChange 之前，水合会把受控输入重置回状态初值（空串），随后的
-     提交就会以「请输入有效邮箱」这类校验错误假失败。这里隔一拍复查，
-     值被冲掉就重填一次。 */
-  await new Promise((r) => setTimeout(r, 250));
-  const persisted = await evaluate(
-    sessionId,
-    `document.querySelector(${JSON.stringify(selector)})?.value === ${JSON.stringify(value)}`
-  );
-  if (!persisted) {
+     提交就会以「请输入有效邮箱」这类校验错误假失败。满载服务器上水合
+     可能数秒后才完成，单次重填不够——循环「填写 → 隔一拍 → 复查」直到
+     值稳定为止（约 3 秒上限），水合一旦落定最后一次填写必然留存。 */
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    await new Promise((r) => setTimeout(r, 300));
+    const persisted = await evaluate(
+      sessionId,
+      `document.querySelector(${JSON.stringify(selector)})?.value === ${JSON.stringify(value)}`
+    );
+    if (persisted) return true;
     await evaluate(
       sessionId,
       `(() => {
@@ -283,6 +285,36 @@ async function fill(sessionId, selector, value) {
     );
   }
   return set;
+}
+
+/* 与 fill 同族：new-password 成对输入框的直填在水合前会被冲掉，
+   循环「填写 → 复查」直到两个值都稳定留存。 */
+async function fillNewPasswords(sessionId, value) {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    await evaluate(
+      sessionId,
+      `(() => {
+        const inputs = [...document.querySelectorAll('input[autocomplete="new-password"]')];
+        const setValue = (element, v) => {
+          const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+          if (setter) setter.call(element, v);
+          else element.value = v;
+          element.dispatchEvent(new Event("input", { bubbles: true }));
+          element.dispatchEvent(new Event("change", { bubbles: true }));
+        };
+        if (inputs[0]) setValue(inputs[0], ${JSON.stringify(value)});
+        if (inputs[1]) setValue(inputs[1], ${JSON.stringify(value)});
+        return inputs.length;
+      })()`
+    );
+    await new Promise((r) => setTimeout(r, 300));
+    const values = await evaluate(
+      sessionId,
+      `[...document.querySelectorAll('input[autocomplete="new-password"]')].map((i) => i.value)`
+    );
+    if (values.length >= 2 && values[0] === value && values[1] === value) return true;
+  }
+  return false;
 }
 
 async function click(sessionId, selector) {
@@ -1009,26 +1041,26 @@ await fill(flowPage.sessionId, 'input[autocomplete="one-time-code"]', debugCode)
 await evaluate(
   flowPage.sessionId,
   `(() => {
-    const inputs = [...document.querySelectorAll('input[autocomplete="new-password"]')];
-    const setValue = (element, value) => {
-      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-      if (setter) setter.call(element, value);
-      else element.value = value;
-      element.dispatchEvent(new Event("input", { bubbles: true }));
-      element.dispatchEvent(new Event("change", { bubbles: true }));
-    };
-    if (inputs[0]) setValue(inputs[0], "smoke-new-password");
-    if (inputs[1]) setValue(inputs[1], "smoke-new-password");
-    return inputs.length >= 2;
-  })()`
-);
+    return true;
+  })()`);
+await fillNewPasswords(flowPage.sessionId, "smoke-new-password");
 await click(flowPage.sessionId, 'form button[type="submit"]');
 const registered = await waitFor(
   flowPage.sessionId,
   `location.pathname === "/" && document.body.innerText.includes("冒烟新用户")`,
-  15000
+  25000
 );
-check("注册成功后自动登录并同步头部账号", registered);
+if (registered) {
+  check("注册成功后自动登录并同步头部账号", true);
+} else {
+  // 满载机器上注册提交 + 客户端跳转 + 头部会话同步可能超过 15s；
+  // 失败时带上当前位置与页面片段，区分「没跳转」和「头部没同步」。
+  const diag = await evaluate(
+    flowPage.sessionId,
+    `location.pathname + " | " + document.body.innerText.split("\n").join(" ").slice(0, 140)`
+  );
+  check("注册成功后自动登录并同步头部账号", false, diag);
+}
 
 // 忘记密码：发码 → 重置 → 用新密码重新登录。
 await send("Network.clearBrowserCookies", {}, flowPage.sessionId);
@@ -1064,19 +1096,9 @@ if (resetCodeVisible) {
   await evaluate(
     flowPage.sessionId,
     `(() => {
-      const inputs = [...document.querySelectorAll('input[autocomplete="new-password"]')];
-      const setValue = (element, value) => {
-        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-        if (setter) setter.call(element, value);
-        else element.value = value;
-        element.dispatchEvent(new Event("input", { bubbles: true }));
-        element.dispatchEvent(new Event("change", { bubbles: true }));
-      };
-      if (inputs[0]) setValue(inputs[0], "smoke-reset-password");
-      if (inputs[1]) setValue(inputs[1], "smoke-reset-password");
-      return inputs.length >= 2;
-    })()`
-  );
+      return true;
+    })()`);
+  await fillNewPasswords(flowPage.sessionId, "smoke-reset-password");
   await clickByText(flowPage.sessionId, "重置密码");
   const resetDone = await waitFor(
     flowPage.sessionId,
