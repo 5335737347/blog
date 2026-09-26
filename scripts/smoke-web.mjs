@@ -239,7 +239,7 @@ async function waitFor(sessionId, expression, timeout = 10000) {
 }
 
 async function fill(sessionId, selector, value) {
-  return evaluate(
+  const set = evaluate(
     sessionId,
     `(() => {
       const element = document.querySelector(${JSON.stringify(selector)});
@@ -255,6 +255,34 @@ async function fill(sessionId, selector, value) {
       return true;
     })()`
   );
+  /* 水合竞态自愈：waitFor 只能确认 SSR 的输入框存在；若 fill 跑在 React
+     附接 onChange 之前，水合会把受控输入重置回状态初值（空串），随后的
+     提交就会以「请输入有效邮箱」这类校验错误假失败。这里隔一拍复查，
+     值被冲掉就重填一次。 */
+  await new Promise((r) => setTimeout(r, 250));
+  const persisted = await evaluate(
+    sessionId,
+    `document.querySelector(${JSON.stringify(selector)})?.value === ${JSON.stringify(value)}`
+  );
+  if (!persisted) {
+    await evaluate(
+      sessionId,
+      `(() => {
+        const element = document.querySelector(${JSON.stringify(selector)});
+        if (!element) return false;
+        const proto = element instanceof HTMLTextAreaElement
+          ? HTMLTextAreaElement.prototype
+          : HTMLInputElement.prototype;
+        const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
+        if (setter) setter.call(element, ${JSON.stringify(value)});
+        else element.value = ${JSON.stringify(value)};
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+        element.dispatchEvent(new Event("change", { bubbles: true }));
+        return true;
+      })()`
+    );
+  }
+  return set;
 }
 
 async function click(sessionId, selector) {
@@ -754,24 +782,57 @@ check("管理员登录后按 redirect 进入后台目标页", adminLoggedIn);
    显示名几乎不可见。这条断言把「登录态账号区 = 不透明白字」钉住。 */
 await send("Page.navigate", { url: BASE + "/" }, flowPage.sessionId);
 await waitFor(flowPage.sessionId, `document.body.innerText.includes("鲲鹏")`, 10000);
+/* 账号区自 2026-09-26 起是单个下拉触发器（👤 显示名 ▾），菜单里才是
+   账号中心 / 管理后台 / 退出登录。断言分两层：
+   1) hero 态下触发器必须是不透明白字（原可读性意图不变）；
+   2) 展开菜单后菜单项必须是常规墨色——globals.css 的 data-over-hero
+      白字规则若染白了白底菜单，会在这里以「白字菜单项」暴露。 */
 const authContrast = await evaluate(flowPage.sessionId, `(() => {
   const box = document.querySelector('.header-auth');
   if (!box) return { found: false };
-  const nodes = [...box.querySelectorAll('a, button')];
+  const trigger = box.querySelector('button[aria-controls="auth-menu"]');
+  if (!trigger) return { found: true, trigger: false };
   return {
     found: true,
+    trigger: true,
     overHero: !!document.querySelector('header[data-over-hero]'),
-    labels: nodes.map(n => (n.textContent || '').trim()),
-    colors: nodes.map(n => getComputedStyle(n).color),
+    label: (trigger.textContent || '').trim(),
+    color: getComputedStyle(trigger).color,
   };
 })()`);
+await evaluate(flowPage.sessionId, `(() => {
+  const trigger = document.querySelector('.header-auth button[aria-controls="auth-menu"]');
+  if (trigger) trigger.click();
+  return !!trigger;
+})()`);
+await new Promise((r) => setTimeout(r, 400));
+const authMenu = await evaluate(flowPage.sessionId, `(() => {
+  const menu = document.getElementById('auth-menu');
+  if (!menu) return { open: false };
+  const items = [...menu.querySelectorAll('a, button')];
+  return {
+    open: true,
+    labels: items.map((n) => (n.textContent || '').trim()),
+    whiteItems: items.filter((n) => getComputedStyle(n).color === "rgb(255, 255, 255)").length,
+  };
+})()`);
+await evaluate(flowPage.sessionId, `document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }))`);
 check(
   "hero 之上的账号区使用不透明白字（可读性）",
   authContrast.found === true &&
+    authContrast.trigger === true &&
     authContrast.overHero === true &&
-    authContrast.colors.length >= 2 &&
-    authContrast.colors.every((color) => color === "rgb(255, 255, 255)"),
+    authContrast.color === "rgb(255, 255, 255)",
   JSON.stringify(authContrast)
+);
+check(
+  "账号下拉菜单展开含完整条目且不被白字规则染白",
+  authMenu.open === true &&
+    authMenu.labels.includes("账号中心") &&
+    authMenu.labels.includes("管理后台") &&
+    authMenu.labels.includes("退出登录") &&
+    authMenu.whiteItems === 0,
+  JSON.stringify(authMenu)
 );
 
 // 后台文章表单：创建草稿 → 详情页 → 修改标题 → 后台列表可见。
