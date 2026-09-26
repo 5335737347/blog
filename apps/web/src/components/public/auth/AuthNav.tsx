@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { readApiData } from "@/lib/api-client";
+import { SettingsIcon, UserIcon } from "@/components/public/layout/SiteIcons";
 
 export interface AuthUser {
   authenticated: boolean;
@@ -104,23 +105,123 @@ export default function AuthNav() {
     );
   }
 
+  return <AccountMenu user={user} onLogout={handleLogout} />;
+}
+
+/**
+ * 登录后的头部账号区：一个下拉菜单替代「用户名 / 管理 / 退出」三个并排项。
+ *
+ * 顶部栏右侧还有搜索、音乐、主题三个图标，再平铺三个文字按钮会显得杂乱；
+ * 收进菜单后头部只多一个触发器。菜单样式与 ThemeSelector 的弹出层保持同构。
+ */
+function AccountMenu({ user, onLogout }: { user: AuthUser; onLogout: () => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent | KeyboardEvent) => {
+      if (e instanceof KeyboardEvent && e.key === "Escape") {
+        setOpen(false);
+        return;
+      }
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    if (!open) return;
+    document.addEventListener("mousedown", handler);
+    document.addEventListener("keydown", handler);
+    return () => {
+      document.removeEventListener("mousedown", handler);
+      document.removeEventListener("keydown", handler);
+    };
+  }, [open]);
+
+  const itemClass =
+    "flex w-full items-center gap-2 rounded-sm px-3 py-2 text-meta text-ink-2 transition-colors hover:bg-surface-hover";
+
   return (
-    <div className="flex items-center gap-1.5">
-      <Link
-        href="/account"
-        title="账号设置"
-        className="max-w-24 truncate text-meta font-medium text-ink-2 transition-colors hover:text-primary-deep"
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="account-trigger btn btn-text h-8 max-w-36 gap-1.5 px-2"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-controls="auth-menu"
+        aria-label={`账号菜单：${user.displayName || user.username}`}
       >
-        {user.displayName || user.username}
-      </Link>
-      {user.role === "ADMIN" && (
-        <Link href="/admin" className="btn btn-text h-8 px-2 text-meta">
-          管理
-        </Link>
-      )}
-      <button type="button" onClick={handleLogout} className="btn btn-text h-8 px-2 text-meta">
-        退出
+        <UserIcon className="h-4 w-4 shrink-0" />
+        <span className="max-w-24 truncate">{user.displayName || user.username}</span>
+        <ChevronDownGlyph open={open} />
       </button>
+      {open && (
+        <div
+          id="auth-menu"
+          role="menu"
+          className="absolute right-0 top-full z-50 mt-2 w-44 rounded-md border border-line bg-surface p-1 shadow-float"
+        >
+          <Link role="menuitem" href="/account" onClick={() => setOpen(false)} className={itemClass}>
+            <UserIcon className="h-4 w-4" />
+            <span>账号中心</span>
+          </Link>
+          {user.role === "ADMIN" && (
+            <Link role="menuitem" href="/admin" onClick={() => setOpen(false)} className={itemClass}>
+              <SettingsIcon className="h-4 w-4" />
+              <span>管理后台</span>
+            </Link>
+          )}
+          <div role="separator" className="my-1 border-t border-line" />
+          <button
+            role="menuitem"
+            type="button"
+            onClick={() => {
+              setOpen(false);
+              onLogout();
+            }}
+            className={`${itemClass} text-danger hover:bg-danger-soft`}
+          >
+            <LogoutGlyph />
+            <span>退出登录</span>
+          </button>
+        </div>
+      )}
     </div>
+  );
+}
+
+function ChevronDownGlyph({ open }: { open: boolean }) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={`h-3.5 w-3.5 shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
+    >
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
+
+function LogoutGlyph() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-4 w-4"
+    >
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+      <path d="m16 17 5-5-5-5" />
+      <path d="M21 12H9" />
+    </svg>
   );
 }

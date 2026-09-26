@@ -412,14 +412,29 @@ header[data-over-hero] .icon-button:hover {
   浅色背板上，不能套用这套白字规则。
 */
 header[data-over-hero] .header-auth a:not(.btn-primary),
-header[data-over-hero] .header-auth button {
+header[data-over-hero] .header-auth .account-trigger {
   color: #fff;
 }
 
-header[data-over-hero] .header-auth a:not(.btn-primary):hover,
-header[data-over-hero] .header-auth button:hover {
+header[data-over-hero] .header-auth .account-trigger:hover {
   color: #fff;
   background: rgb(255 255 255 / 0.16);
+}
+
+/*
+  账号下拉菜单是白底卡片，绝不能被上面的白字规则染白（2026-09-25 实测
+  hero 态下菜单整块空白）。[role="menu"] 内恢复常规墨色，特异性
+  (0,3,1) 稳压上方 (0,2,1)。
+*/
+header[data-over-hero] .header-auth [role="menu"] a,
+header[data-over-hero] .header-auth [role="menu"] button {
+  color: var(--text-2);
+}
+
+header[data-over-hero] .header-auth [role="menu"] a:hover,
+header[data-over-hero] .header-auth [role="menu"] button:hover {
+  color: var(--text);
+  background: var(--surface-hover);
 }
 
 .nav-link:hover {
